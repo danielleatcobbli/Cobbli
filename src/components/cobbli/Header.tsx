@@ -15,9 +15,9 @@ const Header = () => {
 
   return (
     <header className="sticky top-0 z-50 bg-primary text-primary-foreground shadow-soft">
-      <div className="container flex h-20 md:h-24 items-center justify-between gap-6">
+      <div className="container flex h-24 md:h-28 items-center justify-between gap-6">
         <a href="#top" className="flex items-center" aria-label="Cobbli home">
-          <img src={logo} alt="Cobbli" className="h-14 md:h-16 w-auto" />
+          <img src={logo} alt="Cobbli" className="h-20 md:h-24 w-auto" />
         </a>
 
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium">
