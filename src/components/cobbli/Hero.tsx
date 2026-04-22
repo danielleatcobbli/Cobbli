@@ -16,7 +16,7 @@ const Hero = () => {
           <div className="max-w-2xl text-primary-foreground animate-fade-up">
             <h1 className="font-display text-4xl md:text-6xl font-600 leading-[1.05] text-balance">
               Expert Shoe Repair{" "}
-              <span className="italic text-status-cream">Delivered</span> to Your Doorstep
+              <span className="text-primary-foreground">Delivered</span> to Your Doorstep
             </h1>
             <p className="mt-5 text-lg md:text-xl text-primary-foreground/85 max-w-xl">
               We collect, restore and return your favourite shoes — all without you ever
