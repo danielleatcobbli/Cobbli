@@ -14,9 +14,6 @@ const Hero = () => {
         <div className="absolute inset-0 bg-gradient-hero" />
         <div className="container relative z-10 py-20 md:py-28">
           <div className="max-w-2xl text-primary-foreground animate-fade-up">
-            <span className="inline-block mb-4 text-xs font-semibold tracking-[0.2em] uppercase text-status-orange">
-              Trusted by thousands of UK customers
-            </span>
             <h1 className="font-display text-4xl md:text-6xl font-600 leading-[1.05] text-balance">
               Expert Shoe Repair{" "}
               <span className="italic text-status-cream">Delivered</span> to Your Doorstep

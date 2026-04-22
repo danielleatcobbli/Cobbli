@@ -1,4 +1,4 @@
-import logo from "@/assets/logo-reverse.png";
+import logo from "@/assets/logo-cobbli.svg";
 import facebook from "@/assets/icons/facebook.svg";
 import instagram from "@/assets/icons/instagram.svg";
 import tiktok from "@/assets/icons/tiktok.svg";
