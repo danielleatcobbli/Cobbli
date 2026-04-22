@@ -25,9 +25,9 @@
     --popover-foreground: 22 80% 14%;
 
     /* Cobbli brown — primary */
-    --primary: 22 100% 14%;            /* #4A1F00-ish */
+    --primary: 22 100% 12%;            /* Cobbli brown #3D1700 */
     --primary-foreground: 36 40% 96%;
-    --primary-glow: 22 70% 22%;
+    --primary-glow: 22 100% 18%;
 
     --secondary: 36 30% 92%;
     --secondary-foreground: 22 80% 14%;
@@ -40,12 +40,12 @@
 
     /* Status colours from style guide */
     --status-red: 0 72% 51%;           /* errors / urgent */
-    --status-yellow: 45 95% 55%;       /* in-progress / warning */
+    --status-yellow: 43 100% 50%;      /* Cobbli yellow #FDB600 */
     --status-green: 145 55% 42%;       /* success / completed */
     --status-orange: 28 92% 55%;       /* alert / pickup */
     --status-cream: 42 80% 90%;        /* soft highlight */
 
-    --highlight: 45 95% 55%;           /* yellow text highlighter */
+    --highlight: 43 100% 50%;          /* Cobbli yellow #FDB600 */
     --highlight-foreground: 22 80% 14%;
 
     --destructive: 0 72% 51%;
@@ -58,10 +58,10 @@
     --radius: 0.625rem;
 
     /* Gradients & shadows */
-    --gradient-hero: linear-gradient(180deg, hsl(22 80% 10% / 0.55) 0%, hsl(22 80% 10% / 0.25) 50%, hsl(22 80% 10% / 0.65) 100%);
-    --gradient-warm: linear-gradient(135deg, hsl(22 100% 14%) 0%, hsl(22 70% 22%) 100%);
-    --shadow-soft: 0 4px 20px -8px hsl(22 80% 14% / 0.18);
-    --shadow-elevated: 0 12px 40px -12px hsl(22 80% 14% / 0.28);
+    --gradient-hero: linear-gradient(180deg, hsl(22 100% 8% / 0.55) 0%, hsl(22 100% 8% / 0.25) 50%, hsl(22 100% 8% / 0.7) 100%);
+    --gradient-warm: linear-gradient(135deg, hsl(22 100% 12%) 0%, hsl(22 100% 18%) 100%);
+    --shadow-soft: 0 4px 20px -8px hsl(22 100% 12% / 0.18);
+    --shadow-elevated: 0 12px 40px -12px hsl(22 100% 12% / 0.28);
 
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
