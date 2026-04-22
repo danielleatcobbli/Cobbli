@@ -8,7 +8,6 @@ const navLinks = [
   { label: "How it works", href: "#how-it-works" },
   { label: "Services", href: "#services" },
   { label: "Why Cobbli", href: "#why" },
-  { label: "Help", href: "#footer" },
 ];
 
 const Header = () => {
