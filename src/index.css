@@ -42,7 +42,7 @@
     --status-red: 0 72% 51%;           /* errors / urgent */
     --status-yellow: 43 100% 50%;      /* Cobbli yellow #FDB600 */
     --status-green: 145 55% 42%;       /* success / completed */
-    --status-orange: 28 92% 55%;       /* alert / pickup */
+    --status-orange: 43 100% 50%;      /* Cobbli yellow #FDB600 */
     --status-cream: 42 80% 90%;        /* soft highlight */
 
     --highlight: 43 100% 50%;          /* Cobbli yellow #FDB600 */
