@@ -20,9 +20,6 @@ const Services = () => {
           <h2 className="mt-3 text-3xl md:text-5xl font-display font-600 text-balance">
             Book your <span className="highlight-mark">professional repair</span> today
           </h2>
-          <p className="mt-4 text-muted-foreground text-lg">
-            Whatever the damage, our skilled cobblers can restore it. Choose a service to get started.
-          </p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
