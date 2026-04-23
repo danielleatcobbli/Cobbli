@@ -9,7 +9,7 @@ const CTA = () => {
             Ready to give your shoes a second life?
           </h2>
           <p className="mt-3 text-primary-foreground/80">
-            Book your professional repair today — free collection across the UK.
+            Book your professional repair today — free pick up across Manhattan.
           </p>
         </div>
         <Button size="lg" variant="hero" className="shrink-0">

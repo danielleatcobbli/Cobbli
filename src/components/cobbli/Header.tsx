@@ -5,9 +5,9 @@ import accountIcon from "@/assets/icons/account.svg";
 import bagIcon from "@/assets/icons/bag.svg";
 
 const navLinks = [
-  { label: "How it works", href: "#how-it-works" },
+  { label: "Start a Repair", href: "#services" },
   { label: "Services", href: "#services" },
-  { label: "Why Cobbli", href: "#why" },
+  { label: "How It Works", href: "#how-it-works" },
 ];
 
 const Header = () => {

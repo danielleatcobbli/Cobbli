@@ -4,17 +4,17 @@ const items = [
   {
     icon: ShieldCheck,
     title: "Quality guaranteed",
-    desc: "Every repair is backed by our 90-day craftsmanship guarantee.",
+    desc: "Not happy with your repair? We'll make it right, no questions asked.",
   },
   {
     icon: Award,
-    title: "Expert craftsmen",
-    desc: "Master cobblers with decades of experience at every workbench.",
+    title: "Expert cobblers",
+    desc: "Every repair is handled by skilled craftspeople with years of hands-on experience.",
   },
   {
     icon: MessageCircleHeart,
     title: "Dedicated support",
-    desc: "A real human on hand from collection to return — never a chatbot.",
+    desc: "Have a question? Reach us any day of the week at support@cobbli.com.",
   },
 ];
 
