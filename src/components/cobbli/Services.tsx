@@ -15,7 +15,7 @@ const Services = () => {
       <div className="container">
         <div className="max-w-2xl mb-12">
           <p className="text-sm font-semibold tracking-widest uppercase text-status-orange">
-            Our services
+            Services
           </p>
           <h2 className="mt-3 text-3xl md:text-5xl font-display font-600 text-balance">
             Book your <span className="highlight-mark">professional repair</span> today
