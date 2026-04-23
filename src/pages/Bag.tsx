@@ -120,9 +120,7 @@ const Bag = () => {
 
 const EmptyBag = () => (
   <div className="rounded-lg border border-border bg-card py-16 px-6 flex flex-col items-center text-center shadow-soft">
-    <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mb-6">
-      <img src={bagIcon} alt="" className="h-9 w-9 opacity-60" />
-    </div>
+    <img src={emptyBagIcon} alt="" className="h-[72px] w-[72px] mb-6" />
     <h2 className="text-xl font-semibold mb-2">Your bag is empty</h2>
     <p className="text-muted-foreground mb-6 max-w-sm">
       Browse our services and add a repair to get started.
