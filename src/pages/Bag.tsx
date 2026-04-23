@@ -4,7 +4,7 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { Button } from "@/components/ui/button";
 import { useBag, formatPrice } from "@/context/BagContext";
-import bagIcon from "@/assets/icons/bag.svg";
+import emptyBagIcon from "@/assets/icons/empty-bag.svg";
 
 const Bag = () => {
   const { items, itemCount, subtotal, updateQuantity, removeItem } = useBag();
