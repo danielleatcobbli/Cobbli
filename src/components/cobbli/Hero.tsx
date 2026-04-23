@@ -19,8 +19,7 @@ const Hero = () => {
               <span className="text-primary-foreground">Delivered</span> to Your Doorstep
             </h1>
             <p className="mt-5 text-lg md:text-xl text-primary-foreground/85 max-w-xl">
-              We collect, restore and return your favourite shoes — all without you ever
-              leaving the house. Old-world craftsmanship, modern convenience.
+              Old-world craftsmanship, modern convenience. We pick up, repair, and return your shoes — without you leaving home.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button size="lg" variant="hero">

@@ -1,8 +1,8 @@
 const steps = [
-  { n: "01", title: "Book online", desc: "Tell us what needs fixing and pick a free collection slot that suits you." },
-  { n: "02", title: "We collect", desc: "A courier picks up your shoes from your door — no queues, no fuss." },
-  { n: "03", title: "Master cobblers restore", desc: "Our craftspeople inspect and repair your shoes by hand." },
-  { n: "04", title: "Delivered back", desc: "Restored shoes returned to your doorstep, ready to wear." },
+  { n: "1", title: "Choose your services", desc: "Browse our services and add what you need to your bag. Not sure? We'll assess your shoes upon pickup." },
+  { n: "2", title: "Schedule pickup and return", desc: "Choose a pickup and return window that works for you — evenings and weekends included." },
+  { n: "3", title: "We handle the rest", desc: "We'll pick up your shoes and have them back to you within 7 days." },
+  { n: "4", title: "We return your shoes", desc: "We'll return your beautifully repaired shoes right to your door during your scheduled return window." },
 ];
 
 const HowItWorks = () => {

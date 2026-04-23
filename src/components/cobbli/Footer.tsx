@@ -1,13 +1,9 @@
-import facebook from "@/assets/icons/facebook.svg";
 import instagram from "@/assets/icons/instagram.svg";
 import tiktok from "@/assets/icons/tiktok.svg";
-import youtube from "@/assets/icons/youtube.svg";
 
 const socials = [
   { src: instagram, label: "Instagram", href: "#" },
-  { src: facebook, label: "Facebook", href: "#" },
   { src: tiktok, label: "TikTok", href: "#" },
-  { src: youtube, label: "YouTube", href: "#" },
 ];
 
 const Footer = () => {
