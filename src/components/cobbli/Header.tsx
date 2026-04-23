@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import logo from "@/assets/logo-cobbli.svg";
 import accountIcon from "@/assets/icons/account.svg";
 import bagIcon from "@/assets/icons/bag.svg";
+import { useBag } from "@/context/BagContext";
 
 const navLinks = [
   { label: "Start a Repair", href: "#services" },
@@ -12,6 +14,7 @@ const navLinks = [
 
 const Header = () => {
   const [open, setOpen] = useState(false);
+  const { itemCount } = useBag();
 
   return (
     <header className="sticky top-0 z-50 bg-primary text-primary-foreground shadow-soft">
@@ -32,12 +35,12 @@ const Header = () => {
           <a href="#account" aria-label="Account" className="p-2 rounded-md hover:bg-primary-glow transition-colors">
             <img src={accountIcon} alt="" className="h-[22px] w-[22px]" />
           </a>
-          <a href="#bag" aria-label="Shopping bag" className="relative p-2 rounded-md hover:bg-primary-glow transition-colors">
+          <Link to="/bag" aria-label={`Shopping bag, ${itemCount} item${itemCount === 1 ? "" : "s"}`} className="relative p-2 rounded-md hover:bg-primary-glow transition-colors">
             <img src={bagIcon} alt="" className="h-[22px] w-[22px]" />
-            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-status-orange text-[10px] font-bold text-primary flex items-center justify-center">
-              0
+            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-status-orange text-[10px] font-bold text-primary flex items-center justify-center">
+              {itemCount}
             </span>
-          </a>
+          </Link>
           <button
             className="md:hidden p-2 rounded-md hover:bg-primary-glow"
             onClick={() => setOpen((v) => !v)}
