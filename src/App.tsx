@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Bag from "./pages/Bag.tsx";
+import SignIn from "./pages/SignIn.tsx";
 import { BagProvider } from "./context/BagContext";
 import ScrollToHash from "./components/ScrollToHash";
 
@@ -22,6 +23,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/bag" element={<Bag />} />
+            <Route path="/signin" element={<SignIn />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
