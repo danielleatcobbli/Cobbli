@@ -101,7 +101,7 @@ const Bag = () => {
                     </div>
                   </dl>
                   <Button asChild variant="hero" size="lg" className="w-full mt-6">
-                    <Link to="/checkout">Checkout</Link>
+                    <Link to="/signin" state={{ from: "/checkout" }}>Checkout</Link>
                   </Button>
                   <p className="mt-3 text-xs text-muted-foreground text-center">
                     Taxes calculated at checkout.

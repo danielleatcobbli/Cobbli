@@ -32,9 +32,9 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center gap-2 ml-auto">
-          <a href="#account" aria-label="Account" className="p-2 rounded-md hover:bg-primary-glow transition-colors">
+          <Link to="/signin" state={{ from: "/" }} aria-label="Account" className="p-2 rounded-md hover:bg-primary-glow transition-colors">
             <img src={accountIcon} alt="" className="h-[22px] w-[22px]" />
-          </a>
+          </Link>
           <Link to="/bag" aria-label={`Shopping bag, ${itemCount} item${itemCount === 1 ? "" : "s"}`} className="relative p-2 rounded-md hover:bg-primary-glow transition-colors">
             <img src={bagIcon} alt="" className="h-[22px] w-[22px]" />
             <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-status-orange text-[10px] font-bold text-primary flex items-center justify-center">
