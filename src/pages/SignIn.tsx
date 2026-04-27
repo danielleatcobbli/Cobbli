@@ -69,7 +69,7 @@ const SignIn = () => {
           {tab === "signin" ? (
             <section aria-labelledby="signin-heading">
               <h1 id="signin-heading" className="text-2xl md:text-3xl font-semibold mb-6">
-                Welcome back
+                Sign in
               </h1>
 
               <form onSubmit={handleSubmit} className="space-y-5" noValidate>
