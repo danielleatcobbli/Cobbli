@@ -24,10 +24,10 @@ const Hero = () => {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button size="lg" variant="hero">
-                Book a repair
+                Start a repair
               </Button>
               <Button size="lg" variant="heroOutline">
-                See our services
+                Browse services
               </Button>
             </div>
             <p className="mt-5 text-sm md:text-base text-primary-foreground/80">
