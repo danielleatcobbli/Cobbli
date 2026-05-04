@@ -20,7 +20,7 @@ const items = [
 
 const TrustSignals = () => {
   return (
-    <section id="why" className="py-20 md:py-28 bg-background">
+    <section id="why" className="py-20 md:py-28 bg-white">
       <div className="container">
         <div className="max-w-2xl mb-12">
           <p className="text-sm font-semibold tracking-widest uppercase text-status-orange">
