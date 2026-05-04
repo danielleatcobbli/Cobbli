@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+
 import hero from "@/assets/hero-cobbler.png";
 
 const Hero = () => {
@@ -30,18 +30,16 @@ const Hero = () => {
                 See our services
               </Button>
             </div>
-            <button
-              type="button"
-              className="mt-5 inline-flex items-center gap-2 text-sm md:text-base text-primary-foreground/80 hover:text-primary-foreground transition-colors group"
-            >
-              <span>
-                Not sure what your shoes need?{" "}
-                <span className="underline underline-offset-4 decoration-primary-foreground/40 group-hover:decoration-primary-foreground">
-                  Upload a photo and we'll tell you
-                </span>
-              </span>
-              <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
-            </button>
+            <p className="mt-5 text-sm md:text-base text-primary-foreground/80">
+              Not sure what your shoes need? Email us photos at{" "}
+              <a
+                href="mailto:support@cobbli.com"
+                className="underline underline-offset-4 decoration-primary-foreground/40 hover:decoration-primary-foreground hover:text-primary-foreground transition-colors"
+              >
+                support@cobbli.com
+              </a>{" "}
+              and we'll recommend the right repairs
+            </p>
           </div>
         </div>
       </div>
