@@ -13,7 +13,7 @@ const CTA = () => {
           </p>
         </div>
         <Button size="lg" variant="hero" className="shrink-0">
-          Book a repair
+          Start a repair
         </Button>
       </div>
     </section>
