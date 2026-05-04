@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Sparkles, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import hero from "@/assets/hero-cobbler.png";
 
 const Hero = () => {
@@ -34,11 +34,10 @@ const Hero = () => {
               type="button"
               className="mt-5 inline-flex items-center gap-2 text-sm md:text-base text-primary-foreground/80 hover:text-primary-foreground transition-colors group"
             >
-              <Sparkles className="opacity-80" />
               <span>
                 Not sure what your shoes need?{" "}
                 <span className="underline underline-offset-4 decoration-primary-foreground/40 group-hover:decoration-primary-foreground">
-                  Upload a photo for AI recommendations
+                  Upload a photo and we'll tell you
                 </span>
               </span>
               <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
