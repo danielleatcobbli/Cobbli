@@ -147,7 +147,7 @@ const SignIn = () => {
             </section>
           ) : (
             <section aria-labelledby="signin-heading">
-              <h1 id="signin-heading" className="text-2xl md:text-3xl font-semibold mb-6">
+              <h1 id="signin-heading" className="text-2xl md:text-3xl font-semibold mb-6 text-center">
                 Sign in
               </h1>
 
