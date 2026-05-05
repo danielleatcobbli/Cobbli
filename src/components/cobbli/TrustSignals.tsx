@@ -1,4 +1,4 @@
-import { ShieldCheck, Award, MessageCircleHeart } from "lucide-react";
+import { ShieldCheck, Hammer, MessageCircleHeart } from "lucide-react";
 
 const items = [
   {
@@ -7,7 +7,7 @@ const items = [
     desc: "Not happy with your repair? We'll make it right, no questions asked.",
   },
   {
-    icon: Award,
+    icon: Hammer,
     title: "Expert cobblers",
     desc: "Every repair is handled by skilled craftspeople with years of hands-on experience.",
   },
