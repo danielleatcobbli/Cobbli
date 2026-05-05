@@ -38,7 +38,7 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
             </a>
             <span aria-hidden="true">·</span>
             <a href="/terms-of-service" className="underline" {...legalLinkProps}>
-              Terms of Service
+              Terms & Conditions
             </a>
           </div>
           <p>© 2026 Cobbli. All Rights Reserved.</p>
