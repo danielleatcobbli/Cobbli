@@ -271,7 +271,7 @@ const SignUp = () => {
                 <Label htmlFor="agree" className="text-sm font-normal leading-relaxed cursor-pointer">
                   I agree to the{" "}
                   <a
-                    href="/terms-of-service"
+                    href="/terms-conditions"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="underline hover:text-primary"
