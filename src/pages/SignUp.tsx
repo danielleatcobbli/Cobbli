@@ -124,10 +124,10 @@ const SignUp = () => {
           </div>
 
           <section aria-labelledby="signup-heading">
-            <h1 id="signup-heading" className="text-2xl md:text-3xl font-semibold mb-2">
-              Create an account.
+            <h1 id="signup-heading" className="text-2xl md:text-3xl font-semibold mb-2 text-center">
+              Create an account
             </h1>
-            <p className="text-sm text-foreground/80 mb-6">
+            <p className="text-sm text-foreground/80 mb-6 text-center">
               Already have an account?{" "}
               <Link to="/signin" state={{ from }} className="underline hover:text-primary">
                 Sign in
