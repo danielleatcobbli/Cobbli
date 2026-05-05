@@ -35,7 +35,7 @@ const Index = () => {
       <Services />
       <HowItWorks />
       <TrustSignals />
-      <CTA />
+      
       <Footer />
     </main>
   );
