@@ -57,7 +57,7 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
               <img
                 src={s.src}
                 alt=""
-                className="h-5 w-5"
+                className="h-7 w-7"
                 style={{ filter: "brightness(0) invert(1)" }}
               />
             </a>
