@@ -9,6 +9,7 @@ import Bag from "./pages/Bag.tsx";
 import SignIn from "./pages/SignIn.tsx";
 import SignUp from "./pages/SignUp.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
+import TermsConditions from "./pages/TermsConditions.tsx";
 import { BagProvider } from "./context/BagContext";
 import ScrollToHash from "./components/ScrollToHash";
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/signin" element={<SignIn />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/terms-conditions" element={<TermsConditions />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
