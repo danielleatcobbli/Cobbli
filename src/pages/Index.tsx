@@ -3,7 +3,7 @@ import Hero from "@/components/cobbli/Hero";
 import Services from "@/components/cobbli/Services";
 import HowItWorks from "@/components/cobbli/HowItWorks";
 import TrustSignals from "@/components/cobbli/TrustSignals";
-import CTA from "@/components/cobbli/CTA";
+
 import Footer from "@/components/cobbli/Footer";
 import { useEffect } from "react";
 
