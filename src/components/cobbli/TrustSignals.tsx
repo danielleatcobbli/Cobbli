@@ -14,7 +14,15 @@ const items = [
   {
     icon: MessageCircleHeart,
     title: "Dedicated support",
-    desc: "Have a question? Reach us any day of the week at support@cobbli.com.",
+    desc: (
+      <>
+        Have a question? Reach us any day of the week at{" "}
+        <a href="mailto:support@cobbli.com" className="underline hover:text-primary">
+          support@cobbli.com
+        </a>
+        .
+      </>
+    ),
   },
 ];
 

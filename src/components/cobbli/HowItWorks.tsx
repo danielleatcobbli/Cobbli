@@ -1,5 +1,17 @@
 const steps = [
-  { n: "1", title: "Choose your services", desc: "Browse services and add what you need to your bag. Not sure? Email us photos at support@cobbli.com and we’ll make recommend the right repairs." },
+  {
+    n: "1",
+    title: "Choose your services",
+    desc: (
+      <>
+        Browse services and add what you need to your bag. Not sure? Email us photos at{" "}
+        <a href="mailto:support@cobbli.com" className="underline hover:text-primary">
+          support@cobbli.com
+        </a>{" "}
+        and we’ll make recommend the right repairs.
+      </>
+    ),
+  },
   { n: "2", title: "Schedule pickup and return", desc: "Choose a pickup and return window that works for you — evenings and weekends included." },
   { n: "3", title: "We handle the rest", desc: "We'll pick up your shoes and have them back to you within 7 days." },
   { n: "4", title: "We return your shoes", desc: "We'll return your beautifully repaired shoes right to your door during your scheduled return window." },
