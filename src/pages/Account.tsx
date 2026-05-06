@@ -150,51 +150,13 @@ const Password = () => {
     setConfirm("");
   };
 
-  const PwInput = ({
-    id,
-    label,
-    value,
-    onChange,
-    show,
-    setShow,
-  }: {
-    id: string;
-    label: string;
-    value: string;
-    onChange: (v: string) => void;
-    show: boolean;
-    setShow: (b: boolean) => void;
-  }) => (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="relative">
-        <Input
-          id={id}
-          type={show ? "text" : "password"}
-          required
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="pr-10"
-        />
-        <button
-          type="button"
-          onClick={() => setShow(!show)}
-          aria-label={show ? "Hide password" : "Show password"}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
-        >
-          {show ? <EyeOff size={18} /> : <Eye size={18} />}
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <section aria-labelledby="pw-h" className="max-w-md">
       <h1 id="pw-h" className="text-2xl md:text-3xl font-semibold mb-6">
         My Password
       </h1>
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-        <PwInput
+        <PasswordField
           id="current-pw"
           label="Current Password"
           value={current}
@@ -202,7 +164,7 @@ const Password = () => {
           show={showCurrent}
           setShow={setShowCurrent}
         />
-        <PwInput
+        <PasswordField
           id="new-pw"
           label="New Password"
           value={next}
@@ -210,7 +172,7 @@ const Password = () => {
           show={showNext}
           setShow={setShowNext}
         />
-        <PwInput
+        <PasswordField
           id="confirm-pw"
           label="Confirm New Password"
           value={confirm}
@@ -227,6 +189,39 @@ const Password = () => {
     </section>
   );
 };
+
+type PasswordFieldProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  show: boolean;
+  setShow: (b: boolean) => void;
+};
+
+const PasswordField = ({ id, label, value, onChange, show, setShow }: PasswordFieldProps) => (
+  <div className="space-y-2">
+    <Label htmlFor={id}>{label}</Label>
+    <div className="relative">
+      <Input
+        id={id}
+        type={show ? "text" : "password"}
+        required
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        onClick={() => setShow(!show)}
+        aria-label={show ? "Hide password" : "Show password"}
+        className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+      >
+        {show ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+    </div>
+  </div>
+);
 
 // ---------- Contact Us ----------
 const Contact = () => {
