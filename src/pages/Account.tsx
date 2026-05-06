@@ -246,7 +246,6 @@ const Contact = () => {
 
 const Account = () => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const handleSignOut = () => {
     localStorage.removeItem("cobbli:signed-in");
