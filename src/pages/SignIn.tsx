@@ -38,7 +38,9 @@ const setLocked = (email: string, locked: boolean) => {
 const SignIn = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from;
+  const navState = location.state as { from?: string; resetSuccess?: string } | null;
+  const from = navState?.from;
+  const resetSuccess = navState?.resetSuccess;
   // Route after success: bag/checkout flow → /checkout, otherwise → /account
   const successRedirect = from === "/checkout" ? "/checkout" : "/account";
 
@@ -150,6 +152,15 @@ const SignIn = () => {
               <h1 id="signin-heading" className="text-2xl md:text-3xl font-semibold mb-6 text-center">
                 Sign in
               </h1>
+
+              {resetSuccess && (
+                <div
+                  role="status"
+                  className="mb-5 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground"
+                >
+                  {resetSuccess}
+                </div>
+              )}
 
               <form onSubmit={handleSubmit} className="space-y-5" noValidate>
                 <div className="space-y-2">
