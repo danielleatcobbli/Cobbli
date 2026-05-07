@@ -1,28 +1,38 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-export type BagItem = {
+export type BagService = {
   id: string;
   name: string;
-  options?: string;
+  /** Price in cents */
   price: number;
-  quantity: number;
+};
+
+export type BagPair = {
+  id: string;
+  /** Display label like "Pair 1" — derived for display, but stored for stability */
+  label?: string;
+  /** ISO timestamp; used to display in reverse order of addition */
+  addedAt: string;
+  services: BagService[];
 };
 
 type BagState = {
-  items: BagItem[];
+  pairs: BagPair[];
+  /** Total number of services across all pairs (used for header badge) */
   itemCount: number;
+  /** Sum of all service prices across all pairs, in cents */
   subtotal: number;
-  addItem: (item: Omit<BagItem, "quantity"> & { quantity?: number }) => void;
-  updateQuantity: (id: string, quantity: number) => void;
-  removeItem: (id: string) => void;
+  addPair: (services: BagService[]) => void;
+  removePair: (pairId: string) => void;
+  removeService: (pairId: string, serviceId: string) => void;
   clear: () => void;
 };
 
-const STORAGE_KEY = "cobbli.bag.v1";
+const STORAGE_KEY = "cobbli.bag.v2";
 
 const BagContext = createContext<BagState | undefined>(undefined);
 
-const readStorage = (): BagItem[] => {
+const readStorage = (): BagPair[] => {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -34,47 +44,54 @@ const readStorage = (): BagItem[] => {
   }
 };
 
+const genId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+
 export const BagProvider = ({ children }: { children: ReactNode }) => {
-  const [items, setItems] = useState<BagItem[]>(() => readStorage());
+  const [pairs, setPairs] = useState<BagPair[]>(() => readStorage());
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(pairs));
     } catch {
       /* ignore quota errors */
     }
-  }, [items]);
+  }, [pairs]);
 
-  const addItem: BagState["addItem"] = useCallback((item) => {
-    const qty = item.quantity ?? 1;
-    setItems((prev) => {
-      const existing = prev.find((i) => i.id === item.id);
-      if (existing) {
-        return prev.map((i) => (i.id === item.id ? { ...i, quantity: i.quantity + qty } : i));
-      }
-      return [...prev, { ...item, quantity: qty }];
-    });
+  const addPair: BagState["addPair"] = useCallback((services) => {
+    setPairs((prev) => [
+      ...prev,
+      { id: genId(), addedAt: new Date().toISOString(), services },
+    ]);
   }, []);
 
-  const updateQuantity = useCallback((id: string, quantity: number) => {
-    setItems((prev) =>
-      quantity <= 0
-        ? prev.filter((i) => i.id !== id)
-        : prev.map((i) => (i.id === id ? { ...i, quantity } : i)),
+  const removePair = useCallback((pairId: string) => {
+    setPairs((prev) => prev.filter((p) => p.id !== pairId));
+  }, []);
+
+  const removeService = useCallback((pairId: string, serviceId: string) => {
+    setPairs((prev) =>
+      prev
+        .map((p) =>
+          p.id === pairId ? { ...p, services: p.services.filter((s) => s.id !== serviceId) } : p,
+        )
+        // Drop pairs that no longer have any services
+        .filter((p) => p.services.length > 0),
     );
   }, []);
 
-  const removeItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
-  }, []);
-
-  const clear = useCallback(() => setItems([]), []);
+  const clear = useCallback(() => setPairs([]), []);
 
   const value = useMemo<BagState>(() => {
-    const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
-    const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    return { items, itemCount, subtotal, addItem, updateQuantity, removeItem, clear };
-  }, [items, addItem, updateQuantity, removeItem, clear]);
+    const itemCount = pairs.reduce((sum, p) => sum + p.services.length, 0);
+    const subtotal = pairs.reduce(
+      (sum, p) => sum + p.services.reduce((s, svc) => s + svc.price, 0),
+      0,
+    );
+    return { pairs, itemCount, subtotal, addPair, removePair, removeService, clear };
+  }, [pairs, addPair, removePair, removeService, clear]);
 
   return <BagContext.Provider value={value}>{children}</BagContext.Provider>;
 };
