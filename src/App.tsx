@@ -12,6 +12,7 @@ import ResetPassword from "./pages/ResetPassword.tsx";
 import TermsConditions from "./pages/TermsConditions.tsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy.tsx";
 import Account from "./pages/Account.tsx";
+import Faqs from "./pages/Faqs.tsx";
 import { BagProvider } from "./context/BagContext";
 import ScrollToHash from "./components/ScrollToHash";
 
