@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 import hero from "@/assets/hero-cobbler.png";
@@ -23,12 +24,16 @@ const Hero = () => {
               Old-world craftsmanship, modern convenience. We pick up, repair, and return your shoes — without you leaving home.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Button size="lg" variant="hero">
-                Start a repair
-              </Button>
-              <Button size="lg" variant="heroOutline">
-                Browse services
-              </Button>
+              <Link to="/start-repair">
+                <Button size="lg" variant="hero">
+                  Start a repair
+                </Button>
+              </Link>
+              <Link to="/services">
+                <Button size="lg" variant="heroOutline">
+                  Browse services
+                </Button>
+              </Link>
             </div>
             <p className="mt-5 text-sm md:text-base text-primary-foreground/80">
               Not sure what your shoes need? Email us photos at{" "}

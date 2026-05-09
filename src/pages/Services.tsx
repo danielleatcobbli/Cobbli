@@ -1,52 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
+import ConsultationBanner from "@/components/cobbli/ConsultationBanner";
+import {
+  CATEGORIES_ORDERED,
+  SERVICES,
+  isPriceRange,
+  minPrice,
+  type Service,
+} from "@/data/services";
 
-type Category =
-  | "All services"
-  | "Sole or heel repair"
-  | "Zipper repair"
-  | "Strap repair"
-  | "Cleaning"
-  | "Preventative care";
-
-const categories: Category[] = [
-  "All services",
-  "Sole or heel repair",
-  "Zipper repair",
-  "Strap repair",
-  "Cleaning",
-  "Preventative care",
-];
-
-type Service = {
-  slug: string;
-  name: string;
-  description: string;
-  /** When set, displays as "From $XX". Otherwise displays as "$XX". */
-  priceFrom?: number;
-  price?: number;
-  categories: Exclude<Category, "All services">[];
-  /** Lower number = higher rank. Configurable per service. */
-  rank: number;
-};
-
-// Placeholder services — to be replaced with real list/prices/ranking later.
-const services: Service[] = Array.from({ length: 8 }).map((_, i) => ({
-  slug: `service-${i + 1}`,
-  name: "Service name",
-  description: "Service description",
-  ...(i % 2 === 0 ? { price: 0 } : { priceFrom: 0 }),
-  categories: [
-    categories[(i % (categories.length - 1)) + 1] as Exclude<Category, "All services">,
-  ],
-  rank: i + 1,
-}));
+const ALL = "All services" as const;
+const categories = [ALL, ...CATEGORIES_ORDERED];
 
 const ServiceCard = ({ s }: { s: Service }) => {
-  const priceLabel = s.priceFrom !== undefined ? "From $XX" : "$XX";
+  const range = isPriceRange(s);
+  const min = minPrice(s);
+  const priceLabel = range
+    ? `From $${min === 0 ? "XX" : min}`
+    : `$${min === 0 ? "XX" : min}`;
   return (
     <Link
       to={`/services/${s.slug}`}
@@ -68,7 +41,7 @@ const ServiceCard = ({ s }: { s: Service }) => {
 };
 
 const Services = () => {
-  const [active, setActive] = useState<Category>("All services");
+  const [active, setActive] = useState<(typeof categories)[number]>(ALL);
 
   useEffect(() => {
     document.title = "Services — Cobbli";
@@ -86,9 +59,9 @@ const Services = () => {
 
   const visible = useMemo(() => {
     const list =
-      active === "All services"
-        ? services
-        : services.filter((s) => s.categories.includes(active));
+      active === ALL
+        ? SERVICES
+        : SERVICES.filter((s) => s.categories.includes(active as Service["categories"][number]));
     return [...list].sort((a, b) => a.rank - b.rank);
   }, [active]);
 
@@ -102,7 +75,6 @@ const Services = () => {
             Our services.
           </h1>
 
-          {/* Category navigation */}
           <div
             role="tablist"
             aria-label="Service categories"
@@ -130,36 +102,14 @@ const Services = () => {
             })}
           </div>
 
-          {/* Service grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6">
             {visible.map((s) => (
               <ServiceCard key={s.slug} s={s} />
             ))}
           </div>
 
-          {/* Consultation banner */}
-          <div
-            className="mt-12 rounded-xl p-6 md:p-8 flex items-start gap-4"
-            style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
-          >
-            <div
-              className="h-10 w-10 rounded-full flex items-center justify-center shrink-0"
-              style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
-            >
-              <Mail size={20} />
-            </div>
-            <div>
-              <h2 className="font-display text-xl text-primary">
-                Not sure what your shoes need?
-              </h2>
-              <p className="mt-1 text-sm md:text-base text-primary/80">
-                Email us photos at{" "}
-                <a href="mailto:support@cobbli.com" className="underline">
-                  support@cobbli.com
-                </a>{" "}
-                and we'll recommend the right repairs within 1 business day.
-              </p>
-            </div>
+          <div className="mt-12">
+            <ConsultationBanner />
           </div>
         </div>
       </section>
