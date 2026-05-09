@@ -16,7 +16,6 @@ import {
   CATEGORIES_ORDERED,
   SERVICES,
   isEligibleForShoeType,
-  isPriceRange,
   type Service,
 } from "@/data/services";
 import { usePairs } from "@/context/PairsContext";
@@ -257,6 +256,4 @@ const SelectServices = () => {
   );
 };
 
-// Re-export to satisfy lint about unused isPriceRange (used in detail page)
-export { isPriceRange };
 export default SelectServices;
