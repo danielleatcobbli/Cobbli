@@ -13,6 +13,7 @@ import TermsConditions from "./pages/TermsConditions.tsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy.tsx";
 import Account from "./pages/Account.tsx";
 import Faqs from "./pages/Faqs.tsx";
+import Services from "./pages/Services.tsx";
 import { BagProvider } from "./context/BagContext";
 import ScrollToHash from "./components/ScrollToHash";
 
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/account/*" element={<Account />} />
             <Route path="/faqs" element={<Faqs />} />
+            <Route path="/services" element={<Services />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
