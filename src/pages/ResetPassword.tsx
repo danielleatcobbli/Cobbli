@@ -6,16 +6,29 @@ import Footer from "@/components/cobbli/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Step = "request" | "sent" | "reset" | "expired";
 
-const titles: Record<Step, string> = {
-  request: "Reset your password — Cobbli",
-  sent: "Check your inbox — Cobbli",
-  reset: "Reset password — Cobbli",
-  expired: "Link expired — Cobbli",
+const meta: Record<Step, { title: string; description: string }> = {
+  request: {
+    title: "Reset your password — Cobbli",
+    description: "Forgot your Cobbli password? Enter your email to receive a secure reset link and get back to managing your shoe repair orders in NYC.",
+  },
+  sent: {
+    title: "Check your inbox — Cobbli",
+    description: "We've sent you a password reset link. Check your inbox to securely set a new password for your Cobbli account and continue your shoe repairs.",
+  },
+  reset: {
+    title: "Reset password — Cobbli",
+    description: "Set a new password for your Cobbli account so you can sign in and manage your NYC shoe repair orders, addresses and payment methods.",
+  },
+  expired: {
+    title: "Link expired — Cobbli",
+    description: "Your Cobbli password reset link has expired. Request a new secure link to set a new password and get back to your shoe repair orders.",
+  },
 };
 
 const ResetPassword = () => {
@@ -45,9 +58,7 @@ const ResetPassword = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pwdError, setPwdError] = useState<string | null>(null);
 
-  useEffect(() => {
-    document.title = titles[step];
-  }, [step]);
+  usePageMeta(meta[step]);
 
   // Cooldown timer for resend
   const intervalRef = useRef<number | null>(null);
