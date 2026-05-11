@@ -21,7 +21,7 @@ const Header = () => {
     <header className="sticky top-0 z-50 bg-primary text-primary-foreground shadow-soft">
       <div className="container flex h-24 md:h-28 items-center gap-6">
         <Link to="/" className="flex items-center" aria-label="Cobbli home">
-          <img src={logo} alt="Cobbli" className="h-20 md:h-24 w-auto" />
+          <img src={logo} alt="Cobbli" className="h-28 md:h-32 w-auto" />
         </Link>
 
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium ml-6">
