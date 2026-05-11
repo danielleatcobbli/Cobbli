@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useAccount, isExpired } from "@/context/AccountContext";
+import { formatPrice } from "@/context/BagContext";
 
 // Mock signed-in user (UI only)
 const MOCK_USER = {
@@ -57,12 +59,10 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => (
 
 // ---------- My Orders ----------
 const Orders = () => {
+  const { orders } = useAccount();
   useEffect(() => {
     document.title = "My orders — Cobbli";
   }, []);
-
-  // Empty state by default (UI mock)
-  const orders: any[] = [];
 
   return (
     <section aria-labelledby="orders-h">
@@ -73,16 +73,47 @@ const Orders = () => {
         <div className="rounded-lg border border-border bg-card p-8 text-center">
           <p className="text-foreground/80 mb-4">You haven't placed any orders yet</p>
           <Button asChild variant="hero">
-            <Link to="/#services">Start a repair</Link>
+            <Link to="/start-repair">Start a repair</Link>
           </Button>
         </div>
-      ) : null}
+      ) : (
+        <ul className="space-y-4">
+          {orders.map((o) => {
+            const itemCount = o.pairs.reduce((s, p) => s + p.services.length, 0);
+            return (
+              <li key={o.id} className="rounded-lg border border-border bg-card p-5 shadow-soft">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">Order #{o.number}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Placed {new Date(o.placedAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {o.pairs.length} pair{o.pairs.length === 1 ? "" : "s"} · {itemCount} service{itemCount === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">{formatPrice(o.subtotal)}</p>
+                    <Link
+                      to={`/order-confirmation/${o.id}`}
+                      className="text-sm text-primary underline underline-offset-4"
+                    >
+                      View details
+                    </Link>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 };
 
 // ---------- My Addresses ----------
 const Addresses = () => {
+  const { addresses } = useAccount();
   useEffect(() => {
     document.title = "My addresses — Cobbli";
   }, []);
@@ -91,15 +122,29 @@ const Addresses = () => {
       <h1 id="addr-h" className="text-2xl md:text-3xl font-semibold mb-6">
         My Addresses
       </h1>
-      <div className="rounded-lg border border-border bg-card p-8 text-center text-foreground/80">
-        No addresses on file yet.
-      </div>
+      {addresses.length === 0 ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-foreground/80">
+          No addresses on file yet.
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {addresses.map((a) => (
+            <li key={a.id} className="rounded-lg border border-border bg-card p-4 text-sm">
+              <p className="font-medium">
+                {a.street}{a.street2 ? `, ${a.street2}` : ""}, {a.city}, {a.state} {a.zip}
+                {a.isDefault && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 };
 
 // ---------- My Payment Methods ----------
 const PaymentMethods = () => {
+  const { paymentMethods } = useAccount();
   useEffect(() => {
     document.title = "My payment methods — Cobbli";
   }, []);
@@ -108,9 +153,35 @@ const PaymentMethods = () => {
       <h1 id="pm-h" className="text-2xl md:text-3xl font-semibold mb-6">
         My Payment Methods
       </h1>
-      <div className="rounded-lg border border-border bg-card p-8 text-center text-foreground/80">
-        No payment methods on file yet.
-      </div>
+      {paymentMethods.length === 0 ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-foreground/80">
+          No payment methods on file yet.
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {paymentMethods.map((p) => {
+            const expired = isExpired(p);
+            return (
+              <li key={p.id} className="rounded-lg border border-border bg-card p-4 text-sm flex items-center justify-between">
+                <div>
+                  <p className="font-medium">
+                    {p.brand} ending in {p.last4}
+                    {p.isDefault && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Exp {String(p.expMonth).padStart(2, "0")}/{String(p.expYear).slice(-2)}
+                  </p>
+                </div>
+                {expired && (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-destructive/10 text-destructive">
+                    Expired
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 };
