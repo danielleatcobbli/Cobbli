@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
-import hero from "@/assets/hero-cobbler.webp";
+// Served from /public so the preload link in index.html resolves to the same URL.
+const hero = "/assets/hero-cobbler.webp";
 
 const Hero = () => {
   return (
