@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useAccount, isExpired } from "@/context/AccountContext";
 import { formatPrice } from "@/context/BagContext";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 // Mock signed-in user (UI only)
 const MOCK_USER = {
@@ -60,9 +61,10 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => (
 // ---------- My Orders ----------
 const Orders = () => {
   const { orders } = useAccount();
-  useEffect(() => {
-    document.title = "My orders — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "My orders — Cobbli",
+    description: "View your past Cobbli shoe repair orders, see what's been picked up and returned, and quickly start a new repair from your account dashboard.",
+  });
 
   return (
     <section aria-labelledby="orders-h">
@@ -114,9 +116,10 @@ const Orders = () => {
 // ---------- My Addresses ----------
 const Addresses = () => {
   const { addresses } = useAccount();
-  useEffect(() => {
-    document.title = "My addresses — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "My addresses — Cobbli",
+    description: "Manage the saved addresses on your Cobbli account for faster door-to-door shoe repair pickup and return scheduling across NYC.",
+  });
   return (
     <section aria-labelledby="addr-h">
       <h1 id="addr-h" className="text-2xl md:text-3xl font-semibold mb-6">
@@ -145,9 +148,10 @@ const Addresses = () => {
 // ---------- My Payment Methods ----------
 const PaymentMethods = () => {
   const { paymentMethods } = useAccount();
-  useEffect(() => {
-    document.title = "My payment methods — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "My payment methods — Cobbli",
+    description: "Manage the cards saved on your Cobbli account for faster checkout when booking door-to-door shoe repairs across NYC.",
+  });
   return (
     <section aria-labelledby="pm-h">
       <h1 id="pm-h" className="text-2xl md:text-3xl font-semibold mb-6">
@@ -188,9 +192,10 @@ const PaymentMethods = () => {
 
 // ---------- My Password ----------
 const Password = () => {
-  useEffect(() => {
-    document.title = "My password — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "My password — Cobbli",
+    description: "Update the password on your Cobbli account to keep your shoe repair orders, saved addresses and payment methods secure.",
+  });
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -296,9 +301,10 @@ const PasswordField = ({ id, label, value, onChange, show, setShow }: PasswordFi
 
 // ---------- Contact Us ----------
 const Contact = () => {
-  useEffect(() => {
-    document.title = "Contact us — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Contact us — Cobbli",
+    description: "Get in touch with the Cobbli team about your NYC shoe repair order, our service area, pickup scheduling or anything else. We're happy to help.",
+  });
   return (
     <section aria-labelledby="contact-h" className="max-w-2xl">
       <h1 id="contact-h" className="text-2xl md:text-3xl font-semibold mb-4">
