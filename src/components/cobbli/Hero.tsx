@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
-import hero from "@/assets/hero-cobbler.png";
+// Served from /public so the preload link in index.html resolves to the same URL.
+const hero = "/assets/hero-cobbler.webp";
 
 const Hero = () => {
   return (
@@ -12,6 +13,9 @@ const Hero = () => {
           alt="Master cobbler restoring a leather brogue shoe in a workshop"
           className="absolute inset-0 h-full w-full object-cover"
           loading="eager"
+          decoding="async"
+          // @ts-expect-error fetchpriority is a valid HTML attribute, React typing lags
+          fetchpriority="high"
         />
         <div className="absolute inset-0 bg-gradient-hero" />
         <div className="container relative z-10 py-20 md:py-28">
