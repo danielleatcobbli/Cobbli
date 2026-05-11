@@ -17,9 +17,12 @@ import Services from "./pages/Services.tsx";
 import StartRepair from "./pages/StartRepair.tsx";
 import SelectServices from "./pages/SelectServices.tsx";
 import ServiceDetail from "./pages/ServiceDetail.tsx";
+import Checkout from "./pages/Checkout.tsx";
+import OrderConfirmation from "./pages/OrderConfirmation.tsx";
 import { BagProvider } from "./context/BagContext";
 import { PairsProvider } from "./context/PairsContext";
 import { RepairFlowProvider } from "./context/RepairFlowContext";
+import { AccountProvider } from "./context/AccountContext";
 import ScrollToHash from "./components/ScrollToHash";
 
 const queryClient = new QueryClient();
@@ -29,10 +32,11 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BagProvider>
-        <PairsProvider>
-          <RepairFlowProvider>
-            <BrowserRouter>
+      <AccountProvider>
+        <BagProvider>
+          <PairsProvider>
+            <RepairFlowProvider>
+              <BrowserRouter>
               <ScrollToHash />
               <Routes>
                 <Route path="/" element={<Index />} />
@@ -49,13 +53,16 @@ const App = () => (
                 <Route path="/start-repair" element={<StartRepair />} />
                 <Route path="/start-repair/services" element={<SelectServices />} />
                 <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
-          </RepairFlowProvider>
-        </PairsProvider>
-      </BagProvider>
+            </RepairFlowProvider>
+          </PairsProvider>
+        </BagProvider>
+      </AccountProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
