@@ -49,19 +49,6 @@ const Services = () => {
     description:
       "Browse Cobbli's NYC shoe repair services: sole and heel repair, zipper and strap fixes, cleaning and preventative care. Transparent pricing, fast turnaround.",
   });
-  // legacy:
-  // _
-    let meta = document.querySelector('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.setAttribute("name", "description");
-      document.head.appendChild(meta);
-    }
-    meta.setAttribute(
-      "content",
-      "Browse Cobbli's professional shoe repair services — sole and heel repair, zipper repair, strap repair, cleaning and preventative care.",
-    );
-  }, []);
 
   const visible = useMemo(() => {
     const list =
