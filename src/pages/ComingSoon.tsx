@@ -60,7 +60,9 @@ const ComingSoon = () => {
 
     // Treat duplicate as success — they're already on the list
     if (insertError && insertError.code !== "23505") {
-      setError("Something went wrong. Please try again.");
+      setError(
+        "Something went wrong. Please try again or contact us at support@cobbli.com.",
+      );
       return;
     }
 
