@@ -74,7 +74,7 @@ const ComingSoon = () => {
       style={{ backgroundColor: "#3d1700", fontFamily: "'DM Sans', sans-serif" }}
     >
       <div className="w-full flex justify-center">
-        <img src={logo} alt="Cobbli" className="h-20 md:h-24 w-auto" />
+        <img src={logo} alt="Cobbli" className="h-32 md:h-40 w-auto" />
       </div>
 
       <section className="flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto py-10">
