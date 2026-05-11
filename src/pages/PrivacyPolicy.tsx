@@ -1,11 +1,13 @@
-import { useEffect } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 
 const PrivacyPolicy = () => {
-  useEffect(() => {
-    document.title = "Privacy policy — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Privacy policy — Cobbli",
+    description:
+      "Read Cobbli's privacy policy: how we collect, use and protect personal information when you book shoe repairs and use our door-to-door service.",
+  });
 
   return (
     <div className="min-h-screen flex flex-col">

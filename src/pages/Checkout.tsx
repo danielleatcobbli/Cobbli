@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Check, ChevronDown, Pencil } from "lucide-react";
 import Header from "@/components/cobbli/Header";
@@ -42,9 +43,11 @@ const Checkout = () => {
     addOrder,
   } = useAccount();
 
-  useEffect(() => {
-    document.title = "Checkout — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Checkout — Cobbli",
+    description:
+      "Complete your Cobbli shoe repair order: confirm contact information, delivery address and payment for door-to-door pickup and return across NYC.",
+  });
 
   const courierFee = subtotal >= FREE_COURIER_THRESHOLD ? 0 : COURIER_FEE;
   const orderSubtotal = subtotal + courierFee;

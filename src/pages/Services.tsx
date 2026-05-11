@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link } from "react-router-dom";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -43,19 +44,11 @@ const ServiceCard = ({ s }: { s: Service }) => {
 const Services = () => {
   const [active, setActive] = useState<(typeof categories)[number]>(ALL);
 
-  useEffect(() => {
-    document.title = "Services — Cobbli";
-    let meta = document.querySelector('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.setAttribute("name", "description");
-      document.head.appendChild(meta);
-    }
-    meta.setAttribute(
-      "content",
-      "Browse Cobbli's professional shoe repair services — sole and heel repair, zipper repair, strap repair, cleaning and preventative care.",
-    );
-  }, []);
+  usePageMeta({
+    title: "Services — Cobbli",
+    description:
+      "Browse Cobbli's NYC shoe repair services: sole and heel repair, zipper and strap fixes, cleaning and preventative care. Transparent pricing, fast turnaround.",
+  });
 
   const visible = useMemo(() => {
     const list =

@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Plus, Minus } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -135,18 +136,11 @@ const faqs: { q: string; a: ReactNode }[] = [
 const Faqs = () => {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
 
-  useEffect(() => {
-    document.title = "FAQs — Cobbli";
-    const desc =
-      "Frequently asked questions about Cobbli's shoe repair, pickup and return, pricing, and turnaround times.";
-    let meta = document.querySelector('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.setAttribute("name", "description");
-      document.head.appendChild(meta);
-    }
-    meta.setAttribute("content", desc);
-  }, []);
+  usePageMeta({
+    title: "FAQs — Cobbli",
+    description:
+      "Answers to common questions about Cobbli's NYC shoe repair service: pickup and return, pricing, turnaround times, service area and order guarantees.",
+  });
 
   return (
     <main className="min-h-screen flex flex-col bg-white">

@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import Header from "@/components/cobbli/Header";
@@ -34,9 +35,11 @@ const SignUp = () => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
-  useEffect(() => {
-    document.title = "Create an account — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Create an account — Cobbli",
+    description:
+      "Create a free Cobbli account to book shoe repairs, save your addresses and payment methods, and track your door-to-door pickups across NYC.",
+  });
 
   const phoneDigits = phone.replace(/\D/g, "").slice(0, 10);
 

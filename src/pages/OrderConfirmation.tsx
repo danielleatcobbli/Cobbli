@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useParams } from "react-router-dom";
 import { CheckCircle2, MessageSquare } from "lucide-react";
 import Header from "@/components/cobbli/Header";
@@ -12,9 +12,11 @@ const OrderConfirmation = () => {
   const { orders } = useAccount();
   const order = orders.find((o) => o.id === id);
 
-  useEffect(() => {
-    document.title = "Order confirmed — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Order confirmed — Cobbli",
+    description:
+      "Your Cobbli shoe repair order is confirmed. We'll text you to coordinate your door-to-door pickup and return windows across NYC.",
+  });
 
   if (!order) {
     return (

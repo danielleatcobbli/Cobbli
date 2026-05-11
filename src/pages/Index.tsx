@@ -6,26 +6,47 @@ import TrustSignals from "@/components/cobbli/TrustSignals";
 
 import Footer from "@/components/cobbli/Footer";
 import { useEffect } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 const Index = () => {
-  useEffect(() => {
-    document.title = "Cobbli — Expert shoe repair, delivered to your doorstep";
-    const desc = "Cobbli collects, restores and returns your favourite shoes. Master cobblers, free UK collection, 90-day quality guarantee.";
-    let meta = document.querySelector('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.setAttribute("name", "description");
-      document.head.appendChild(meta);
-    }
-    meta.setAttribute("content", desc);
+  usePageMeta({
+    title: "Cobbli — Expert shoe repair, delivered to your doorstep",
+    description:
+      "Cobbli picks up, repairs and returns your favorite shoes across NYC. Master cobblers, free courier on orders over $100, easy online booking.",
+    canonicalPath: "/",
+  });
 
-    let canonical = document.querySelector('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.setAttribute("rel", "canonical");
-      document.head.appendChild(canonical);
+  // LocalBusiness structured data for the homepage
+  useEffect(() => {
+    const id = "cobbli-localbusiness-jsonld";
+    let script = document.getElementById(id) as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement("script");
+      script.id = id;
+      script.type = "application/ld+json";
+      document.head.appendChild(script);
     }
-    canonical.setAttribute("href", window.location.origin + "/");
+    const data = {
+      "@context": "https://schema.org",
+      "@type": "LocalBusiness",
+      name: "Cobbli",
+      description:
+        "Door-to-door shoe repair in NYC. Cobbli picks up, repairs and returns your favorite shoes.",
+      url: window.location.origin,
+      email: "support@cobbli.com",
+      areaServed: { "@type": "City", name: "New York" },
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: "New York",
+        addressRegion: "NY",
+        addressCountry: "US",
+      },
+      priceRange: "$$",
+    };
+    script.textContent = JSON.stringify(data);
+    return () => {
+      script?.remove();
+    };
   }, []);
 
   return (

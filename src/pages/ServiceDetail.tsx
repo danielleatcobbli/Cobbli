@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import Header from "@/components/cobbli/Header";
@@ -19,9 +19,12 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
 
   const service = getService(slug);
 
-  useEffect(() => {
-    document.title = service ? `${service.name} — Cobbli` : "Service — Cobbli";
-  }, [service]);
+  usePageMeta({
+    title: service ? `${service.name} — Cobbli` : "Service — Cobbli",
+    description: service
+      ? `${service.description} Book ${service.name.toLowerCase()} with Cobbli's NYC door-to-door shoe repair service. Transparent pricing and fast turnaround.`
+      : "Cobbli's professional shoe repair services with transparent pricing and door-to-door pickup and return across NYC.",
+  });
 
   if (!service) return <Navigate to={mode === "flow" ? "/start-repair/services" : "/services"} replace />;
 

@@ -1,11 +1,13 @@
-import { useEffect } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 
 const TermsConditions = () => {
-  useEffect(() => {
-    document.title = "Terms & conditions — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Terms & conditions — Cobbli",
+    description:
+      "The terms and conditions that govern your use of Cobbli's NYC shoe repair service, including pickup, return, payment and order guarantees.",
+  });
 
   return (
     <div className="min-h-screen flex flex-col">

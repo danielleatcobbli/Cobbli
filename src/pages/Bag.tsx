@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useNavigate } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import Header from "@/components/cobbli/Header";
@@ -15,9 +16,11 @@ const Bag = () => {
   const { pairs, subtotal, removePair, removeService } = useBag();
   const isEmpty = pairs.length === 0;
 
-  useEffect(() => {
-    document.title = "Shopping bag — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Shopping bag — Cobbli",
+    description:
+      "Review the shoe repairs in your Cobbli bag, see your order summary and check out for door-to-door pickup and return across NYC.",
+  });
 
   // Most-recently-added pair first
   const orderedPairs = useMemo(

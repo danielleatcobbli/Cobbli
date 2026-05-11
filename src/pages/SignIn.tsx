@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import Header from "@/components/cobbli/Header";
@@ -51,9 +52,11 @@ const SignIn = () => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [locked, setLockedState] = useState(false);
 
-  useEffect(() => {
-    document.title = "Sign In — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Sign in — Cobbli",
+    description:
+      "Sign in to your Cobbli account to manage shoe repair orders, saved addresses and payment methods for fast door-to-door checkout across NYC.",
+  });
 
   // Re-check locked state whenever email changes
   useEffect(() => {
