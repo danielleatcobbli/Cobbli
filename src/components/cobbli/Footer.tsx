@@ -37,6 +37,10 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
               Privacy Policy
             </a>
             <span aria-hidden="true">·</span>
+            <a href="/cookie-policy" className="underline" {...legalLinkProps}>
+              Cookie Policy
+            </a>
+            <span aria-hidden="true">·</span>
             <a href="/terms-conditions" className="underline" {...legalLinkProps}>
               Terms & Conditions
             </a>
