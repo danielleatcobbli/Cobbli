@@ -126,8 +126,11 @@ const Addresses = () => {
         My Addresses
       </h1>
       {addresses.length === 0 ? (
-        <div className="rounded-lg border border-border bg-card p-8 text-center text-foreground/80">
-          No addresses on file yet.
+        <div className="rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-foreground/80 mb-4">No addresses on file yet.</p>
+          <Button asChild variant="hero">
+            <Link to="/start-repair">Add an address</Link>
+          </Button>
         </div>
       ) : (
         <ul className="space-y-3">
@@ -158,8 +161,11 @@ const PaymentMethods = () => {
         My Payment Methods
       </h1>
       {paymentMethods.length === 0 ? (
-        <div className="rounded-lg border border-border bg-card p-8 text-center text-foreground/80">
-          No payment methods on file yet.
+        <div className="rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-foreground/80 mb-4">No payment methods on file yet.</p>
+          <Button asChild variant="hero">
+            <Link to="/start-repair">Add a payment method</Link>
+          </Button>
         </div>
       ) : (
         <ul className="space-y-3">
