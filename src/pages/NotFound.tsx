@@ -2,9 +2,16 @@ import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 const NotFound = () => {
   const location = useLocation();
+
+  usePageMeta({
+    title: "Page not found — Cobbli",
+    description:
+      "The page you're looking for doesn't exist. Head back to Cobbli's homepage to start a shoe repair or browse our NYC door-to-door services.",
+  });
 
   useEffect(() => {
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);

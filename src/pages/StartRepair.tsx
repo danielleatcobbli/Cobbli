@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -175,9 +176,11 @@ const StartRepair = () => {
   const { selectedPairId, setSelectedPairId } = useRepairFlow();
   const [modalOpen, setModalOpen] = useState(false);
 
-  useEffect(() => {
-    document.title = "Start a repair — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Start a repair — Cobbli",
+    description:
+      "Start a Cobbli repair: pick the pair of shoes you want fixed, choose your services and book door-to-door pickup and return across NYC.",
+  });
 
   const sortedPairs = useMemo(
     () => [...pairs].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),

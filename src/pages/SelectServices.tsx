@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
 import Header from "@/components/cobbli/Header";
@@ -89,9 +90,11 @@ const SelectServices = () => {
   const { addPair: addPairToBag } = useBag();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  useEffect(() => {
-    document.title = "Start a repair — Cobbli";
-  }, []);
+  usePageMeta({
+    title: "Select services — Cobbli",
+    description:
+      "Choose the repairs your shoes need from Cobbli's catalog of sole, heel, zipper, strap, cleaning and preventative care services. Transparent pricing.",
+  });
 
   const pair = selectedPairId ? getPair(selectedPairId) : undefined;
   if (!pair) return <Navigate to="/start-repair" replace />;

@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Plus, Minus } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
