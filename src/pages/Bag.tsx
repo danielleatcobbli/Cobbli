@@ -157,7 +157,7 @@ const EmptyBag = () => (
       You haven't added any repairs yet. Start a repair to get your shoes looking their best.
     </p>
     <Button asChild variant="hero" size="lg">
-      <Link to="/#services">Start a repair</Link>
+      <Link to="/start-repair">Start a repair</Link>
     </Button>
   </div>
 );
