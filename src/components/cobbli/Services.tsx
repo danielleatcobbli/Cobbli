@@ -1,61 +1,28 @@
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import ServiceCard from "@/components/cobbli/ServiceCard";
 import {
-  Footprints,
-  Hammer,
-  Sparkles,
-  Heart,
-  Wrench,
-  Scissors,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+  CATEGORIES_ORDERED,
+  SERVICES,
+  type Service,
+} from "@/data/services";
 
-type Category =
-  | "All services"
-  | "Heels & Soles"
-  | "Stitching"
-  | "Polish & Care"
-  | "Restoration";
-
-type Service = {
-  icon: typeof Footprints;
-  title: string;
-  desc: string;
-  category: Exclude<Category, "All services">;
-};
-
-const services: Service[] = [
-  { icon: Footprints, title: "Heel replacement", desc: "Replace worn heels for everyday wear.", category: "Heels & Soles" },
-  { icon: Footprints, title: "Full resole", desc: "New soles for tired everyday shoes.", category: "Heels & Soles" },
-  { icon: Hammer, title: "Seam stitching", desc: "Re-stitch seams and reinforce uppers.", category: "Stitching" },
-  { icon: Hammer, title: "Upper rebuild", desc: "Rebuild damaged leather uppers.", category: "Stitching" },
-  { icon: Sparkles, title: "Polish & Renew", desc: "Hand-polished finish that brings shoes back to life.", category: "Polish & Care" },
-  { icon: Heart, title: "Leather conditioning", desc: "Deep conditioning and protective treatments.", category: "Polish & Care" },
-  { icon: Heart, title: "Leather dyeing", desc: "Restore color with custom dye work.", category: "Polish & Care" },
-  { icon: Wrench, title: "Boot restoration", desc: "Heritage-grade restoration for boots you love.", category: "Restoration" },
-  { icon: Scissors, title: "Custom work", desc: "Bespoke alterations from our master cobblers.", category: "Restoration" },
-];
-
-const categories: Category[] = [
-  "All services",
-  "Heels & Soles",
-  "Stitching",
-  "Polish & Care",
-  "Restoration",
-];
+const ALL = "All services" as const;
+const categories = [ALL, ...CATEGORIES_ORDERED];
 
 const Services = () => {
-  const [active, setActive] = useState<Category>("All services");
+  const [active, setActive] = useState<(typeof categories)[number]>(ALL);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
 
-  const visible = useMemo(
-    () => (active === "All services" ? services : services.filter((s) => s.category === active)),
-    [active],
-  );
-
-  const showArrows = visible.length >= 5;
+  const visible = useMemo(() => {
+    const list =
+      active === ALL
+        ? SERVICES
+        : SERVICES.filter((s) => s.categories.includes(active as Service["categories"][number]));
+    return [...list].sort((a, b) => a.rank - b.rank);
+  }, [active]);
 
   const updateArrows = () => {
     const el = scrollerRef.current;
@@ -76,13 +43,13 @@ const Services = () => {
       el.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", updateArrows);
     };
-  }, [active]);
+  }, [active, visible.length]);
 
   const scrollByCard = (dir: 1 | -1) => {
     const el = scrollerRef.current;
     if (!el) return;
     const card = el.querySelector<HTMLElement>("[data-service-card]");
-    const step = card ? card.offsetWidth + 16 : el.clientWidth * 0.8;
+    const step = card ? card.offsetWidth + 24 : el.clientWidth * 0.8;
     el.scrollBy({ left: dir * step, behavior: "smooth" });
   };
 
@@ -98,7 +65,7 @@ const Services = () => {
           </h2>
         </div>
 
-        {/* Category navigation */}
+        {/* Category navigation — same tabs as the Services page */}
         <div
           role="tablist"
           aria-label="Service categories"
@@ -128,7 +95,7 @@ const Services = () => {
 
         {/* Carousel */}
         <div className="relative">
-          {showArrows && canPrev && (
+          {canPrev && (
             <button
               type="button"
               aria-label="Previous services"
@@ -138,7 +105,7 @@ const Services = () => {
               <ChevronLeft size={20} />
             </button>
           )}
-          {showArrows && canNext && (
+          {canNext && (
             <button
               type="button"
               aria-label="Next services"
@@ -151,21 +118,16 @@ const Services = () => {
 
           <div
             ref={scrollerRef}
-            className="flex gap-4 md:gap-6 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex gap-5 md:gap-6 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {visible.map((s) => (
-              <a
-                key={s.title}
-                href="#book"
+              <div
+                key={s.slug}
                 data-service-card
-                className="group snap-start shrink-0 w-[calc(50%-0.5rem)] md:w-[calc(25%-1.125rem)] rounded-xl border border-border bg-card p-6 md:p-7 shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all"
+                className="snap-start shrink-0 w-[calc(80%-0.5rem)] sm:w-[calc(50%-0.625rem)] md:w-[calc(33.333%-1rem)] lg:w-[calc(25%-1.125rem)]"
               >
-                <div className="h-12 w-12 rounded-lg bg-secondary flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                  <s.icon size={22} strokeWidth={1.75} />
-                </div>
-                <h3 className="mt-5 text-lg font-display font-600">{s.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
-              </a>
+                <ServiceCard s={s} />
+              </div>
             ))}
           </div>
         </div>

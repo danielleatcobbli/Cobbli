@@ -7,39 +7,12 @@ import ConsultationBanner from "@/components/cobbli/ConsultationBanner";
 import {
   CATEGORIES_ORDERED,
   SERVICES,
-  isPriceRange,
-  minPrice,
   type Service,
 } from "@/data/services";
+import ServiceCard from "@/components/cobbli/ServiceCard";
 
 const ALL = "All services" as const;
 const categories = [ALL, ...CATEGORIES_ORDERED];
-
-const ServiceCard = ({ s }: { s: Service }) => {
-  const range = isPriceRange(s);
-  const min = minPrice(s);
-  const priceLabel = range
-    ? `From $${min === 0 ? "XX" : min}`
-    : `$${min === 0 ? "XX" : min}`;
-  return (
-    <Link
-      to={`/services/${s.slug}`}
-      className="group rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col"
-    >
-      <div
-        className="aspect-[4/3] flex items-center justify-center text-center px-4"
-        style={{ backgroundColor: "#3d1700", color: "#fdb600" }}
-      >
-        <span className="font-display text-xl">{s.name}</span>
-      </div>
-      <div className="p-5 flex flex-col gap-1">
-        <h3 className="font-display text-lg text-primary">{s.name}</h3>
-        <p className="text-sm text-muted-foreground">{s.description}</p>
-        <p className="mt-2 font-medium text-primary">{priceLabel}</p>
-      </div>
-    </Link>
-  );
-};
 
 const Services = () => {
   const [active, setActive] = useState<(typeof categories)[number]>(ALL);
