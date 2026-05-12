@@ -10,6 +10,8 @@ import { useLocation } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 const Index = () => {
+  const location = useLocation();
+
   usePageMeta({
     title: "Cobbli — Expert shoe repair, delivered to your doorstep",
     description:
