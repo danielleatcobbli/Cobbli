@@ -1,24 +1,51 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
+import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { useAccount, isExpired } from "@/context/AccountContext";
-import { formatPrice } from "@/context/BagContext";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 
-// Mock signed-in user (UI only)
-const MOCK_USER = {
-  name: "Jane Doe",
-  email: "[email protected]",
+type Profile = {
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  phone: string | null;
 };
 
-type NavItem = { to: string; label: string };
-const NAV: NavItem[] = [
+type Address = {
+  id: string;
+  street: string;
+  street2: string | null;
+  city: string;
+  state: string;
+  zip: string;
+  is_default: boolean;
+};
+
+type PaymentMethod = {
+  id: string;
+  card_brand: string;
+  card_last4: string;
+  exp_month: number;
+  exp_year: number;
+  is_default: boolean;
+};
+
+type Order = {
+  id: string;
+  order_number: string;
+  placed_at: string;
+  total_cents: number;
+};
+
+const NAV = [
   { to: "/account/orders", label: "My Orders" },
   { to: "/account/addresses", label: "My Addresses" },
   { to: "/account/payment-methods", label: "My Payment Methods" },
@@ -26,52 +53,105 @@ const NAV: NavItem[] = [
   { to: "/account/contact", label: "Contact Us" },
 ];
 
-const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => (
-  <aside className="md:w-64 md:shrink-0">
-    <div className="mb-6">
-      <p className="font-semibold text-foreground">{MOCK_USER.name}</p>
-      <p className="text-sm text-muted-foreground break-all">{MOCK_USER.email}</p>
-    </div>
-    <nav aria-label="Account" className="flex flex-col gap-1 text-sm">
-      {NAV.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          className={({ isActive }) =>
-            cn(
-              "py-2 transition-colors hover:text-primary",
-              isActive ? "underline underline-offset-4 font-medium text-primary" : "text-foreground/80",
-            )
-          }
-        >
-          {item.label}
-        </NavLink>
-      ))}
-      <button
-        type="button"
-        onClick={onSignOut}
-        className="text-left py-2 text-foreground/80 hover:text-primary transition-colors"
-      >
-        Sign Out
-      </button>
-    </nav>
-  </aside>
-);
+const formatPrice = (cents: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 
-// ---------- My Orders ----------
-const Orders = () => {
-  const { orders } = useAccount();
-  usePageMeta({
-    title: "My orders — Cobbli",
-    description: "View your past Cobbli shoe repair orders, see what's been picked up and returned, and quickly start a new repair from your account dashboard.",
-  });
+const isExpired = (m: number, y: number) => {
+  const now = new Date();
+  const yy = now.getFullYear();
+  const mm = now.getMonth() + 1;
+  return y < yy || (y === yy && m < mm);
+};
+
+const useProfile = () => {
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("profiles")
+      .select("first_name,last_name,email,phone")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setProfile(data as Profile | null);
+        setLoading(false);
+      });
+  }, [user]);
+  return { profile, loading };
+};
+
+const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => {
+  const { profile, loading } = useProfile();
+  const fullName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.email || "";
 
   return (
-    <section aria-labelledby="orders-h">
-      <h1 id="orders-h" className="text-2xl md:text-3xl font-semibold mb-6">
-        My Orders
-      </h1>
-      {orders.length === 0 ? (
+    <aside className="md:w-64 md:shrink-0">
+      <div className="mb-6 min-h-[3rem]">
+        {loading ? (
+          <BrandSpinner size="sm" className="justify-start" />
+        ) : (
+          <>
+            <p className="font-semibold text-foreground">{fullName}</p>
+            {profile?.email && (
+              <p className="text-sm text-muted-foreground break-all">{profile.email}</p>
+            )}
+          </>
+        )}
+      </div>
+      <nav aria-label="Account" className="flex flex-col gap-1 text-sm">
+        {NAV.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              cn(
+                "py-2 transition-colors hover:text-primary",
+                isActive ? "underline underline-offset-4 font-medium text-primary" : "text-foreground/80",
+              )
+            }
+          >
+            {item.label}
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="text-left py-2 text-foreground/80 hover:text-primary transition-colors"
+        >
+          Sign Out
+        </button>
+      </nav>
+    </aside>
+  );
+};
+
+const Orders = () => {
+  const { user } = useAuth();
+  const [orders, setOrders] = useState<Order[] | null>(null);
+  usePageMeta({
+    title: "My orders — Cobbli",
+    description:
+      "View your past Cobbli shoe repair orders, see what's been picked up and returned, and quickly start a new repair from your account dashboard.",
+  });
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("orders")
+      .select("id,order_number,placed_at,total_cents")
+      .eq("user_id", user.id)
+      .order("placed_at", { ascending: false })
+      .then(({ data }) => setOrders((data ?? []) as Order[]));
+  }, [user]);
+
+  return (
+    <section>
+      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My Orders</h1>
+      {orders === null ? (
+        <BrandSpinner className="py-10" />
+      ) : orders.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-8 text-center">
           <p className="text-foreground/80 mb-4">You haven't placed any orders yet</p>
           <Button asChild variant="hero">
@@ -80,52 +160,62 @@ const Orders = () => {
         </div>
       ) : (
         <ul className="space-y-4">
-          {orders.map((o) => {
-            const itemCount = o.pairs.reduce((s, p) => s + p.services.length, 0);
-            return (
-              <li key={o.id} className="rounded-lg border border-border bg-card p-5 shadow-soft">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">Order #{o.number}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Placed {new Date(o.placedAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {o.pairs.length} pair{o.pairs.length === 1 ? "" : "s"} · {itemCount} service{itemCount === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{formatPrice(o.subtotal)}</p>
-                    <Link
-                      to={`/order-confirmation/${o.id}`}
-                      className="text-sm text-primary underline underline-offset-4"
-                    >
-                      View details
-                    </Link>
-                  </div>
+          {orders.map((o) => (
+            <li key={o.id} className="rounded-lg border border-border bg-card p-5 shadow-soft">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">Order #{o.order_number}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Placed{" "}
+                    {new Date(o.placed_at).toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </p>
                 </div>
-              </li>
-            );
-          })}
+                <div className="text-right">
+                  <p className="font-semibold">{formatPrice(o.total_cents)}</p>
+                  <Link
+                    to={`/order-confirmation/${o.id}`}
+                    className="text-sm text-primary underline underline-offset-4"
+                  >
+                    View details
+                  </Link>
+                </div>
+              </div>
+            </li>
+          ))}
         </ul>
       )}
     </section>
   );
 };
 
-// ---------- My Addresses ----------
 const Addresses = () => {
-  const { addresses } = useAccount();
+  const { user } = useAuth();
+  const [items, setItems] = useState<Address[] | null>(null);
   usePageMeta({
     title: "My addresses — Cobbli",
-    description: "Manage the saved addresses on your Cobbli account for faster door-to-door shoe repair pickup and return scheduling across NYC.",
+    description:
+      "Manage the saved addresses on your Cobbli account for faster door-to-door shoe repair pickup and return scheduling across NYC.",
   });
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("addresses")
+      .select("id,street,street2,city,state,zip,is_default")
+      .eq("user_id", user.id)
+      .order("is_default", { ascending: false })
+      .then(({ data }) => setItems((data ?? []) as Address[]));
+  }, [user]);
+
   return (
-    <section aria-labelledby="addr-h">
-      <h1 id="addr-h" className="text-2xl md:text-3xl font-semibold mb-6">
-        My Addresses
-      </h1>
-      {addresses.length === 0 ? (
+    <section>
+      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My Addresses</h1>
+      {items === null ? (
+        <BrandSpinner className="py-10" />
+      ) : items.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-8 text-center">
           <p className="text-foreground/80 mb-4">No addresses on file yet.</p>
           <Button asChild variant="hero">
@@ -134,11 +224,12 @@ const Addresses = () => {
         </div>
       ) : (
         <ul className="space-y-3">
-          {addresses.map((a) => (
+          {items.map((a) => (
             <li key={a.id} className="rounded-lg border border-border bg-card p-4 text-sm">
               <p className="font-medium">
-                {a.street}{a.street2 ? `, ${a.street2}` : ""}, {a.city}, {a.state} {a.zip}
-                {a.isDefault && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
+                {a.street}
+                {a.street2 ? `, ${a.street2}` : ""}, {a.city}, {a.state} {a.zip}
+                {a.is_default && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
               </p>
             </li>
           ))}
@@ -148,19 +239,30 @@ const Addresses = () => {
   );
 };
 
-// ---------- My Payment Methods ----------
 const PaymentMethods = () => {
-  const { paymentMethods } = useAccount();
+  const { user } = useAuth();
+  const [items, setItems] = useState<PaymentMethod[] | null>(null);
   usePageMeta({
     title: "My payment methods — Cobbli",
-    description: "Manage the cards saved on your Cobbli account for faster checkout when booking door-to-door shoe repairs across NYC.",
+    description:
+      "Manage the cards saved on your Cobbli account for faster checkout when booking door-to-door shoe repairs across NYC.",
   });
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("payment_methods")
+      .select("id,card_brand,card_last4,exp_month,exp_year,is_default")
+      .eq("user_id", user.id)
+      .order("is_default", { ascending: false })
+      .then(({ data }) => setItems((data ?? []) as PaymentMethod[]));
+  }, [user]);
+
   return (
-    <section aria-labelledby="pm-h">
-      <h1 id="pm-h" className="text-2xl md:text-3xl font-semibold mb-6">
-        My Payment Methods
-      </h1>
-      {paymentMethods.length === 0 ? (
+    <section>
+      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My Payment Methods</h1>
+      {items === null ? (
+        <BrandSpinner className="py-10" />
+      ) : items.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-8 text-center">
           <p className="text-foreground/80 mb-4">No payment methods on file yet.</p>
           <Button asChild variant="hero">
@@ -169,17 +271,20 @@ const PaymentMethods = () => {
         </div>
       ) : (
         <ul className="space-y-3">
-          {paymentMethods.map((p) => {
-            const expired = isExpired(p);
+          {items.map((p) => {
+            const expired = isExpired(p.exp_month, p.exp_year);
             return (
-              <li key={p.id} className="rounded-lg border border-border bg-card p-4 text-sm flex items-center justify-between">
+              <li
+                key={p.id}
+                className="rounded-lg border border-border bg-card p-4 text-sm flex items-center justify-between"
+              >
                 <div>
                   <p className="font-medium">
-                    {p.brand} ending in {p.last4}
-                    {p.isDefault && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
+                    {p.card_brand} ending in {p.card_last4}
+                    {p.is_default && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Exp {String(p.expMonth).padStart(2, "0")}/{String(p.expYear).slice(-2)}
+                    Exp {String(p.exp_month).padStart(2, "0")}/{String(p.exp_year).slice(-2)}
                   </p>
                 </div>
                 {expired && (
@@ -196,25 +301,23 @@ const PaymentMethods = () => {
   );
 };
 
-// ---------- My Password ----------
 const Password = () => {
   usePageMeta({
     title: "My password — Cobbli",
-    description: "Update the password on your Cobbli account to keep your shoe repair orders, saved addresses and payment methods secure.",
+    description:
+      "Update the password on your Cobbli account to keep your shoe repair orders, saved addresses and payment methods secure.",
   });
-  const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [showCurrent, setShowCurrent] = useState(false);
   const [showNext, setShowNext] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit =
-    current.length > 0 && next.length > 0 && confirm.length > 0;
+  const canSubmit = next.length > 0 && confirm.length > 0 && !submitting;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
@@ -226,62 +329,49 @@ const Password = () => {
       setError("Password too short");
       return;
     }
+    setSubmitting(true);
+    const { error: err } = await supabase.auth.updateUser({ password: next });
+    setSubmitting(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
     setSuccess("Your password has been updated.");
-    setCurrent("");
     setNext("");
     setConfirm("");
   };
 
   return (
-    <section aria-labelledby="pw-h" className="max-w-md">
-      <h1 id="pw-h" className="text-2xl md:text-3xl font-semibold mb-6">
-        My Password
-      </h1>
+    <section className="max-w-md">
+      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My Password</h1>
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-        <PasswordField
-          id="current-pw"
-          label="Current Password"
-          value={current}
-          onChange={setCurrent}
-          show={showCurrent}
-          setShow={setShowCurrent}
-        />
-        <PasswordField
-          id="new-pw"
-          label="New Password"
-          value={next}
-          onChange={setNext}
-          show={showNext}
-          setShow={setShowNext}
-        />
-        <PasswordField
-          id="confirm-pw"
-          label="Confirm New Password"
-          value={confirm}
-          onChange={setConfirm}
-          show={showConfirm}
-          setShow={setShowConfirm}
-        />
+        <PasswordField id="new-pw" label="New Password" value={next} onChange={setNext} show={showNext} setShow={setShowNext} />
+        <PasswordField id="confirm-pw" label="Confirm New Password" value={confirm} onChange={setConfirm} show={showConfirm} setShow={setShowConfirm} />
         {error && <p className="text-sm text-destructive">{error}</p>}
         {success && <p className="text-sm text-status-green">{success}</p>}
         <Button type="submit" variant="hero" size="lg" disabled={!canSubmit}>
-          Update password
+          {submitting ? "Updating…" : "Update password"}
         </Button>
       </form>
     </section>
   );
 };
 
-type PasswordFieldProps = {
+const PasswordField = ({
+  id,
+  label,
+  value,
+  onChange,
+  show,
+  setShow,
+}: {
   id: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
   show: boolean;
   setShow: (b: boolean) => void;
-};
-
-const PasswordField = ({ id, label, value, onChange, show, setShow }: PasswordFieldProps) => (
+}) => (
   <div className="space-y-2">
     <Label htmlFor={id}>{label}</Label>
     <div className="relative">
@@ -305,17 +395,15 @@ const PasswordField = ({ id, label, value, onChange, show, setShow }: PasswordFi
   </div>
 );
 
-// ---------- Contact Us ----------
 const Contact = () => {
   usePageMeta({
     title: "Contact us — Cobbli",
-    description: "Get in touch with the Cobbli team about your NYC shoe repair order, our service area, pickup scheduling or anything else. We're happy to help.",
+    description:
+      "Get in touch with the Cobbli team about your NYC shoe repair order, our service area, pickup scheduling or anything else. We're happy to help.",
   });
   return (
-    <section aria-labelledby="contact-h" className="max-w-2xl">
-      <h1 id="contact-h" className="text-2xl md:text-3xl font-semibold mb-4">
-        Contact Us
-      </h1>
+    <section className="max-w-2xl">
+      <h1 className="text-2xl md:text-3xl font-semibold mb-4">Contact Us</h1>
       <p className="text-foreground/90 leading-relaxed">
         We'd love to hear from you! You can reach us at{" "}
         <a href="mailto:support@cobbli.com" className="underline hover:text-primary">
@@ -329,10 +417,11 @@ const Contact = () => {
 
 const Account = () => {
   const navigate = useNavigate();
+  const { signOut } = useAuth();
 
-  const handleSignOut = () => {
-    localStorage.removeItem("cobbli:signed-in");
-    navigate("/", { replace: true });
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/signin", { replace: true });
   };
 
   return (
