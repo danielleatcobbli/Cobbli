@@ -229,7 +229,7 @@ const SelectServices = () => {
                 <a href="mailto:support@cobbli.com" className="underline text-primary">
                   Email us photos
                 </a>{" "}
-                and we'll recommend the right repairs within 1 business day.
+                and we'll recommend the right repairs.
               </p>
             </div>
           </div>
