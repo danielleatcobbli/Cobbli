@@ -143,6 +143,12 @@ const ResetPassword = () => {
       if (userRes.user?.id) {
         await supabase.rpc("reset_failed_attempts", { _user_id: userRes.user.id });
       }
+      // Send password-updated confirmation email (best-effort; don't block on failure)
+      try {
+        await supabase.functions.invoke("send-password-updated");
+      } catch (e) {
+        console.warn("send-password-updated invocation failed", e);
+      }
       await supabase.auth.signOut();
       navigate("/signin", {
         replace: true,
