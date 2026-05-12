@@ -55,21 +55,22 @@ const Bag = () => {
             <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
               {/* Pairs */}
               <ul className="space-y-6">
-                {orderedPairs.map((pair, idx) => {
+                {orderedPairs.map((pair) => {
                   const pairTotal = pair.services.reduce((s, svc) => s + svc.price, 0);
-                  const pairNumber = orderedPairs.length - idx; // first added = Pair 1
+                  const savedPair = pair.pairId ? getPair(pair.pairId) : undefined;
+                  const pairLabel = savedPair ? formatPairLabel(savedPair) : pair.label ?? "Unnamed pair";
                   return (
                     <li
                       key={pair.id}
                       className="rounded-lg border border-border bg-card p-6 shadow-soft"
                     >
                       <div className="flex items-start justify-between gap-4 mb-4">
-                        <h2 className="text-lg font-semibold">{pair.label ?? `Pair ${pairNumber}`}</h2>
+                        <h2 className="text-lg font-semibold">{pairLabel}</h2>
                         <button
                           type="button"
                           onClick={() => removePair(pair.id)}
                           className="text-sm text-muted-foreground hover:text-destructive inline-flex items-center gap-1.5 transition-colors"
-                          aria-label={`Remove ${pair.label ?? `Pair ${pairNumber}`}`}
+                          aria-label={`Remove ${pairLabel}`}
                         >
                           <Trash2 size={14} /> Remove pair
                         </button>
