@@ -28,6 +28,7 @@ import { Plus } from "lucide-react";
 import { SHOE_TYPES, type ShoeType } from "@/data/services";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
+import { useBag } from "@/context/BagContext";
 
 const COLORS = [
   "Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
@@ -177,7 +178,8 @@ const AddPairModal = ({
 const StartRepair = () => {
   const navigate = useNavigate();
   const { pairs } = usePairs();
-  const { selectedPairId, setSelectedPairId } = useRepairFlow();
+  const { selectedPairId, setSelectedPairId, setSelectedServiceSlugs } = useRepairFlow();
+  const { findByPairId } = useBag();
   const [modalOpen, setModalOpen] = useState(false);
 
   usePageMeta({
@@ -193,6 +195,8 @@ const StartRepair = () => {
 
   const onConfirm = () => {
     if (!selectedPairId) return;
+    const existing = findByPairId(selectedPairId);
+    setSelectedServiceSlugs(existing ? existing.services.map((s) => s.id) : []);
     navigate("/start-repair/services");
   };
 
@@ -215,6 +219,7 @@ const StartRepair = () => {
                 {sortedPairs.map((p) => {
                   const id = `pair-${p.id}`;
                   const checked = selectedPairId === p.id;
+                  const inBag = !!findByPairId(p.id);
                   return (
                     <li key={p.id}>
                       <label
@@ -232,6 +237,14 @@ const StartRepair = () => {
                           className="h-4 w-4 accent-[hsl(var(--primary))]"
                         />
                         <span className="text-primary font-medium">{formatPairLabel(p)}</span>
+                        {inBag && (
+                          <span
+                            className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                            style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
+                          >
+                            In bag
+                          </span>
+                        )}
                       </label>
                     </li>
                   );

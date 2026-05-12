@@ -68,7 +68,7 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "What if I don't know what services I need?",
     a: (
       <p>
-        Email us photos of your shoes at <Email /> and we will recommend the right services.
+        Email us photos of your shoes to <Email /> and we will recommend the right services.
       </p>
     ),
   },

@@ -122,7 +122,7 @@ const SelectServices = () => {
       name: s.name,
       price: (s.pricing[pair.shoeType] ?? 0) * 100,
     }));
-    addPairToBag(bagServices);
+    addPairToBag(bagServices, pair.id);
     setConfirmOpen(true);
   };
 
