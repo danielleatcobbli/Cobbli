@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -7,51 +7,48 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { supabase } from "@/integrations/supabase/client";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-type Step = "request" | "sent" | "reset" | "expired";
+type Step = "request" | "sent" | "reset";
 
 const meta: Record<Step, { title: string; description: string }> = {
   request: {
     title: "Reset your password — Cobbli",
-    description: "Forgot your Cobbli password? Enter your email to receive a secure reset link and get back to managing your shoe repair orders in NYC.",
+    description:
+      "Forgot your Cobbli password? Enter your email to receive a secure reset link and get back to managing your shoe repair orders in NYC.",
   },
   sent: {
     title: "Check your inbox — Cobbli",
-    description: "We've sent you a password reset link. Check your inbox to securely set a new password for your Cobbli account and continue your shoe repairs.",
+    description:
+      "We've sent you a password reset link. Check your inbox to securely set a new password for your Cobbli account and continue your shoe repairs.",
   },
   reset: {
     title: "Reset password — Cobbli",
-    description: "Set a new password for your Cobbli account so you can sign in and manage your NYC shoe repair orders, addresses and payment methods.",
-  },
-  expired: {
-    title: "Link expired — Cobbli",
-    description: "Your Cobbli password reset link has expired. Request a new secure link to set a new password and get back to your shoe repair orders.",
+    description:
+      "Set a new password for your Cobbli account so you can sign in and manage your NYC shoe repair orders, addresses and payment methods.",
   },
 };
 
 const ResetPassword = () => {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
 
-  // Determine step from query params:
-  //   ?step=reset&token=...  → reset password screen
-  //   ?step=expired          → link expired screen
-  //   (default)              → request reset link screen / sent state
-  const initialStep: Step =
-    params.get("step") === "reset"
-      ? "reset"
-      : params.get("step") === "expired"
-        ? "expired"
-        : "request";
+  // Detect Supabase recovery hash on mount
+  const [step, setStep] = useState<Step>(() => {
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash;
+      if (hash.includes("type=recovery") || hash.includes("access_token")) return "reset";
+    }
+    return "request";
+  });
 
-  const [step, setStep] = useState<Step>(initialStep);
   const [email, setEmail] = useState("");
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [cooldown, setCooldown] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
-  // Reset password fields
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -60,7 +57,14 @@ const ResetPassword = () => {
 
   usePageMeta(meta[step]);
 
-  // Cooldown timer for resend
+  // Listen for the PASSWORD_RECOVERY event Supabase fires after a recovery link sets the session
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setStep("reset");
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
   const intervalRef = useRef<number | null>(null);
   useEffect(() => {
     if (cooldown <= 0) {
@@ -71,9 +75,7 @@ const ResetPassword = () => {
       return;
     }
     if (intervalRef.current === null) {
-      intervalRef.current = window.setInterval(() => {
-        setCooldown((c) => (c > 0 ? c - 1 : 0));
-      }, 1000);
+      intervalRef.current = window.setInterval(() => setCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
     }
     return () => {
       if (intervalRef.current) {
@@ -85,22 +87,40 @@ const ResetPassword = () => {
 
   const emailValid = useMemo(() => emailRegex.test(email.trim()), [email]);
 
-  const handleRequest = (e: FormEvent) => {
+  const sendReset = async (target: string) => {
+    return supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+  };
+
+  const handleRequest = async (e: FormEvent) => {
     e.preventDefault();
-    if (!emailValid) return;
-    setSubmittedEmail(email.trim());
-    setCooldown(60);
-    setStep("sent");
+    if (!emailValid || submitting) return;
+    setRequestError(null);
+    setSubmitting(true);
+    try {
+      const { error } = await sendReset(email.trim());
+      if (error) {
+        setRequestError(error.message);
+        return;
+      }
+      setSubmittedEmail(email.trim());
+      setCooldown(60);
+      setStep("sent");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleResend = () => {
-    if (cooldown > 0) return;
+  const handleResend = async () => {
+    if (cooldown > 0 || !submittedEmail) return;
     setCooldown(60);
+    await sendReset(submittedEmail);
   };
 
-  const canSubmitReset = newPwd.length > 0 && confirmPwd.length > 0;
+  const canSubmitReset = newPwd.length > 0 && confirmPwd.length > 0 && !submitting;
 
-  const handleResetSubmit = (e: FormEvent) => {
+  const handleResetSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setPwdError(null);
     if (newPwd.length < 8) {
@@ -111,14 +131,26 @@ const ResetPassword = () => {
       setPwdError("Passwords don't match.");
       return;
     }
-    // Reset lockout counters for any locked accounts (mock)
-    Object.keys(localStorage)
-      .filter((k) => k.startsWith("cobbli:signin-locked:") || k.startsWith("cobbli:signin-attempts:"))
-      .forEach((k) => localStorage.removeItem(k));
-    navigate("/signin", {
-      replace: true,
-      state: { resetSuccess: "Your password has been updated. Please sign in with your new password." },
-    });
+    setSubmitting(true);
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const { error } = await supabase.auth.updateUser({ password: newPwd });
+      if (error) {
+        setPwdError(error.message);
+        return;
+      }
+      // Clear lockout for this user
+      if (userRes.user?.id) {
+        await supabase.rpc("reset_failed_attempts", { _user_id: userRes.user.id });
+      }
+      await supabase.auth.signOut();
+      navigate("/signin", {
+        replace: true,
+        state: { resetSuccess: "Your password has been updated. Please sign in with your new password." },
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -127,10 +159,8 @@ const ResetPassword = () => {
       <main className="flex-1">
         <div className="container max-w-md py-12 md:py-16">
           {step === "request" && (
-            <section aria-labelledby="reset-heading" className="space-y-6">
-              <h1 id="reset-heading" className="text-2xl md:text-3xl font-semibold">
-                Reset your password
-              </h1>
+            <section className="space-y-6">
+              <h1 className="text-2xl md:text-3xl font-semibold">Reset your password</h1>
               <form onSubmit={handleRequest} className="space-y-5" noValidate>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email address</Label>
@@ -143,8 +173,9 @@ const ResetPassword = () => {
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
-                <Button type="submit" variant="hero" size="lg" className="w-full" disabled={!emailValid}>
-                  Send reset link
+                {requestError && <p className="text-sm text-destructive">{requestError}</p>}
+                <Button type="submit" variant="hero" size="lg" className="w-full" disabled={!emailValid || submitting}>
+                  {submitting ? "Sending…" : "Send reset link"}
                 </Button>
                 <div className="text-center">
                   <Link to="/signin" className="text-sm text-primary hover:underline">
@@ -156,10 +187,8 @@ const ResetPassword = () => {
           )}
 
           {step === "sent" && (
-            <section aria-labelledby="sent-heading" className="space-y-6">
-              <h1 id="sent-heading" className="text-2xl md:text-3xl font-semibold">
-                Check your inbox
-              </h1>
+            <section className="space-y-6">
+              <h1 className="text-2xl md:text-3xl font-semibold">Check your inbox</h1>
               <p className="text-foreground/80">
                 If an account exists for {submittedEmail}, a reset link is on its way. Check your spam folder if it
                 doesn't arrive within a minute.
@@ -183,10 +212,8 @@ const ResetPassword = () => {
           )}
 
           {step === "reset" && (
-            <section aria-labelledby="newpwd-heading" className="space-y-6">
-              <h1 id="newpwd-heading" className="text-2xl md:text-3xl font-semibold">
-                Reset password
-              </h1>
+            <section className="space-y-6">
+              <h1 className="text-2xl md:text-3xl font-semibold">Reset password</h1>
               <form onSubmit={handleResetSubmit} className="space-y-5" noValidate>
                 <div className="space-y-2">
                   <Label htmlFor="new-pwd">New password</Label>
@@ -233,38 +260,14 @@ const ResetPassword = () => {
                       {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Minimum of 8 characters</p>
                 </div>
 
                 {pwdError && <p className="text-sm text-destructive">{pwdError}</p>}
 
                 <Button type="submit" variant="hero" size="lg" className="w-full" disabled={!canSubmitReset}>
-                  Update password
+                  {submitting ? "Updating…" : "Update password"}
                 </Button>
               </form>
-            </section>
-          )}
-
-          {step === "expired" && (
-            <section aria-labelledby="expired-heading" className="space-y-6">
-              <h1 id="expired-heading" className="text-2xl md:text-3xl font-semibold">
-                Link expired
-              </h1>
-              <p className="text-foreground/80">
-                Your password reset link has expired. Reset links are valid for 24 hours. Please request a new one.
-              </p>
-              <Button
-                type="button"
-                variant="hero"
-                size="lg"
-                className="w-full"
-                onClick={() => {
-                  setStep("request");
-                  navigate("/reset-password", { replace: true });
-                }}
-              >
-                Request a new link
-              </Button>
             </section>
           )}
         </div>
