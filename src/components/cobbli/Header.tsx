@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import logo from "@/assets/logo-cobbli.svg";
 import accountIcon from "@/assets/icons/account.svg";
@@ -14,8 +14,19 @@ const navLinks = [
 ];
 
 const Header = () => {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const { itemCount } = useBag();
+
+  const handleHowItWorksClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (location.pathname === "/") {
+      e.preventDefault();
+      const el = document.getElementById("how-it-works");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-primary text-primary-foreground shadow-soft">
@@ -26,7 +37,12 @@ const Header = () => {
 
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium ml-6">
           {navLinks.map((l) => (
-            <Link key={l.label} to={l.to} className="opacity-90 hover:opacity-100 transition-opacity">
+            <Link
+              key={l.label}
+              to={l.to}
+              onClick={l.label === "How It Works" ? handleHowItWorksClick : undefined}
+              className="opacity-90 hover:opacity-100 transition-opacity"
+            >
               {l.label}
             </Link>
           ))}
@@ -56,7 +72,15 @@ const Header = () => {
         <div className="md:hidden border-t border-primary-glow">
           <nav className="container py-4 flex flex-col gap-3 text-sm font-medium">
             {navLinks.map((l) => (
-              <Link key={l.label} to={l.to} onClick={() => setOpen(false)} className="py-1 opacity-90">
+              <Link
+                key={l.label}
+                to={l.to}
+                onClick={(e) => {
+                  if (l.label === "How It Works") handleHowItWorksClick(e);
+                  setOpen(false);
+                }}
+                className="py-1 opacity-90"
+              >
                 {l.label}
               </Link>
             ))}

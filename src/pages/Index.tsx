@@ -6,15 +6,30 @@ import TrustSignals from "@/components/cobbli/TrustSignals";
 
 import Footer from "@/components/cobbli/Footer";
 import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 const Index = () => {
+  const location = useLocation();
+
   usePageMeta({
     title: "Cobbli — Expert shoe repair, delivered to your doorstep",
     description:
       "Cobbli picks up, repairs and returns your favorite shoes across NYC. Master cobblers, free courier on orders over $100, easy online booking.",
     canonicalPath: "/",
   });
+
+  useEffect(() => {
+    if (location.hash === "#how-it-works") {
+      const timer = setTimeout(() => {
+        const el = document.getElementById("how-it-works");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [location]);
 
   // LocalBusiness structured data for the homepage
   useEffect(() => {
