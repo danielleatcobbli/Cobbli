@@ -19,6 +19,18 @@ const Index = () => {
     canonicalPath: "/",
   });
 
+  useEffect(() => {
+    if (location.hash === "#how-it-works") {
+      const timer = setTimeout(() => {
+        const el = document.getElementById("how-it-works");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [location]);
+
   // LocalBusiness structured data for the homepage
   useEffect(() => {
     const id = "cobbli-localbusiness-jsonld";
