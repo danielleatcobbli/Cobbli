@@ -55,9 +55,9 @@ const App = () => (
                       <Route path="/reset-password" element={<ResetPassword />} />
                       <Route path="/start-repair" element={<StartRepair />} />
                       <Route path="/start-repair/services" element={<SelectServices />} />
-                      <Route path="/start-repair/services/:slug" element={<ServiceDetail />} />
+                      <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
                       <Route path="/services" element={<Services />} />
-                      <Route path="/services/:slug" element={<ServiceDetail />} />
+                      <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
                       <Route path="/bag" element={<Bag />} />
                       <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
                       <Route path="/order-confirmation" element={<OrderConfirmation />} />
