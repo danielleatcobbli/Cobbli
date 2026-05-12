@@ -65,11 +65,21 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [pairs]);
 
-  const addPair: BagState["addPair"] = useCallback((services) => {
-    setPairs((prev) => [
-      ...prev,
-      { id: genId(), addedAt: new Date().toISOString(), services },
-    ]);
+  const addPair: BagState["addPair"] = useCallback((services, pairId) => {
+    setPairs((prev) => {
+      if (pairId) {
+        const idx = prev.findIndex((p) => p.pairId === pairId);
+        if (idx !== -1) {
+          const next = [...prev];
+          next[idx] = { ...next[idx], services, addedAt: new Date().toISOString() };
+          return next;
+        }
+      }
+      return [
+        ...prev,
+        { id: genId(), pairId, addedAt: new Date().toISOString(), services },
+      ];
+    });
   }, []);
 
   const removePair = useCallback((pairId: string) => {
@@ -87,6 +97,11 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
     );
   }, []);
 
+  const findByPairId = useCallback(
+    (pairId: string) => pairs.find((p) => p.pairId === pairId),
+    [pairs],
+  );
+
   const clear = useCallback(() => setPairs([]), []);
 
   const value = useMemo<BagState>(() => {
@@ -95,8 +110,8 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
       (sum, p) => sum + p.services.reduce((s, svc) => s + svc.price, 0),
       0,
     );
-    return { pairs, itemCount, subtotal, addPair, removePair, removeService, clear };
-  }, [pairs, addPair, removePair, removeService, clear]);
+    return { pairs, itemCount, subtotal, addPair, removePair, removeService, findByPairId, clear };
+  }, [pairs, addPair, removePair, removeService, findByPairId, clear]);
 
   return <BagContext.Provider value={value}>{children}</BagContext.Provider>;
 };
