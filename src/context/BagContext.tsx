@@ -9,6 +9,8 @@ export type BagService = {
 
 export type BagPair = {
   id: string;
+  /** Optional reference to the SavedPair this bag entry corresponds to */
+  pairId?: string;
   /** Display label like "Pair 1" — derived for display, but stored for stability */
   label?: string;
   /** ISO timestamp; used to display in reverse order of addition */
@@ -22,9 +24,12 @@ type BagState = {
   itemCount: number;
   /** Sum of all service prices across all pairs, in cents */
   subtotal: number;
-  addPair: (services: BagService[]) => void;
+  /** Add a new bag entry, or update an existing one if pairId matches */
+  addPair: (services: BagService[], pairId?: string) => void;
   removePair: (pairId: string) => void;
   removeService: (pairId: string, serviceId: string) => void;
+  /** Find an existing bag entry for a given saved pair id */
+  findByPairId: (pairId: string) => BagPair | undefined;
   clear: () => void;
 };
 
