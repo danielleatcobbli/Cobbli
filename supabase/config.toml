@@ -1,1 +1,10 @@
 project_id = "hqcdsjznvyywmoylmjur"
+
+[functions.send-order-confirmation]
+verify_jwt = false
+
+[functions.send-account-locked]
+verify_jwt = false
+
+[functions.send-walkup-welcome]
+verify_jwt = false
