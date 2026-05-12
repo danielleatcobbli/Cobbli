@@ -37,7 +37,12 @@ const Header = () => {
 
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium ml-6">
           {navLinks.map((l) => (
-            <Link key={l.label} to={l.to} className="opacity-90 hover:opacity-100 transition-opacity">
+            <Link
+              key={l.label}
+              to={l.to}
+              onClick={l.label === "How It Works" ? handleHowItWorksClick : undefined}
+              className="opacity-90 hover:opacity-100 transition-opacity"
+            >
               {l.label}
             </Link>
           ))}
