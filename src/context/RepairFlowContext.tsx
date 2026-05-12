@@ -47,8 +47,12 @@ export const RepairFlowProvider = ({ children }: { children: ReactNode }) => {
   }, [state]);
 
   const setSelectedPairId = useCallback((id: string | null) => {
-    setState((s) => ({ ...s, selectedPairId: id, selectedServiceSlugs: [] }));
+    setState((s) => (s.selectedPairId === id ? s : { ...s, selectedPairId: id, selectedServiceSlugs: [] }));
   }, []);
+  const setSelectedServiceSlugs = useCallback(
+    (slugs: string[]) => setState((s) => ({ ...s, selectedServiceSlugs: slugs })),
+    [],
+  );
   const setActiveCategory = useCallback((c: string) => setState((s) => ({ ...s, activeCategory: c })), []);
   const addService = useCallback(
     (slug: string) =>
