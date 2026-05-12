@@ -6,6 +6,7 @@ type RepairFlowState = {
   /** Persists the active category between Select services and the service detail page. */
   activeCategory: string;
   setSelectedPairId: (id: string | null) => void;
+  setSelectedServiceSlugs: (slugs: string[]) => void;
   setActiveCategory: (c: string) => void;
   addService: (slug: string) => void;
   removeService: (slug: string) => void;
