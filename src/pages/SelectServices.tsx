@@ -225,7 +225,7 @@ const SelectServices = () => {
               )}
 
               <p className="mt-8 text-sm text-muted-foreground">
-                Not sure what to pick?{" "}
+                Not sure what your shoes need?{" "}
                 <a href="mailto:support@cobbli.com" className="underline text-primary">
                   Email us photos
                 </a>{" "}
