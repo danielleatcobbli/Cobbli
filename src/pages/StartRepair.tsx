@@ -178,7 +178,8 @@ const AddPairModal = ({
 const StartRepair = () => {
   const navigate = useNavigate();
   const { pairs } = usePairs();
-  const { selectedPairId, setSelectedPairId } = useRepairFlow();
+  const { selectedPairId, setSelectedPairId, setSelectedServiceSlugs } = useRepairFlow();
+  const { findByPairId } = useBag();
   const [modalOpen, setModalOpen] = useState(false);
 
   usePageMeta({
@@ -194,6 +195,8 @@ const StartRepair = () => {
 
   const onConfirm = () => {
     if (!selectedPairId) return;
+    const existing = findByPairId(selectedPairId);
+    setSelectedServiceSlugs(existing ? existing.services.map((s) => s.id) : []);
     navigate("/start-repair/services");
   };
 
