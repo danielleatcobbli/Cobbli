@@ -6,6 +6,7 @@ import TrustSignals from "@/components/cobbli/TrustSignals";
 
 import Footer from "@/components/cobbli/Footer";
 import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 const Index = () => {
