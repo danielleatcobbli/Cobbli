@@ -74,8 +74,8 @@ export const RepairFlowProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const value = useMemo<RepairFlowState>(
-    () => ({ ...state, setSelectedPairId, setActiveCategory, addService, removeService, reset }),
-    [state, setSelectedPairId, setActiveCategory, addService, removeService, reset],
+    () => ({ ...state, setSelectedPairId, setSelectedServiceSlugs, setActiveCategory, addService, removeService, reset }),
+    [state, setSelectedPairId, setSelectedServiceSlugs, setActiveCategory, addService, removeService, reset],
   );
   return <RepairFlowContext.Provider value={value}>{children}</RepairFlowContext.Provider>;
 };
