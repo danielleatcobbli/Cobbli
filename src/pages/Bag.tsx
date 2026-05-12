@@ -6,6 +6,7 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { Button } from "@/components/ui/button";
 import { useBag, formatPrice } from "@/context/BagContext";
+import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import bagIcon from "@/assets/icons/bag.svg";
 
 const FREE_COURIER_THRESHOLD = 10000; // $100 in cents
