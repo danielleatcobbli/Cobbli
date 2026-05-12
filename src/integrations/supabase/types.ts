@@ -457,6 +457,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _invoke_edge_function: {
+        Args: { _name: string; _payload: Json }
+        Returns: number
+      }
       generate_order_number: { Args: never; Returns: string }
       has_role: {
         Args: {
