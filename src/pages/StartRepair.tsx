@@ -28,6 +28,7 @@ import { Plus } from "lucide-react";
 import { SHOE_TYPES, type ShoeType } from "@/data/services";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
+import { useBag } from "@/context/BagContext";
 
 const COLORS = [
   "Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
