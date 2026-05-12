@@ -14,6 +14,7 @@ const navLinks = [
 ];
 
 const Header = () => {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const { itemCount } = useBag();
 
