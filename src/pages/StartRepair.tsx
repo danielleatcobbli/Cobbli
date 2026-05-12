@@ -106,6 +106,9 @@ const AddPairModal = ({
             <Label>
               Color <span className="text-destructive">*</span>
             </Label>
+            <p className="text-[13px] text-muted-foreground -mt-1">
+              Select all that apply
+            </p>
             <div className="flex flex-wrap gap-2">
               {COLORS.map((c) => {
                 const selected = colors.includes(c);
