@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.send-walkup-welcome]
 verify_jwt = false
+
+[functions.send-password-updated]
+verify_jwt = false
