@@ -72,7 +72,15 @@ const Header = () => {
         <div className="md:hidden border-t border-primary-glow">
           <nav className="container py-4 flex flex-col gap-3 text-sm font-medium">
             {navLinks.map((l) => (
-              <Link key={l.label} to={l.to} onClick={() => setOpen(false)} className="py-1 opacity-90">
+              <Link
+                key={l.label}
+                to={l.to}
+                onClick={(e) => {
+                  if (l.label === "How It Works") handleHowItWorksClick(e);
+                  setOpen(false);
+                }}
+                className="py-1 opacity-90"
+              >
                 {l.label}
               </Link>
             ))}
