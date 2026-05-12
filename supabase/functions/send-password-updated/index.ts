@@ -4,8 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { sendBrevoEmail, corsHeaders } from "../_shared/brevo.ts";
 
-// TODO: Replace with the Brevo template ID once it's created.
-const BREVO_TEMPLATE_ID = 0;
+const BREVO_TEMPLATE_ID = 7;
 
 interface AuthUserRecord {
   id: string;
