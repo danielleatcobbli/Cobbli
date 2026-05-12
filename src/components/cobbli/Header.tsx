@@ -18,6 +18,16 @@ const Header = () => {
   const [open, setOpen] = useState(false);
   const { itemCount } = useBag();
 
+  const handleHowItWorksClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (location.pathname === "/") {
+      e.preventDefault();
+      const el = document.getElementById("how-it-works");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 bg-primary text-primary-foreground shadow-soft">
       <div className="container flex h-24 md:h-28 items-center gap-6">
