@@ -15,6 +15,7 @@ const COURIER_FEE = 1500; // $15 in cents
 const Bag = () => {
   const navigate = useNavigate();
   const { pairs, subtotal, removePair, removeService } = useBag();
+  const { getPair } = usePairs();
   const isEmpty = pairs.length === 0;
 
   usePageMeta({
