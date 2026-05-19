@@ -123,13 +123,20 @@ const ResetPassword = () => {
     await sendReset(submittedEmail);
   };
 
-  const canSubmitReset = newPwd.length > 0 && confirmPwd.length > 0 && !submitting;
+  const livePwdError = newPwd.length > 0 ? validatePassword(newPwd) : null;
+  const canSubmitReset =
+    newPwd.length > 0 &&
+    confirmPwd.length > 0 &&
+    validatePassword(newPwd) === null &&
+    newPwd === confirmPwd &&
+    !submitting;
 
   const handleResetSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setPwdError(null);
-    if (newPwd.length < 8) {
-      setPwdError("Minimum of 8 characters.");
+    const validationError = validatePassword(newPwd);
+    if (validationError) {
+      setPwdError(validationError);
       return;
     }
     if (newPwd !== confirmPwd) {
@@ -141,7 +148,7 @@ const ResetPassword = () => {
       const { data: userRes } = await supabase.auth.getUser();
       const { error } = await supabase.auth.updateUser({ password: newPwd });
       if (error) {
-        setPwdError(error.message);
+        setPwdError(mapSupabasePasswordError(error.message) ?? error.message);
         return;
       }
       // Clear lockout for this user
