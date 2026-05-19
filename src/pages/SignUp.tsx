@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/context/AuthContext";
+import {
+  PASSWORD_HELPER_TEXT,
+  validatePassword,
+  mapSupabasePasswordError,
+} from "@/lib/passwordValidation";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
