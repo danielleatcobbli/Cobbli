@@ -418,12 +418,28 @@ const Contact = () => {
 
 const Account = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signOut } = useAuth();
+
+  // Show one-time "email verified" toast after the verification redirect.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("verified") === "1") {
+      toast.success("Your email has been verified.");
+      params.delete("verified");
+      const next = params.toString();
+      navigate(
+        { pathname: location.pathname, search: next ? `?${next}` : "" },
+        { replace: true },
+      );
+    }
+  }, [location.pathname, location.search, navigate]);
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/signin", { replace: true });
   };
+
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
