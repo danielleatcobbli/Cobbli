@@ -118,7 +118,7 @@ const SignUp = () => {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/account`,
+          emailRedirectTo: `${window.location.origin}/account?verified=1`,
           data: {
             first_name: firstName.trim(),
             last_name: lastName.trim(),
