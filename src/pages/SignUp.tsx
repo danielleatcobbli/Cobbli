@@ -58,13 +58,16 @@ const SignUp = () => {
 
   const phoneDigits = phone.replace(/\D/g, "").slice(0, 10);
 
+  // Live password validation
+  const livePasswordError = password.length > 0 ? validatePassword(password) : null;
+
   const allValid =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
     emailRegex.test(email.trim()) &&
     phoneDigits.length === 10 &&
-    password.length >= 8 &&
-    confirm.length >= 8 &&
+    validatePassword(password) === null &&
+    confirm.length > 0 &&
     password === confirm &&
     agree &&
     !submitting;
