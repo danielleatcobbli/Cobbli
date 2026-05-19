@@ -291,9 +291,10 @@ const SignUp = () => {
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Minimum of 8 characters"
+                      placeholder="Create a password"
                       className="pr-10"
-                      aria-invalid={!!passwordError}
+                      aria-invalid={!!(passwordError ?? livePasswordError)}
+                      aria-describedby="password-helper"
                     />
                     <button
                       type="button"
@@ -304,7 +305,12 @@ const SignUp = () => {
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
-                  {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+                  <p id="password-helper" className="text-xs text-muted-foreground">
+                    {PASSWORD_HELPER_TEXT}
+                  </p>
+                  {(passwordError ?? livePasswordError) && (
+                    <p className="text-sm text-destructive">{passwordError ?? livePasswordError}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
