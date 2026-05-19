@@ -130,10 +130,13 @@ const SignUp = () => {
         const msg = error.message.toLowerCase();
         if (msg.includes("already") || msg.includes("registered")) {
           setEmailExists(true);
-        } else if (msg.includes("password")) {
-          setPasswordError(error.message);
         } else {
-          setFormError(error.message);
+          const mapped = mapSupabasePasswordError(error.message);
+          if (mapped) {
+            setPasswordError(mapped);
+          } else {
+            setFormError(error.message);
+          }
         }
         return;
       }
