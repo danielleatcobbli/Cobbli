@@ -8,6 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  PASSWORD_HELPER_TEXT,
+  validatePassword,
+  mapSupabasePasswordError,
+} from "@/lib/passwordValidation";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
