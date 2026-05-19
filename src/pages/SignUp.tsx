@@ -101,8 +101,9 @@ const SignUp = () => {
       setPhoneError("Invalid phone number");
       hasError = true;
     }
-    if (password.length < 8) {
-      setPasswordError("Password too short");
+    const pwdValidationError = validatePassword(password);
+    if (pwdValidationError) {
+      setPasswordError(pwdValidationError);
       hasError = true;
     }
     if (confirm !== password) {
