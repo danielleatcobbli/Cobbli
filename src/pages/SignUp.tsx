@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/context/AuthContext";
+import {
+  PASSWORD_HELPER_TEXT,
+  validatePassword,
+  mapSupabasePasswordError,
+} from "@/lib/passwordValidation";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -53,13 +58,16 @@ const SignUp = () => {
 
   const phoneDigits = phone.replace(/\D/g, "").slice(0, 10);
 
+  // Live password validation
+  const livePasswordError = password.length > 0 ? validatePassword(password) : null;
+
   const allValid =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
     emailRegex.test(email.trim()) &&
     phoneDigits.length === 10 &&
-    password.length >= 8 &&
-    confirm.length >= 8 &&
+    validatePassword(password) === null &&
+    confirm.length > 0 &&
     password === confirm &&
     agree &&
     !submitting;
@@ -93,8 +101,9 @@ const SignUp = () => {
       setPhoneError("Invalid phone number");
       hasError = true;
     }
-    if (password.length < 8) {
-      setPasswordError("Password too short");
+    const pwdValidationError = validatePassword(password);
+    if (pwdValidationError) {
+      setPasswordError(pwdValidationError);
       hasError = true;
     }
     if (confirm !== password) {
@@ -121,10 +130,13 @@ const SignUp = () => {
         const msg = error.message.toLowerCase();
         if (msg.includes("already") || msg.includes("registered")) {
           setEmailExists(true);
-        } else if (msg.includes("password")) {
-          setPasswordError(error.message);
         } else {
-          setFormError(error.message);
+          const mapped = mapSupabasePasswordError(error.message);
+          if (mapped) {
+            setPasswordError(mapped);
+          } else {
+            setFormError(error.message);
+          }
         }
         return;
       }
@@ -279,9 +291,10 @@ const SignUp = () => {
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Minimum of 8 characters"
+                      placeholder="Create a password"
                       className="pr-10"
-                      aria-invalid={!!passwordError}
+                      aria-invalid={!!(passwordError ?? livePasswordError)}
+                      aria-describedby="password-helper"
                     />
                     <button
                       type="button"
@@ -292,7 +305,12 @@ const SignUp = () => {
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
-                  {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+                  <p id="password-helper" className="text-xs text-muted-foreground">
+                    {PASSWORD_HELPER_TEXT}
+                  </p>
+                  {(passwordError ?? livePasswordError) && (
+                    <p className="text-sm text-destructive">{passwordError ?? livePasswordError}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

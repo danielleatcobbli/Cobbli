@@ -8,6 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  PASSWORD_HELPER_TEXT,
+  validatePassword,
+  mapSupabasePasswordError,
+} from "@/lib/passwordValidation";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -118,13 +123,20 @@ const ResetPassword = () => {
     await sendReset(submittedEmail);
   };
 
-  const canSubmitReset = newPwd.length > 0 && confirmPwd.length > 0 && !submitting;
+  const livePwdError = newPwd.length > 0 ? validatePassword(newPwd) : null;
+  const canSubmitReset =
+    newPwd.length > 0 &&
+    confirmPwd.length > 0 &&
+    validatePassword(newPwd) === null &&
+    newPwd === confirmPwd &&
+    !submitting;
 
   const handleResetSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setPwdError(null);
-    if (newPwd.length < 8) {
-      setPwdError("Minimum of 8 characters.");
+    const validationError = validatePassword(newPwd);
+    if (validationError) {
+      setPwdError(validationError);
       return;
     }
     if (newPwd !== confirmPwd) {
@@ -136,7 +148,7 @@ const ResetPassword = () => {
       const { data: userRes } = await supabase.auth.getUser();
       const { error } = await supabase.auth.updateUser({ password: newPwd });
       if (error) {
-        setPwdError(error.message);
+        setPwdError(mapSupabasePasswordError(error.message) ?? error.message);
         return;
       }
       // Clear lockout for this user
@@ -232,6 +244,8 @@ const ResetPassword = () => {
                       value={newPwd}
                       onChange={(e) => setNewPwd(e.target.value)}
                       className="pr-10"
+                      aria-invalid={!!(pwdError ?? livePwdError)}
+                      aria-describedby="new-pwd-helper"
                     />
                     <button
                       type="button"
@@ -242,7 +256,12 @@ const ResetPassword = () => {
                       {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Minimum of 8 characters</p>
+                  <p id="new-pwd-helper" className="text-xs text-muted-foreground">
+                    {PASSWORD_HELPER_TEXT}
+                  </p>
+                  {livePwdError && !pwdError && (
+                    <p className="text-sm text-destructive">{livePwdError}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
