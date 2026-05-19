@@ -8,7 +8,7 @@ const steps = [
         <a href="mailto:support@cobbli.com" className="underline hover:text-primary">
           support@cobbli.com
         </a>{" "}
-        and we’ll make recommend the right repairs.
+        and we’ll recommend the right repairs.
       </>
     ),
   },
