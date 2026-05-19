@@ -244,6 +244,8 @@ const ResetPassword = () => {
                       value={newPwd}
                       onChange={(e) => setNewPwd(e.target.value)}
                       className="pr-10"
+                      aria-invalid={!!(pwdError ?? livePwdError)}
+                      aria-describedby="new-pwd-helper"
                     />
                     <button
                       type="button"
@@ -254,7 +256,12 @@ const ResetPassword = () => {
                       {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Minimum of 8 characters</p>
+                  <p id="new-pwd-helper" className="text-xs text-muted-foreground">
+                    {PASSWORD_HELPER_TEXT}
+                  </p>
+                  {livePwdError && !pwdError && (
+                    <p className="text-sm text-destructive">{livePwdError}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
