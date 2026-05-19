@@ -140,6 +140,16 @@ const SignUp = () => {
         }
         return;
       }
+      // Supabase returns an empty `identities` array when the email is
+      // already registered (and "Confirm email" is enabled). No verification
+      // email is sent in this case — surface a clear error instead of
+      // advancing to the "check your inbox" screen.
+      const identities = data.user?.identities;
+      if (identities && identities.length === 0) {
+        setEmailExists(true);
+        setEmail("");
+        return;
+      }
       // If email confirmation is required (no session returned), show confirmation prompt
       if (!data.session) {
         setConfirmEmailSent(true);
