@@ -153,10 +153,15 @@ const EmptyBag = () => (
   <div className="rounded-lg border border-border bg-card py-16 px-6 flex flex-col items-center text-center shadow-soft">
     <div
       className="h-24 w-24 rounded-full flex items-center justify-center mb-6"
-      style={{ backgroundColor: "#fff5cc" }}
+      style={{ backgroundColor: "#3d1700" }}
       aria-hidden
     >
-      <img src={bagIcon} alt="" className="h-10 w-10" />
+      <img
+        src={bagIcon}
+        alt=""
+        className="h-10 w-10"
+        style={{ filter: "brightness(0) invert(1)" }}
+      />
     </div>
     <h2 className="text-xl font-semibold mb-2">Your bag is empty</h2>
     <p className="text-muted-foreground mb-6 max-w-sm">
