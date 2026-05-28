@@ -234,16 +234,57 @@ const AddPairModal = ({
               rows={3}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label>Photos (optional)</Label>
+            <p className="text-[13px] text-muted-foreground -mt-1">Add photos of your shoes</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
+              multiple
+              className="hidden"
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+            <div className="flex flex-wrap gap-2">
+              {photoPreviews.map((src, idx) => (
+                <div key={idx} className="relative h-20 w-20 rounded-md overflow-hidden border border-border">
+                  <img src={src} alt={`Photo ${idx + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(idx)}
+                    aria-label={`Remove photo ${idx + 1}`}
+                    className="absolute top-0.5 right-0.5 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              {photos.length < 5 && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-20 w-20 rounded-md border border-dashed border-border flex flex-col items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors"
+                >
+                  <Plus size={18} />
+                  <span className="text-[11px] mt-1">Add</span>
+                </button>
+              )}
+            </div>
+            <p className="text-[12px] text-muted-foreground">
+              Up to 5 photos · JPG, PNG, HEIC · max 10MB each
+            </p>
+          </div>
         </div>
 
         <DialogFooter>
           <Button
             type="button"
             onClick={onSave}
-            disabled={!valid}
-            className={!valid ? "opacity-50 cursor-not-allowed" : ""}
+            disabled={!valid || uploading}
+            className={!valid || uploading ? "opacity-50 cursor-not-allowed" : ""}
           >
-            Save pair
+            {uploading ? "Saving…" : "Save pair"}
           </Button>
         </DialogFooter>
       </DialogContent>
