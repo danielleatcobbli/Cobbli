@@ -152,22 +152,6 @@ const AddPairModal = ({
     }
   };
 
-  const valid = shoeType !== "" && colors.length > 0;
-
-  const toggleColor = (c: string) =>
-    setColors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
-
-  const onSave = () => {
-    if (!valid) return;
-    const pair = addPair({
-      shoeType: shoeType as ShoeType,
-      colors,
-      brand: brand.trim() || undefined,
-      description: description.trim() || undefined,
-    });
-    onSaved(pair.id);
-    onOpenChange(false);
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
