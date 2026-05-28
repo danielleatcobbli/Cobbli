@@ -7,6 +7,7 @@ export type SavedPair = {
   colors: string[];
   brand?: string;
   description?: string;
+  photoUrls?: string[];
   createdAt: string;
 };
 
