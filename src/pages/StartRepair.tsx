@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -24,7 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import { SHOE_TYPES, type ShoeType } from "@/data/services";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
@@ -50,6 +51,10 @@ const AddPairModal = ({
   const [colors, setColors] = useState<string[]>([]);
   const [brand, setBrand] = useState("");
   const [description, setDescription] = useState("");
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -57,25 +62,96 @@ const AddPairModal = ({
       setColors([]);
       setBrand("");
       setDescription("");
+      setPhotos([]);
+      setPhotoPreviews([]);
     }
   }, [open]);
+
+  useEffect(() => {
+    const urls = photos.map((f) => URL.createObjectURL(f));
+    setPhotoPreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [photos]);
+
+  const MAX_PHOTOS = 5;
+  const MAX_SIZE = 10 * 1024 * 1024;
+  const ACCEPTED = ["image/jpeg", "image/jpg", "image/png", "image/heic", "image/heif"];
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files) return;
+    const incoming = Array.from(files);
+    const accepted: File[] = [];
+    for (const f of incoming) {
+      const ext = f.name.toLowerCase().split(".").pop() || "";
+      const okType = ACCEPTED.includes(f.type) || ["jpg", "jpeg", "png", "heic", "heif"].includes(ext);
+      if (!okType) {
+        toast({ title: "Unsupported file", description: `${f.name} must be JPG, PNG, or HEIC.`, variant: "destructive" });
+        continue;
+      }
+      if (f.size > MAX_SIZE) {
+        toast({ title: "File too large", description: `${f.name} exceeds 10MB.`, variant: "destructive" });
+        continue;
+      }
+      accepted.push(f);
+    }
+    setPhotos((prev) => {
+      const remaining = MAX_PHOTOS - prev.length;
+      if (accepted.length > remaining) {
+        toast({ title: "Photo limit", description: `You can upload up to ${MAX_PHOTOS} photos.`, variant: "destructive" });
+      }
+      return [...prev, ...accepted.slice(0, remaining)];
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removePhoto = (idx: number) => setPhotos((prev) => prev.filter((_, i) => i !== idx));
 
   const valid = shoeType !== "" && colors.length > 0;
 
   const toggleColor = (c: string) =>
     setColors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
 
-  const onSave = () => {
-    if (!valid) return;
-    const pair = addPair({
-      shoeType: shoeType as ShoeType,
-      colors,
-      brand: brand.trim() || undefined,
-      description: description.trim() || undefined,
-    });
-    onSaved(pair.id);
-    onOpenChange(false);
+  const onSave = async () => {
+    if (!valid || uploading) return;
+    setUploading(true);
+    let photoUrls: string[] = [];
+    try {
+      if (photos.length > 0) {
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData.user?.id;
+        if (!uid) {
+          toast({ title: "Sign in required", description: "Please sign in to upload photos.", variant: "destructive" });
+          setUploading(false);
+          return;
+        }
+        const pairFolder = (typeof crypto !== "undefined" && "randomUUID" in crypto) ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+        for (const file of photos) {
+          const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+          const path = `${uid}/${pairFolder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error } = await supabase.storage.from("pair-photos").upload(path, file, {
+            contentType: file.type || undefined,
+            upsert: false,
+          });
+          if (error) throw error;
+          photoUrls.push(path);
+        }
+      }
+      const pair = addPair({
+        shoeType: shoeType as ShoeType,
+        colors,
+        brand: brand.trim() || undefined,
+        description: description.trim() || undefined,
+        photoUrls: photoUrls.length ? photoUrls : undefined,
+      });
+      onSaved(pair.id);
+      onOpenChange(false);
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e?.message || "Could not upload photos.", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -158,16 +234,57 @@ const AddPairModal = ({
               rows={3}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label>Photos (optional)</Label>
+            <p className="text-[13px] text-muted-foreground -mt-1">Add photos of your shoes</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
+              multiple
+              className="hidden"
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+            <div className="flex flex-wrap gap-2">
+              {photoPreviews.map((src, idx) => (
+                <div key={idx} className="relative h-20 w-20 rounded-md overflow-hidden border border-border">
+                  <img src={src} alt={`Photo ${idx + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(idx)}
+                    aria-label={`Remove photo ${idx + 1}`}
+                    className="absolute top-0.5 right-0.5 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              {photos.length < 5 && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-20 w-20 rounded-md border border-dashed border-border flex flex-col items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors"
+                >
+                  <Plus size={18} />
+                  <span className="text-[11px] mt-1">Add</span>
+                </button>
+              )}
+            </div>
+            <p className="text-[12px] text-muted-foreground">
+              Up to 5 photos · JPG, PNG, HEIC · max 10MB each
+            </p>
+          </div>
         </div>
 
         <DialogFooter>
           <Button
             type="button"
             onClick={onSave}
-            disabled={!valid}
-            className={!valid ? "opacity-50 cursor-not-allowed" : ""}
+            disabled={!valid || uploading}
+            className={!valid || uploading ? "opacity-50 cursor-not-allowed" : ""}
           >
-            Save pair
+            {uploading ? "Saving…" : "Save pair"}
           </Button>
         </DialogFooter>
       </DialogContent>
