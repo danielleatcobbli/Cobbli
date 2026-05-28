@@ -39,11 +39,20 @@ const meta: Record<Step, { title: string; description: string }> = {
 const ResetPassword = () => {
   const navigate = useNavigate();
 
-  // Detect Supabase recovery hash on mount
+  // Detect Supabase recovery token on mount (hash flow OR PKCE ?code=... flow)
   const [step, setStep] = useState<Step>(() => {
     if (typeof window !== "undefined") {
       const hash = window.location.hash;
-      if (hash.includes("type=recovery") || hash.includes("access_token")) return "reset";
+      const search = window.location.search;
+      if (
+        hash.includes("type=recovery") ||
+        hash.includes("access_token") ||
+        /[?&]code=/.test(search) ||
+        /[?&]token_hash=/.test(search) ||
+        /[?&]type=recovery/.test(search)
+      ) {
+        return "reset";
+      }
     }
     return "request";
   });
@@ -61,6 +70,21 @@ const ResetPassword = () => {
   const [pwdError, setPwdError] = useState<string | null>(null);
 
   usePageMeta(meta[step]);
+
+  // Exchange ?code=... for a session on mount (PKCE recovery flow)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (!code) return;
+    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (error) {
+        setPwdError(error.message);
+      } else {
+        setStep("reset");
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    });
+  }, []);
 
   // Listen for the PASSWORD_RECOVERY event Supabase fires after a recovery link sets the session
   useEffect(() => {
