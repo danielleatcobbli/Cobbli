@@ -52,6 +52,10 @@ const AddPairModal = ({
   const [colors, setColors] = useState<string[]>([]);
   const [brand, setBrand] = useState("");
   const [description, setDescription] = useState("");
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -59,8 +63,95 @@ const AddPairModal = ({
       setColors([]);
       setBrand("");
       setDescription("");
+      setPhotos([]);
+      setPhotoPreviews([]);
     }
   }, [open]);
+
+  useEffect(() => {
+    const urls = photos.map((f) => URL.createObjectURL(f));
+    setPhotoPreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [photos]);
+
+  const MAX_PHOTOS = 5;
+  const MAX_SIZE = 10 * 1024 * 1024;
+  const ACCEPTED = ["image/jpeg", "image/jpg", "image/png", "image/heic", "image/heif"];
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files) return;
+    const incoming = Array.from(files);
+    const accepted: File[] = [];
+    for (const f of incoming) {
+      const ext = f.name.toLowerCase().split(".").pop() || "";
+      const okType = ACCEPTED.includes(f.type) || ["jpg", "jpeg", "png", "heic", "heif"].includes(ext);
+      if (!okType) {
+        toast({ title: "Unsupported file", description: `${f.name} must be JPG, PNG, or HEIC.`, variant: "destructive" });
+        continue;
+      }
+      if (f.size > MAX_SIZE) {
+        toast({ title: "File too large", description: `${f.name} exceeds 10MB.`, variant: "destructive" });
+        continue;
+      }
+      accepted.push(f);
+    }
+    setPhotos((prev) => {
+      const remaining = MAX_PHOTOS - prev.length;
+      if (accepted.length > remaining) {
+        toast({ title: "Photo limit", description: `You can upload up to ${MAX_PHOTOS} photos.`, variant: "destructive" });
+      }
+      return [...prev, ...accepted.slice(0, remaining)];
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removePhoto = (idx: number) => setPhotos((prev) => prev.filter((_, i) => i !== idx));
+
+  const valid = shoeType !== "" && colors.length > 0;
+
+  const toggleColor = (c: string) =>
+    setColors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+
+  const onSave = async () => {
+    if (!valid || uploading) return;
+    setUploading(true);
+    let photoUrls: string[] = [];
+    try {
+      if (photos.length > 0) {
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData.user?.id;
+        if (!uid) {
+          toast({ title: "Sign in required", description: "Please sign in to upload photos.", variant: "destructive" });
+          setUploading(false);
+          return;
+        }
+        const pairFolder = (typeof crypto !== "undefined" && "randomUUID" in crypto) ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+        for (const file of photos) {
+          const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+          const path = `${uid}/${pairFolder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error } = await supabase.storage.from("pair-photos").upload(path, file, {
+            contentType: file.type || undefined,
+            upsert: false,
+          });
+          if (error) throw error;
+          photoUrls.push(path);
+        }
+      }
+      const pair = addPair({
+        shoeType: shoeType as ShoeType,
+        colors,
+        brand: brand.trim() || undefined,
+        description: description.trim() || undefined,
+        photoUrls: photoUrls.length ? photoUrls : undefined,
+      });
+      onSaved(pair.id);
+      onOpenChange(false);
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e?.message || "Could not upload photos.", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const valid = shoeType !== "" && colors.length > 0;
 
