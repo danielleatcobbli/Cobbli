@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
+import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,9 +17,34 @@ import {
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-type Step = "request" | "sent" | "reset";
+type Step = "checking" | "request" | "sent" | "reset";
+
+const getRecoveryParams = () => {
+  if (typeof window === "undefined") {
+    return { hasRecoveryToken: false, code: null as string | null, tokenHash: null as string | null };
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const type = searchParams.get("type") ?? hashParams.get("type");
+  const code = searchParams.get("code") ?? hashParams.get("code");
+  const tokenHash = searchParams.get("token_hash") ?? hashParams.get("token_hash");
+  const accessToken = searchParams.get("access_token") ?? hashParams.get("access_token");
+  const refreshToken = searchParams.get("refresh_token") ?? hashParams.get("refresh_token");
+
+  return {
+    code,
+    tokenHash,
+    hasRecoveryToken: type === "recovery" && (!!tokenHash || !!accessToken || !!refreshToken || !!code),
+  };
+};
 
 const meta: Record<Step, { title: string; description: string }> = {
+  checking: {
+    title: "Reset password — Cobbli",
+    description:
+      "Securely reset your Cobbli password so you can sign in and manage your NYC shoe repair orders, addresses and payment methods.",
+  },
   request: {
     title: "Reset your password — Cobbli",
     description:

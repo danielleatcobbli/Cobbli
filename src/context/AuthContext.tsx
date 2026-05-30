@@ -13,8 +13,9 @@ type AuthState = {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 // Routes where a newly-detected session (e.g. email verification completed in
-// another tab) should auto-redirect the user into their account.
-const AUTH_ENTRY_ROUTES = ["/signup", "/signin", "/reset-password"];
+// another tab) should auto-redirect the user into their account. Password
+// recovery intentionally stays on /reset-password so users can set a new one.
+const AUTH_ENTRY_ROUTES = ["/signup", "/signin"];
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
