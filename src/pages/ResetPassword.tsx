@@ -29,13 +29,14 @@ const getRecoveryParams = () => {
   const type = searchParams.get("type") ?? hashParams.get("type");
   const code = searchParams.get("code") ?? hashParams.get("code");
   const tokenHash = searchParams.get("token_hash") ?? hashParams.get("token_hash");
+  const token = searchParams.get("token") ?? hashParams.get("token");
   const accessToken = searchParams.get("access_token") ?? hashParams.get("access_token");
   const refreshToken = searchParams.get("refresh_token") ?? hashParams.get("refresh_token");
 
   return {
     code,
     tokenHash,
-    hasRecoveryToken: type === "recovery" && (!!tokenHash || !!accessToken || !!refreshToken || !!code),
+    hasRecoveryToken: type === "recovery" && (!!tokenHash || !!token || !!accessToken || !!refreshToken || !!code),
   };
 };
 
@@ -115,9 +116,11 @@ const ResetPassword = () => {
 
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
-      const recoverySentAt = (data.session?.user as { recovery_sent_at?: string | null } | undefined)
-        ?.recovery_sent_at;
-      setStep(data.session && recoverySentAt ? "reset" : "request");
+      const recoveryMarker = window.sessionStorage.getItem("cobbli-password-recovery") === "1";
+      if (!data.session) {
+        window.sessionStorage.removeItem("cobbli-password-recovery");
+      }
+      setStep(data.session || recoveryMarker ? "reset" : "request");
     };
 
     detectRecoveryState();
@@ -222,6 +225,7 @@ const ResetPassword = () => {
         console.warn("send-password-updated invocation failed", e);
       }
       await supabase.auth.signOut();
+      window.sessionStorage.removeItem("cobbli-password-recovery");
       navigate("/signin", {
         replace: true,
         state: { resetSuccess: "Your password has been updated. Please sign in with your new password." },

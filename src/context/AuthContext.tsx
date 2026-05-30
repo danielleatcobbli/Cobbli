@@ -32,6 +32,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Set up listener BEFORE reading session.
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
+      if (event === "PASSWORD_RECOVERY") {
+        window.sessionStorage.setItem("cobbli-password-recovery", "1");
+      }
 
       // Cross-tab email-verification handoff: if a session appears while we
       // had none (and the user is sitting on an auth-entry page like /signup),
