@@ -189,12 +189,7 @@ const ResetPassword = () => {
   };
 
   const livePwdError = newPwd.length > 0 ? validatePassword(newPwd) : null;
-  const canSubmitReset =
-    newPwd.length > 0 &&
-    confirmPwd.length > 0 &&
-    validatePassword(newPwd) === null &&
-    newPwd === confirmPwd &&
-    !submitting;
+  const canSubmitReset = newPwd.length > 0 && confirmPwd.length > 0 && !submitting;
 
   const handleResetSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -269,6 +264,13 @@ const ResetPassword = () => {
             </section>
           )}
 
+          {step === "checking" && (
+            <section className="space-y-6" aria-busy="true">
+              <h1 className="text-2xl md:text-3xl font-semibold">Reset password</h1>
+              <BrandSpinner className="py-8" label="Checking reset link" size="lg" />
+            </section>
+          )}
+
           {step === "sent" && (
             <section className="space-y-6">
               <h1 className="text-2xl md:text-3xl font-semibold">Check your inbox</h1>
@@ -296,7 +298,7 @@ const ResetPassword = () => {
 
           {step === "reset" && (
             <section className="space-y-6">
-              <h1 className="text-2xl md:text-3xl font-semibold">Reset password</h1>
+              <h1 className="text-2xl md:text-3xl font-semibold">Set new password</h1>
               <form onSubmit={handleResetSubmit} className="space-y-5" noValidate>
                 <div className="space-y-2">
                   <Label htmlFor="new-pwd">New password</Label>
@@ -307,7 +309,10 @@ const ResetPassword = () => {
                       autoComplete="new-password"
                       required
                       value={newPwd}
-                      onChange={(e) => setNewPwd(e.target.value)}
+                      onChange={(e) => {
+                        setNewPwd(e.target.value);
+                        setPwdError(null);
+                      }}
                       className="pr-10"
                       aria-invalid={!!(pwdError ?? livePwdError)}
                       aria-describedby="new-pwd-helper"
@@ -338,7 +343,10 @@ const ResetPassword = () => {
                       autoComplete="new-password"
                       required
                       value={confirmPwd}
-                      onChange={(e) => setConfirmPwd(e.target.value)}
+                      onChange={(e) => {
+                        setConfirmPwd(e.target.value);
+                        setPwdError(null);
+                      }}
                       className="pr-10"
                     />
                     <button
