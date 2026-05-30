@@ -65,23 +65,7 @@ const meta: Record<Step, { title: string; description: string }> = {
 const ResetPassword = () => {
   const navigate = useNavigate();
 
-  // Detect Supabase recovery token on mount (hash flow OR PKCE ?code=... flow)
-  const [step, setStep] = useState<Step>(() => {
-    if (typeof window !== "undefined") {
-      const hash = window.location.hash;
-      const search = window.location.search;
-      if (
-        hash.includes("type=recovery") ||
-        hash.includes("access_token") ||
-        /[?&]code=/.test(search) ||
-        /[?&]token_hash=/.test(search) ||
-        /[?&]type=recovery/.test(search)
-      ) {
-        return "reset";
-      }
-    }
-    return "request";
-  });
+  const [step, setStep] = useState<Step>("checking");
 
   const [email, setEmail] = useState("");
   const [submittedEmail, setSubmittedEmail] = useState("");
@@ -97,19 +81,50 @@ const ResetPassword = () => {
 
   usePageMeta(meta[step]);
 
-  // Exchange ?code=... for a session on mount (PKCE recovery flow)
+  // Decide which version of /reset-password to show before rendering either form.
+  // A recovery link may arrive as ?token_hash=...&type=recovery, as PKCE ?code=...,
+  // as hash tokens, or as a session that Supabase has already established.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    if (!code) return;
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (error) {
-        setPwdError(error.message);
-      } else {
+    let mounted = true;
+
+    const detectRecoveryState = async () => {
+      const { code, tokenHash, hasRecoveryToken } = getRecoveryParams();
+
+      if (tokenHash) {
+        const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+        if (!mounted) return;
+        if (error) setPwdError(error.message);
         setStep("reset");
         window.history.replaceState({}, "", window.location.pathname);
+        return;
       }
-    });
+
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!mounted) return;
+        if (error) setPwdError(error.message);
+        setStep("reset");
+        window.history.replaceState({}, "", window.location.pathname);
+        return;
+      }
+
+      if (hasRecoveryToken) {
+        setStep("reset");
+        return;
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+      const recoverySentAt = (data.session?.user as { recovery_sent_at?: string | null } | undefined)
+        ?.recovery_sent_at;
+      setStep(data.session && recoverySentAt ? "reset" : "request");
+    };
+
+    detectRecoveryState();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Listen for the PASSWORD_RECOVERY event Supabase fires after a recovery link sets the session
