@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
+import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,9 +17,35 @@ import {
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-type Step = "request" | "sent" | "reset";
+type Step = "checking" | "request" | "sent" | "reset";
+
+const getRecoveryParams = () => {
+  if (typeof window === "undefined") {
+    return { hasRecoveryToken: false, code: null as string | null, tokenHash: null as string | null };
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const type = searchParams.get("type") ?? hashParams.get("type");
+  const code = searchParams.get("code") ?? hashParams.get("code");
+  const tokenHash = searchParams.get("token_hash") ?? hashParams.get("token_hash");
+  const token = searchParams.get("token") ?? hashParams.get("token");
+  const accessToken = searchParams.get("access_token") ?? hashParams.get("access_token");
+  const refreshToken = searchParams.get("refresh_token") ?? hashParams.get("refresh_token");
+
+  return {
+    code,
+    tokenHash,
+    hasRecoveryToken: type === "recovery" && (!!tokenHash || !!token || !!accessToken || !!refreshToken || !!code),
+  };
+};
 
 const meta: Record<Step, { title: string; description: string }> = {
+  checking: {
+    title: "Reset password — Cobbli",
+    description:
+      "Securely reset your Cobbli password so you can sign in and manage your NYC shoe repair orders, addresses and payment methods.",
+  },
   request: {
     title: "Reset your password — Cobbli",
     description:
@@ -39,23 +66,7 @@ const meta: Record<Step, { title: string; description: string }> = {
 const ResetPassword = () => {
   const navigate = useNavigate();
 
-  // Detect Supabase recovery token on mount (hash flow OR PKCE ?code=... flow)
-  const [step, setStep] = useState<Step>(() => {
-    if (typeof window !== "undefined") {
-      const hash = window.location.hash;
-      const search = window.location.search;
-      if (
-        hash.includes("type=recovery") ||
-        hash.includes("access_token") ||
-        /[?&]code=/.test(search) ||
-        /[?&]token_hash=/.test(search) ||
-        /[?&]type=recovery/.test(search)
-      ) {
-        return "reset";
-      }
-    }
-    return "request";
-  });
+  const [step, setStep] = useState<Step>("checking");
 
   const [email, setEmail] = useState("");
   const [submittedEmail, setSubmittedEmail] = useState("");
@@ -71,19 +82,52 @@ const ResetPassword = () => {
 
   usePageMeta(meta[step]);
 
-  // Exchange ?code=... for a session on mount (PKCE recovery flow)
+  // Decide which version of /reset-password to show before rendering either form.
+  // A recovery link may arrive as ?token_hash=...&type=recovery, as PKCE ?code=...,
+  // as hash tokens, or as a session that Supabase has already established.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    if (!code) return;
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (error) {
-        setPwdError(error.message);
-      } else {
+    let mounted = true;
+
+    const detectRecoveryState = async () => {
+      const { code, tokenHash, hasRecoveryToken } = getRecoveryParams();
+
+      if (tokenHash) {
+        const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+        if (!mounted) return;
+        if (error) setPwdError(error.message);
         setStep("reset");
         window.history.replaceState({}, "", window.location.pathname);
+        return;
       }
-    });
+
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!mounted) return;
+        if (error) setPwdError(error.message);
+        setStep("reset");
+        window.history.replaceState({}, "", window.location.pathname);
+        return;
+      }
+
+      if (hasRecoveryToken) {
+        setStep("reset");
+        return;
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+      const recoveryMarker = window.sessionStorage.getItem("cobbli-password-recovery") === "1";
+      if (!data.session) {
+        window.sessionStorage.removeItem("cobbli-password-recovery");
+      }
+      setStep(data.session || recoveryMarker ? "reset" : "request");
+    };
+
+    detectRecoveryState();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Listen for the PASSWORD_RECOVERY event Supabase fires after a recovery link sets the session
@@ -148,12 +192,7 @@ const ResetPassword = () => {
   };
 
   const livePwdError = newPwd.length > 0 ? validatePassword(newPwd) : null;
-  const canSubmitReset =
-    newPwd.length > 0 &&
-    confirmPwd.length > 0 &&
-    validatePassword(newPwd) === null &&
-    newPwd === confirmPwd &&
-    !submitting;
+  const canSubmitReset = newPwd.length > 0 && confirmPwd.length > 0 && !submitting;
 
   const handleResetSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -186,6 +225,7 @@ const ResetPassword = () => {
         console.warn("send-password-updated invocation failed", e);
       }
       await supabase.auth.signOut();
+      window.sessionStorage.removeItem("cobbli-password-recovery");
       navigate("/signin", {
         replace: true,
         state: { resetSuccess: "Your password has been updated. Please sign in with your new password." },
@@ -228,6 +268,13 @@ const ResetPassword = () => {
             </section>
           )}
 
+          {step === "checking" && (
+            <section className="space-y-6" aria-busy="true">
+              <h1 className="text-2xl md:text-3xl font-semibold">Reset password</h1>
+              <BrandSpinner className="py-8" label="Checking reset link" size="lg" />
+            </section>
+          )}
+
           {step === "sent" && (
             <section className="space-y-6">
               <h1 className="text-2xl md:text-3xl font-semibold">Check your inbox</h1>
@@ -255,7 +302,7 @@ const ResetPassword = () => {
 
           {step === "reset" && (
             <section className="space-y-6">
-              <h1 className="text-2xl md:text-3xl font-semibold">Reset password</h1>
+              <h1 className="text-2xl md:text-3xl font-semibold">Set new password</h1>
               <form onSubmit={handleResetSubmit} className="space-y-5" noValidate>
                 <div className="space-y-2">
                   <Label htmlFor="new-pwd">New password</Label>
@@ -266,7 +313,10 @@ const ResetPassword = () => {
                       autoComplete="new-password"
                       required
                       value={newPwd}
-                      onChange={(e) => setNewPwd(e.target.value)}
+                      onChange={(e) => {
+                        setNewPwd(e.target.value);
+                        setPwdError(null);
+                      }}
                       className="pr-10"
                       aria-invalid={!!(pwdError ?? livePwdError)}
                       aria-describedby="new-pwd-helper"
@@ -297,7 +347,10 @@ const ResetPassword = () => {
                       autoComplete="new-password"
                       required
                       value={confirmPwd}
-                      onChange={(e) => setConfirmPwd(e.target.value)}
+                      onChange={(e) => {
+                        setConfirmPwd(e.target.value);
+                        setPwdError(null);
+                      }}
                       className="pr-10"
                     />
                     <button

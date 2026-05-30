@@ -13,8 +13,9 @@ type AuthState = {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 // Routes where a newly-detected session (e.g. email verification completed in
-// another tab) should auto-redirect the user into their account.
-const AUTH_ENTRY_ROUTES = ["/signup", "/signin", "/reset-password"];
+// another tab) should auto-redirect the user into their account. Password
+// recovery intentionally stays on /reset-password so users can set a new one.
+const AUTH_ENTRY_ROUTES = ["/signup", "/signin"];
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
@@ -31,6 +32,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Set up listener BEFORE reading session.
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
+      if (event === "PASSWORD_RECOVERY") {
+        window.sessionStorage.setItem("cobbli-password-recovery", "1");
+      }
 
       // Cross-tab email-verification handoff: if a session appears while we
       // had none (and the user is sitting on an auth-entry page like /signup),
