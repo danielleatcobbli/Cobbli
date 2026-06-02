@@ -277,7 +277,7 @@ const PaymentMethods = () => {
         <div className="rounded-lg border border-border bg-card p-8 text-center">
           <p className="text-foreground/80 mb-4">No payment methods on file yet.</p>
           <Button asChild variant="hero">
-            <Link to="/start-repair">Add a payment method</Link>
+            <Link to="/account/payment-methods/new">Add a payment method</Link>
           </Button>
         </div>
       ) : (
