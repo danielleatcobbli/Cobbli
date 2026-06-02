@@ -230,7 +230,7 @@ const Addresses = () => {
         <div className="rounded-lg border border-border bg-card p-8 text-center">
           <p className="text-foreground/80 mb-4">No addresses on file yet.</p>
           <Button asChild variant="hero">
-            <Link to="/start-repair">Add an address</Link>
+            <Link to="/account/addresses/new">Add an address</Link>
           </Button>
         </div>
       ) : (
