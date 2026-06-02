@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useNavigate } from "react-router-dom";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
+import { useRepairFlow } from "@/context/RepairFlowContext";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,15 @@ const Bag = () => {
   const navigate = useNavigate();
   const { pairs, subtotal, removePair, removeService } = useBag();
   const { getPair } = usePairs();
+  const { setSelectedPairId, setSelectedServiceSlugs, setActiveCategory } = useRepairFlow();
+
+  const handleEditRepair = (pairId: string | undefined, serviceSlugs: string[]) => {
+    if (!pairId) return;
+    setSelectedPairId(pairId);
+    setSelectedServiceSlugs(serviceSlugs);
+    setActiveCategory("All services");
+    navigate("/start-repair/services");
+  };
   const isEmpty = pairs.length === 0;
 
   usePageMeta({
@@ -66,15 +76,33 @@ const Bag = () => {
                     >
                       <div className="flex items-start justify-between gap-4 mb-4">
                         <h2 className="text-lg font-semibold">{pairLabel}</h2>
-                        <button
-                          type="button"
-                          onClick={() => removePair(pair.id)}
-                          className="text-sm text-muted-foreground hover:text-destructive inline-flex items-center gap-1.5 transition-colors"
-                          aria-label={`Remove ${pairLabel}`}
-                        >
-                          <Trash2 size={14} /> Remove pair
-                        </button>
+                        <div className="flex items-center gap-4">
+                          {pair.pairId && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleEditRepair(
+                                  pair.pairId,
+                                  pair.services.map((s) => s.id),
+                                )
+                              }
+                              className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1.5 transition-colors"
+                              aria-label={`Edit repair for ${pairLabel}`}
+                            >
+                              <Pencil size={14} /> Edit repair
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removePair(pair.id)}
+                            className="text-sm text-muted-foreground hover:text-destructive inline-flex items-center gap-1.5 transition-colors"
+                            aria-label={`Remove ${pairLabel}`}
+                          >
+                            <Trash2 size={14} /> Remove pair
+                          </button>
+                        </div>
                       </div>
+
 
                       <ul className="divide-y divide-border border-y border-border">
                         {pair.services.map((svc) => (
