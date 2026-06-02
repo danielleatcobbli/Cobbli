@@ -237,7 +237,49 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
     [state, updateContact, addAddress, addPaymentMethod, addOrder],
   );
 
-  return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
+  return (
+    <AccountContext.Provider value={value}>
+      {children}
+      <Dialog open={needsName} onOpenChange={(open) => { if (!open) return; /* not dismissible */ }}>
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Welcome to Cobbli</DialogTitle>
+            <DialogDescription>
+              Please enter your name so we can personalize your account.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="needs-first-name">First name</Label>
+              <Input
+                id="needs-first-name"
+                value={nameForm.first}
+                onChange={(e) => setNameForm((f) => ({ ...f, first: e.target.value }))}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="needs-last-name">Last name</Label>
+              <Input
+                id="needs-last-name"
+                value={nameForm.last}
+                onChange={(e) => setNameForm((f) => ({ ...f, last: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={submitName}
+              disabled={savingName || !nameForm.first.trim() || !nameForm.last.trim()}
+            >
+              {savingName ? "Saving..." : "Continue"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </AccountContext.Provider>
+  );
+
 };
 
 export const useAccount = () => {
