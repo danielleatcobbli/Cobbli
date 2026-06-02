@@ -21,7 +21,13 @@ type Step = "checking" | "request" | "sent" | "reset";
 
 const getRecoveryParams = () => {
   if (typeof window === "undefined") {
-    return { hasRecoveryToken: false, code: null as string | null, tokenHash: null as string | null };
+    return {
+      hasRecoveryToken: false,
+      code: null as string | null,
+      tokenHash: null as string | null,
+      errorCode: null as string | null,
+      errorParam: null as string | null,
+    };
   }
 
   const searchParams = new URLSearchParams(window.location.search);
@@ -32,13 +38,24 @@ const getRecoveryParams = () => {
   const token = searchParams.get("token") ?? hashParams.get("token");
   const accessToken = searchParams.get("access_token") ?? hashParams.get("access_token");
   const refreshToken = searchParams.get("refresh_token") ?? hashParams.get("refresh_token");
+  const errorCode = searchParams.get("error_code") ?? hashParams.get("error_code");
+  const errorParam = searchParams.get("error") ?? hashParams.get("error");
 
   return {
     code,
     tokenHash,
+    errorCode,
+    errorParam,
     hasRecoveryToken: type === "recovery" && (!!tokenHash || !!token || !!accessToken || !!refreshToken || !!code),
   };
 };
+
+const isExpiredAuthError = (message: string | null | undefined) => {
+  if (!message) return false;
+  const m = message.toLowerCase();
+  return m.includes("expired") || m.includes("otp_expired") || m.includes("invalid") && m.includes("token");
+};
+
 
 const meta: Record<Step, { title: string; description: string }> = {
   checking: {
