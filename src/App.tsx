@@ -54,6 +54,7 @@ const App = () => (
                       <Route path="/signin" element={<SignIn />} />
                       <Route path="/signup" element={<SignUp />} />
                       <Route path="/reset-password" element={<ResetPassword />} />
+                      <Route path="/link-expired" element={<LinkExpired />} />
                       <Route path="/start-repair" element={<StartRepair />} />
                       <Route path="/start-repair/services" element={<SelectServices />} />
                       <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
