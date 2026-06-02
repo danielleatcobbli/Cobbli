@@ -1,6 +1,9 @@
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { getConsent, setConsent, type ConsentValue } from "@/lib/consent";
 import { useEffect, useState } from "react";
+import Header from "@/components/cobbli/Header";
+import Footer from "@/components/cobbli/Footer";
+
 
 const CookiePolicy = () => {
   usePageMeta({
