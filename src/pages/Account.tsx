@@ -381,7 +381,7 @@ const AddAddress = () => {
               <SelectTrigger id="state"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {US_STATES.map((s) => (
-                  <SelectItem key={s.code} value={s.code}>{s.code}</SelectItem>
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
