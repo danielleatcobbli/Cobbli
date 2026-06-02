@@ -38,7 +38,7 @@ const Services = () => {
       <section className="flex-1 py-16 md:py-20">
         <div className="container">
           <h1 className="text-3xl md:text-5xl font-display font-600 text-primary mb-8">
-            Our services.
+            Services
           </h1>
 
           <div
