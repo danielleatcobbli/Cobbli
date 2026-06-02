@@ -119,8 +119,8 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
       const fullName =
         (meta.full_name as string | undefined) ??
         (meta.name as string | undefined) ??
-        [meta.given_name, meta.family_name].filter(Boolean).join(" ").trim() ||
-        null;
+        ([meta.given_name, meta.family_name].filter(Boolean).join(" ").trim() || null);
+
       const given = (meta.given_name as string | undefined) ?? null;
       const family = (meta.family_name as string | undefined) ?? null;
 
