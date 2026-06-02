@@ -608,6 +608,7 @@ const PasswordField = ({
   onChange,
   show,
   setShow,
+  error,
 }: {
   id: string;
   label: string;
@@ -615,6 +616,7 @@ const PasswordField = ({
   onChange: (v: string) => void;
   show: boolean;
   setShow: (b: boolean) => void;
+  error?: string | null;
 }) => (
   <div className="space-y-2">
     <Label htmlFor={id}>{label}</Label>
@@ -626,6 +628,7 @@ const PasswordField = ({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="pr-10"
+        aria-invalid={!!error}
       />
       <button
         type="button"
@@ -636,6 +639,7 @@ const PasswordField = ({
         {show ? <EyeOff size={18} /> : <Eye size={18} />}
       </button>
     </div>
+    {error && <p className="text-sm text-destructive">{error}</p>}
   </div>
 );
 
