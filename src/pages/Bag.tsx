@@ -17,6 +17,15 @@ const Bag = () => {
   const navigate = useNavigate();
   const { pairs, subtotal, removePair, removeService } = useBag();
   const { getPair } = usePairs();
+  const { setSelectedPairId, setSelectedServiceSlugs, setActiveCategory } = useRepairFlow();
+
+  const handleEditRepair = (pairId: string | undefined, serviceSlugs: string[]) => {
+    if (!pairId) return;
+    setSelectedPairId(pairId);
+    setSelectedServiceSlugs(serviceSlugs);
+    setActiveCategory("All services");
+    navigate("/start-repair/services");
+  };
   const isEmpty = pairs.length === 0;
 
   usePageMeta({
