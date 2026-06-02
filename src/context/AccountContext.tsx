@@ -89,6 +89,36 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [state]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user || cancelled) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("first_name, last_name, phone")
+        .eq("user_id", authData.user.id)
+        .single();
+
+      if (cancelled) return;
+
+      setState((s) => ({
+        ...s,
+        user: {
+          name:
+            profile?.first_name && profile?.last_name
+              ? `${profile.first_name} ${profile.last_name}`
+              : authData.user.email?.split("@")[0] ?? s.user.name,
+          email: authData.user.email ?? s.user.email,
+          phone: profile?.phone ?? s.user.phone,
+        },
+      }));
+    };
+    sync();
+    return () => { cancelled = true; };
+  }, []);
+
   const updateContact = useCallback((email: string, phone: string) => {
     setState((s) => ({ ...s, user: { ...s.user, email, phone } }));
   }, []);
