@@ -106,12 +106,24 @@ const ResetPassword = () => {
     let mounted = true;
 
     const detectRecoveryState = async () => {
-      const { code, tokenHash, hasRecoveryToken } = getRecoveryParams();
+      const { code, tokenHash, hasRecoveryToken, errorCode, errorParam } = getRecoveryParams();
+
+      // Supabase redirects expired/invalid recovery links back with error params.
+      if (errorCode === "otp_expired" || errorParam === "access_denied") {
+        navigate("/link-expired", { replace: true });
+        return;
+      }
 
       if (tokenHash) {
         const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
         if (!mounted) return;
-        if (error) setPwdError(error.message);
+        if (error) {
+          if (isExpiredAuthError(error.message)) {
+            navigate("/link-expired", { replace: true });
+            return;
+          }
+          setPwdError(error.message);
+        }
         setStep("reset");
         window.history.replaceState({}, "", window.location.pathname);
         return;
@@ -120,7 +132,13 @@ const ResetPassword = () => {
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!mounted) return;
-        if (error) setPwdError(error.message);
+        if (error) {
+          if (isExpiredAuthError(error.message)) {
+            navigate("/link-expired", { replace: true });
+            return;
+          }
+          setPwdError(error.message);
+        }
         setStep("reset");
         window.history.replaceState({}, "", window.location.pathname);
         return;
@@ -130,6 +148,7 @@ const ResetPassword = () => {
         setStep("reset");
         return;
       }
+
 
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
