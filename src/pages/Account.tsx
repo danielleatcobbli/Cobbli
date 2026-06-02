@@ -520,19 +520,24 @@ const Password = () => {
     description:
       "Update the password on your Cobbli account to keep your shoe repair orders, saved addresses and payment methods secure.",
   });
+  const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
   const [showNext, setShowNext] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [currentError, setCurrentError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit = next.length > 0 && confirm.length > 0 && !submitting;
+  const canSubmit =
+    current.length > 0 && next.length > 0 && confirm.length > 0 && !submitting;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    setCurrentError(null);
     setSuccess(null);
     if (next !== confirm) {
       setError("Passwords don't match");
@@ -543,6 +548,22 @@ const Password = () => {
       return;
     }
     setSubmitting(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const email = userData.user?.email;
+    if (!email) {
+      setSubmitting(false);
+      setError("You must be signed in to change your password.");
+      return;
+    }
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email,
+      password: current,
+    });
+    if (signInErr) {
+      setSubmitting(false);
+      setCurrentError("Incorrect current password. Please try again.");
+      return;
+    }
     const { error: err } = await supabase.auth.updateUser({ password: next });
     setSubmitting(false);
     if (err) {
@@ -550,6 +571,7 @@ const Password = () => {
       return;
     }
     setSuccess("Your password has been updated.");
+    setCurrent("");
     setNext("");
     setConfirm("");
   };
@@ -558,6 +580,15 @@ const Password = () => {
     <section className="max-w-md">
       <h1 className="text-2xl md:text-3xl font-semibold mb-6">My Password</h1>
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        <PasswordField
+          id="current-pw"
+          label="Current Password"
+          value={current}
+          onChange={(v) => { setCurrent(v); if (currentError) setCurrentError(null); }}
+          show={showCurrent}
+          setShow={setShowCurrent}
+          error={currentError}
+        />
         <PasswordField id="new-pw" label="New Password" value={next} onChange={setNext} show={showNext} setShow={setShowNext} />
         <PasswordField id="confirm-pw" label="Confirm New Password" value={confirm} onChange={setConfirm} show={showConfirm} setShow={setShowConfirm} />
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -577,6 +608,7 @@ const PasswordField = ({
   onChange,
   show,
   setShow,
+  error,
 }: {
   id: string;
   label: string;
@@ -584,6 +616,7 @@ const PasswordField = ({
   onChange: (v: string) => void;
   show: boolean;
   setShow: (b: boolean) => void;
+  error?: string | null;
 }) => (
   <div className="space-y-2">
     <Label htmlFor={id}>{label}</Label>
@@ -595,6 +628,7 @@ const PasswordField = ({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="pr-10"
+        aria-invalid={!!error}
       />
       <button
         type="button"
@@ -605,6 +639,7 @@ const PasswordField = ({
         {show ? <EyeOff size={18} /> : <Eye size={18} />}
       </button>
     </div>
+    {error && <p className="text-sm text-destructive">{error}</p>}
   </div>
 );
 
