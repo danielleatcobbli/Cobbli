@@ -665,7 +665,9 @@ const Account = () => {
                 <Route index element={<Navigate to="orders" replace />} />
                 <Route path="orders" element={<Orders />} />
                 <Route path="addresses" element={<Addresses />} />
+                <Route path="addresses/new" element={<AddAddress />} />
                 <Route path="payment-methods" element={<PaymentMethods />} />
+                <Route path="payment-methods/new" element={<AddPaymentMethod />} />
                 <Route path="password" element={<Password />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="*" element={<Navigate to="orders" replace />} />
