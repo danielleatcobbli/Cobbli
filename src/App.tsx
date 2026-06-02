@@ -13,6 +13,7 @@ import TermsConditions from "./pages/TermsConditions";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import ResetPassword from "./pages/ResetPassword";
+import LinkExpired from "./pages/LinkExpired";
 import Account from "./pages/Account";
 import StartRepair from "./pages/StartRepair";
 import SelectServices from "./pages/SelectServices";
@@ -53,6 +54,7 @@ const App = () => (
                       <Route path="/signin" element={<SignIn />} />
                       <Route path="/signup" element={<SignUp />} />
                       <Route path="/reset-password" element={<ResetPassword />} />
+                      <Route path="/link-expired" element={<LinkExpired />} />
                       <Route path="/start-repair" element={<StartRepair />} />
                       <Route path="/start-repair/services" element={<SelectServices />} />
                       <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
