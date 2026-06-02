@@ -312,6 +312,208 @@ const PaymentMethods = () => {
   );
 };
 
+const AddAddress = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  usePageMeta({
+    title: "Add address — Cobbli",
+    description: "Save a new pickup and delivery address to your Cobbli account.",
+  });
+  const [form, setForm] = useState({
+    street: "",
+    street2: "",
+    city: "",
+    state: "NY",
+    zip: "",
+    makeDefault: false,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const zipInvalid = form.zip.length === 5 && !isServiceableZip(form.zip);
+  const valid =
+    form.street.trim() &&
+    form.city.trim() &&
+    form.state &&
+    /^\d{5}$/.test(form.zip) &&
+    isServiceableZip(form.zip);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!valid || !user || submitting) return;
+    setSubmitting(true);
+    const { error } = await supabase.from("addresses").insert({
+      user_id: user.id,
+      street: form.street.trim(),
+      street2: form.street2.trim() || null,
+      city: form.city.trim(),
+      state: form.state,
+      zip: form.zip,
+      is_default: form.makeDefault,
+    });
+    setSubmitting(false);
+    if (error) {
+      toast.error("Could not save address. Please try again.");
+      return;
+    }
+    toast.success("Address saved.");
+    navigate("/account/addresses");
+  };
+
+  return (
+    <section className="max-w-lg">
+      <h1 className="text-2xl md:text-3xl font-semibold mb-6">Add address</h1>
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <div className="space-y-1.5">
+          <Label htmlFor="street">Street address</Label>
+          <Input id="street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="street2">Apt, suite, etc. (optional)</Label>
+          <Input id="street2" value={form.street2} onChange={(e) => setForm({ ...form, street2: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="city">City</Label>
+            <Input id="city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="state">State</Label>
+            <Select value={form.state} onValueChange={(v) => setForm({ ...form, state: v })}>
+              <SelectTrigger id="state"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {US_STATES.map((s) => (
+                  <SelectItem key={s.code} value={s.code}>{s.code}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="zip">ZIP code</Label>
+          <Input id="zip" inputMode="numeric" maxLength={5} value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value.replace(/\D/g, "") })} />
+          {zipInvalid && (
+            <p className="text-sm text-destructive">We don't currently service this ZIP code.</p>
+          )}
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
+          Set as default address
+        </label>
+        <div className="flex gap-3 pt-2">
+          <Button type="submit" variant="hero" disabled={!valid || submitting}>
+            {submitting ? "Saving…" : "Save address"}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => navigate("/account/addresses")}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </section>
+  );
+};
+
+const detectBrand = (num: string) => {
+  const n = num.replace(/\D/g, "");
+  if (/^4/.test(n)) return "Visa";
+  if (/^(5[1-5]|2[2-7])/.test(n)) return "Mastercard";
+  if (/^3[47]/.test(n)) return "Amex";
+  if (/^6(?:011|5)/.test(n)) return "Discover";
+  return "Card";
+};
+
+const AddPaymentMethod = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  usePageMeta({
+    title: "Add payment method — Cobbli",
+    description: "Save a card to your Cobbli account for faster checkout.",
+  });
+  const [form, setForm] = useState({ cardNumber: "", exp: "", cvv: "", makeDefault: false });
+  const [submitting, setSubmitting] = useState(false);
+  const digits = form.cardNumber.replace(/\D/g, "");
+  const expMatch = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(form.exp);
+  const valid = digits.length >= 13 && !!expMatch && /^\d{3,4}$/.test(form.cvv);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!valid || !user || submitting || !expMatch) return;
+    setSubmitting(true);
+    const { error } = await supabase.from("payment_methods").insert({
+      user_id: user.id,
+      stripe_payment_method_id: `manual_${Date.now()}`,
+      card_brand: detectBrand(form.cardNumber),
+      card_last4: digits.slice(-4),
+      exp_month: Number(expMatch[1]),
+      exp_year: 2000 + Number(expMatch[2]),
+      is_default: form.makeDefault,
+    });
+    setSubmitting(false);
+    if (error) {
+      toast.error("Could not save payment method. Please try again.");
+      return;
+    }
+    toast.success("Payment method saved.");
+    navigate("/account/payment-methods");
+  };
+
+  return (
+    <section className="max-w-lg">
+      <h1 className="text-2xl md:text-3xl font-semibold mb-6">Add payment method</h1>
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <div className="space-y-1.5">
+          <Label htmlFor="card">Card number</Label>
+          <Input
+            id="card"
+            inputMode="numeric"
+            autoComplete="cc-number"
+            value={form.cardNumber}
+            onChange={(e) => setForm({ ...form, cardNumber: e.target.value.replace(/[^\d ]/g, "").slice(0, 19) })}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="exp">Expiration (MM/YY)</Label>
+            <Input
+              id="exp"
+              inputMode="numeric"
+              autoComplete="cc-exp"
+              placeholder="MM/YY"
+              value={form.exp}
+              onChange={(e) => {
+                let v = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+                if (v.length >= 3) v = `${v.slice(0, 2)}/${v.slice(2)}`;
+                setForm({ ...form, exp: v });
+              }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cvv">CVV</Label>
+            <Input
+              id="cvv"
+              inputMode="numeric"
+              autoComplete="cc-csc"
+              maxLength={4}
+              value={form.cvv}
+              onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, "") })}
+            />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
+          Set as default payment method
+        </label>
+        <div className="flex gap-3 pt-2">
+          <Button type="submit" variant="hero" disabled={!valid || submitting}>
+            {submitting ? "Saving…" : "Save payment method"}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => navigate("/account/payment-methods")}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </section>
+  );
+};
+
 const Password = () => {
   usePageMeta({
     title: "My password — Cobbli",
