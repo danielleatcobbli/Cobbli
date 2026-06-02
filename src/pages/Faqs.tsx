@@ -76,7 +76,7 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "Is it worth repairing my shoes?",
     a: (
       <p>
-        Well-made shoes are built to last – with the right care, a repair is almost always more
+        Well-made shoes are built to last – with the right care, a repair is more
         cost-effective than replacement. Repair is also more sustainable than replacement, as manufacturing
         new shoes is a resource-intensive process.
       </p>
