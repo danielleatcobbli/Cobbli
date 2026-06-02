@@ -13,6 +13,7 @@ import TermsConditions from "./pages/TermsConditions";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import ResetPassword from "./pages/ResetPassword";
+import LinkExpired from "./pages/LinkExpired";
 import Account from "./pages/Account";
 import StartRepair from "./pages/StartRepair";
 import SelectServices from "./pages/SelectServices";
