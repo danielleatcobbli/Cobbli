@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import ServiceCard from "@/components/cobbli/ServiceCard";
-import {
-  CATEGORIES_ORDERED,
-  SERVICES,
-  type Service,
-} from "@/data/services";
+import BrandSpinner from "@/components/cobbli/BrandSpinner";
+import { CATEGORIES_ORDERED, type Service } from "@/data/services";
+import { useServices } from "@/hooks/useServices";
 
 const ALL = "All services" as const;
 const categories = [ALL, ...CATEGORIES_ORDERED];
@@ -15,14 +13,16 @@ const Services = () => {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
+  const { data: services, isLoading } = useServices();
 
   const visible = useMemo(() => {
-    const list =
+    const list = services ?? [];
+    const filtered =
       active === ALL
-        ? SERVICES
-        : SERVICES.filter((s) => s.categories.includes(active as Service["categories"][number]));
-    return [...list].sort((a, b) => a.rank - b.rank);
-  }, [active]);
+        ? list
+        : list.filter((s) => s.categories.includes(active as Service["categories"][number]));
+    return [...filtered].sort((a, b) => a.rank - b.rank);
+  }, [services, active]);
 
   const updateArrows = () => {
     const el = scrollerRef.current;
@@ -65,7 +65,6 @@ const Services = () => {
           </h2>
         </div>
 
-        {/* Category navigation — same tabs as the Services page */}
         <div
           role="tablist"
           aria-label="Service categories"
@@ -93,44 +92,51 @@ const Services = () => {
           })}
         </div>
 
-        {/* Carousel */}
-        <div className="relative">
-          {canPrev && (
-            <button
-              type="button"
-              aria-label="Previous services"
-              onClick={() => scrollByCard(-1)}
-              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 h-10 w-10 rounded-full bg-card border border-border shadow-soft flex items-center justify-center text-primary hover:bg-secondary transition-colors"
-            >
-              <ChevronLeft size={20} />
-            </button>
-          )}
-          {canNext && (
-            <button
-              type="button"
-              aria-label="Next services"
-              onClick={() => scrollByCard(1)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 h-10 w-10 rounded-full bg-card border border-border shadow-soft flex items-center justify-center text-primary hover:bg-secondary transition-colors"
-            >
-              <ChevronRight size={20} />
-            </button>
-          )}
-
-          <div
-            ref={scrollerRef}
-            className="flex gap-5 md:gap-6 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          >
-            {visible.map((s) => (
-              <div
-                key={s.slug}
-                data-service-card
-                className="snap-start shrink-0 w-[calc(80%-0.5rem)] sm:w-[calc(50%-0.625rem)] md:w-[calc(33.333%-1rem)] lg:w-[calc(25%-1.125rem)]"
+        {isLoading ? (
+          <BrandSpinner className="py-16" size="lg" />
+        ) : visible.length === 0 ? (
+          <p className="text-muted-foreground py-10 text-center">
+            No services in this category yet.
+          </p>
+        ) : (
+          <div className="relative">
+            {canPrev && (
+              <button
+                type="button"
+                aria-label="Previous services"
+                onClick={() => scrollByCard(-1)}
+                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 h-10 w-10 rounded-full bg-card border border-border shadow-soft flex items-center justify-center text-primary hover:bg-secondary transition-colors"
               >
-                <ServiceCard s={s} />
-              </div>
-            ))}
+                <ChevronLeft size={20} />
+              </button>
+            )}
+            {canNext && (
+              <button
+                type="button"
+                aria-label="Next services"
+                onClick={() => scrollByCard(1)}
+                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 h-10 w-10 rounded-full bg-card border border-border shadow-soft flex items-center justify-center text-primary hover:bg-secondary transition-colors"
+              >
+                <ChevronRight size={20} />
+              </button>
+            )}
+
+            <div
+              ref={scrollerRef}
+              className="flex gap-5 md:gap-6 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {visible.map((s) => (
+                <div
+                  key={s.slug}
+                  data-service-card
+                  className="snap-start shrink-0 w-[calc(80%-0.5rem)] sm:w-[calc(50%-0.625rem)] md:w-[calc(33.333%-1rem)] lg:w-[calc(25%-1.125rem)]"
+                >
+                  <ServiceCard s={s} />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </section>
   );

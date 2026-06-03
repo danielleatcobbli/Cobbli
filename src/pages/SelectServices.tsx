@@ -15,12 +15,13 @@ import {
 } from "@/components/ui/dialog";
 import {
   CATEGORIES_ORDERED,
-  SERVICES,
   isEligibleForShoeType,
   priceForShoeType,
   type Service,
   type ShoeType,
 } from "@/data/services";
+import { useServices } from "@/hooks/useServices";
+import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import { useBag, type BagService } from "@/context/BagContext";
@@ -98,12 +99,15 @@ const SelectServices = () => {
       "Choose the repairs your shoes need from Cobbli's catalog of sole, heel, zipper, strap, cleaning and preventative care services. Transparent pricing.",
   });
 
+  const { data: services, isLoading } = useServices();
+  const allServices = services ?? [];
+
   const pair = selectedPairId ? getPair(selectedPairId) : undefined;
   if (!pair) return <Navigate to="/start-repair" replace />;
 
   const eligible = useMemo(
-    () => SERVICES.filter((s) => isEligibleForShoeType(s, pair.shoeType)),
-    [pair.shoeType],
+    () => allServices.filter((s) => isEligibleForShoeType(s, pair.shoeType)),
+    [allServices, pair.shoeType],
   );
 
   const visible = useMemo(() => {
@@ -114,7 +118,7 @@ const SelectServices = () => {
     return [...list].sort((a, b) => a.rank - b.rank);
   }, [eligible, activeCategory]);
 
-  const selectedServices = SERVICES.filter((s) => selectedServiceSlugs.includes(s.slug));
+  const selectedServices = allServices.filter((s) => selectedServiceSlugs.includes(s.slug));
   const canCheckout = selectedServiceSlugs.length > 0;
 
   const onAddRepairToBag = () => {
@@ -210,7 +214,9 @@ const SelectServices = () => {
             </aside>
 
             <div>
-              {visible.length === 0 ? (
+              {isLoading ? (
+                <BrandSpinner className="py-16" size="lg" />
+              ) : visible.length === 0 ? (
                 <p className="text-muted-foreground">No services available in this category for the selected pair.</p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">

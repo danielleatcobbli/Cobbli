@@ -4,9 +4,9 @@ import { ChevronLeft } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
+import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { Button } from "@/components/ui/button";
 import {
-  getService,
   isEligibleForTier,
   isPriceRange,
   minPrice,
@@ -14,6 +14,7 @@ import {
   PRICE_TIER_LABELS,
   PRICE_TIERS_ORDERED,
 } from "@/data/services";
+import { useService } from "@/hooks/useServices";
 import { usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 
@@ -25,7 +26,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
   const { getPair } = usePairs();
   const { selectedPairId, selectedServiceSlugs, addService } = useRepairFlow();
 
-  const service = getService(slug);
+  const { service, isLoading } = useService(slug);
 
   usePageMeta({
     title: service ? `${service.name} — Cobbli` : "Service — Cobbli",
@@ -33,6 +34,19 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
       ? `${service.description} Book ${service.name.toLowerCase()} with Cobbli's NYC door-to-door shoe repair service. Transparent pricing and fast turnaround.`
       : "Cobbli's professional shoe repair services with transparent pricing and door-to-door pickup and return across NYC.",
   });
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-white flex flex-col">
+        <Header />
+        {mode === "flow" && <StepIndicator current="select" />}
+        <section className="flex-1 flex items-center justify-center py-20">
+          <BrandSpinner size="lg" />
+        </section>
+        <Footer />
+      </main>
+    );
+  }
 
   if (!service) return <Navigate to={mode === "flow" ? "/start-repair/services" : "/services"} replace />;
 
