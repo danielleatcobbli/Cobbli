@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import {
   getService,
   isEligibleForTier,
+  isPriceRange,
+  minPrice,
   priceForShoeType,
   PRICE_TIER_LABELS,
   PRICE_TIERS_ORDERED,
@@ -83,7 +85,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                       ? "XX"
                       : priceForShoeType(service, pair.shoeType)}
                   </p>
-                ) : (
+                ) : isPriceRange(service) ? (
                   <div>
                     <p className="text-sm font-medium text-primary mb-2">Pricing by shoe type</p>
                     <ul className="rounded-lg border border-border divide-y divide-border">
@@ -97,6 +99,10 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                       ))}
                     </ul>
                   </div>
+                ) : (
+                  <p className="text-2xl font-display text-primary">
+                    ${minPrice(service) === 0 ? "XX" : minPrice(service)}
+                  </p>
                 )}
               </div>
 
