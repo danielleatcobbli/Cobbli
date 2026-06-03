@@ -27,7 +27,7 @@ export const SHOE_TYPES: ShoeType[] = [
 export type PriceTier = "Other" | "Ankle boots" | "Boots";
 
 /** Display order for the pricing table: All other shoes / Ankle boots / Boots. */
-export const PRICE_TIERS_ORDERED: PriceTier[] = ["Other", "Ankle boots", "Boots"];
+export const PRICE_TIERS_ORDERED: PriceTier[] = ["Ankle boots", "Boots", "Other"];
 
 export const PRICE_TIER_LABELS: Record<PriceTier, string> = {
   Other: "All other shoes",
