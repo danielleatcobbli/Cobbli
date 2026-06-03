@@ -99,12 +99,15 @@ const SelectServices = () => {
       "Choose the repairs your shoes need from Cobbli's catalog of sole, heel, zipper, strap, cleaning and preventative care services. Transparent pricing.",
   });
 
+  const { data: services, isLoading } = useServices();
+  const allServices = services ?? [];
+
   const pair = selectedPairId ? getPair(selectedPairId) : undefined;
   if (!pair) return <Navigate to="/start-repair" replace />;
 
   const eligible = useMemo(
-    () => SERVICES.filter((s) => isEligibleForShoeType(s, pair.shoeType)),
-    [pair.shoeType],
+    () => allServices.filter((s) => isEligibleForShoeType(s, pair.shoeType)),
+    [allServices, pair.shoeType],
   );
 
   const visible = useMemo(() => {
@@ -115,7 +118,7 @@ const SelectServices = () => {
     return [...list].sort((a, b) => a.rank - b.rank);
   }, [eligible, activeCategory]);
 
-  const selectedServices = SERVICES.filter((s) => selectedServiceSlugs.includes(s.slug));
+  const selectedServices = allServices.filter((s) => selectedServiceSlugs.includes(s.slug));
   const canCheckout = selectedServiceSlugs.length > 0;
 
   const onAddRepairToBag = () => {
