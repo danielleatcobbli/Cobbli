@@ -5,7 +5,13 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
 import { Button } from "@/components/ui/button";
-import { getService, isEligibleForShoeType, SHOE_TYPES } from "@/data/services";
+import {
+  getService,
+  isEligibleForTier,
+  priceForShoeType,
+  PRICE_TIER_LABELS,
+  PRICE_TIERS_ORDERED,
+} from "@/data/services";
 import { usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 
@@ -73,15 +79,17 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
               <div className="mt-6">
                 {mode === "flow" && pair ? (
                   <p className="text-2xl font-display text-primary">
-                    ${service.pricing[pair.shoeType] === 0 ? "XX" : service.pricing[pair.shoeType]}
+                    ${priceForShoeType(service, pair.shoeType) === 0
+                      ? "XX"
+                      : priceForShoeType(service, pair.shoeType)}
                   </p>
                 ) : (
                   <div>
                     <p className="text-sm font-medium text-primary mb-2">Pricing by shoe type</p>
                     <ul className="rounded-lg border border-border divide-y divide-border">
-                      {SHOE_TYPES.filter((t) => isEligibleForShoeType(service, t)).map((t) => (
+                      {PRICE_TIERS_ORDERED.filter((t) => isEligibleForTier(service, t)).map((t) => (
                         <li key={t} className="flex items-center justify-between px-4 py-2 text-sm">
-                          <span className="text-primary">{t}</span>
+                          <span className="text-primary">{PRICE_TIER_LABELS[t]}</span>
                           <span className="text-muted-foreground">
                             ${service.pricing[t] === 0 ? "XX" : service.pricing[t]}
                           </span>

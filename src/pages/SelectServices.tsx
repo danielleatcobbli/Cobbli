@@ -17,7 +17,9 @@ import {
   CATEGORIES_ORDERED,
   SERVICES,
   isEligibleForShoeType,
+  priceForShoeType,
   type Service,
+  type ShoeType,
 } from "@/data/services";
 import { usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
@@ -33,11 +35,11 @@ const ServiceCard = ({
   onAdd,
 }: {
   s: Service;
-  shoeType: string;
+  shoeType: ShoeType;
   selected: boolean;
   onAdd: () => void;
 }) => {
-  const price = s.pricing[shoeType as keyof typeof s.pricing] ?? 0;
+  const price = priceForShoeType(s, shoeType) ?? 0;
   const priceLabel = `$${price === 0 ? "XX" : price}`;
   return (
     <div
@@ -120,7 +122,7 @@ const SelectServices = () => {
     const bagServices: BagService[] = selectedServices.map((s) => ({
       id: s.slug,
       name: s.name,
-      price: (s.pricing[pair.shoeType] ?? 0) * 100,
+      price: (priceForShoeType(s, pair.shoeType) ?? 0) * 100,
     }));
     addPairToBag(bagServices, pair.id);
     setConfirmOpen(true);
