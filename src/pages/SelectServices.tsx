@@ -214,7 +214,9 @@ const SelectServices = () => {
             </aside>
 
             <div>
-              {visible.length === 0 ? (
+              {isLoading ? (
+                <BrandSpinner className="py-16" size="lg" />
+              ) : visible.length === 0 ? (
                 <p className="text-muted-foreground">No services available in this category for the selected pair.</p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
