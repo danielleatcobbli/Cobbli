@@ -15,12 +15,13 @@ import {
 } from "@/components/ui/dialog";
 import {
   CATEGORIES_ORDERED,
-  SERVICES,
   isEligibleForShoeType,
   priceForShoeType,
   type Service,
   type ShoeType,
 } from "@/data/services";
+import { useServices } from "@/hooks/useServices";
+import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import { useBag, type BagService } from "@/context/BagContext";
