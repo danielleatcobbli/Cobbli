@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import ServiceCard from "@/components/cobbli/ServiceCard";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
-import { CATEGORIES_ORDERED, type Service } from "@/data/services";
+import { CATEGORIES_ORDERED, type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
 
 const ALL = "All services" as const;

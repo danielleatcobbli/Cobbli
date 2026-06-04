@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { ShoeType } from "@/data/services";
+import type { ShoeType } from "@/types/service";
 
 export type SavedPair = {
   id: string;

@@ -1,4 +1,5 @@
-// Placeholder service data — to be replaced with finalized list, prices, and rankings.
+// Shared service types & utilities. Service records themselves come from
+// Supabase via `useServices`; this module only holds the shape and helpers.
 
 export type ShoeType =
   | "Ankle boots"
@@ -26,7 +27,7 @@ export const SHOE_TYPES: ShoeType[] = [
  */
 export type PriceTier = "Other" | "Ankle boots" | "Boots";
 
-/** Display order for the pricing table: All other shoes / Ankle boots / Boots. */
+/** Display order for the pricing table: Ankle boots / Boots / All other shoes. */
 export const PRICE_TIERS_ORDERED: PriceTier[] = ["Ankle boots", "Boots", "Other"];
 
 export const PRICE_TIER_LABELS: Record<PriceTier, string> = {
@@ -67,76 +68,6 @@ export type Service = {
   /** Lower number = higher rank. */
   rank: number;
 };
-
-// Placeholder set — names/descriptions/prices are intentionally generic.
-export const SERVICES: Service[] = [
-  {
-    slug: "service-1",
-    name: "Service name",
-    description: "Service description",
-    pricing: { Other: 0, "Ankle boots": 0, Boots: 0 },
-    categories: ["Sole or heel repair"],
-    rank: 1,
-  },
-  {
-    slug: "service-2",
-    name: "Service name",
-    description: "Service description",
-    pricing: { "Ankle boots": 0, Boots: 0 },
-    categories: ["Sole or heel repair"],
-    rank: 2,
-  },
-  {
-    slug: "service-3",
-    name: "Service name",
-    description: "Service description",
-    pricing: { Boots: 0 },
-    categories: ["Zipper repair"],
-    rank: 1,
-  },
-  {
-    slug: "service-4",
-    name: "Service name",
-    description: "Service description",
-    pricing: { Other: 0 },
-    categories: ["Strap repair"],
-    rank: 1,
-  },
-  {
-    slug: "service-5",
-    name: "Service name",
-    description: "Service description",
-    pricing: { Other: 0, "Ankle boots": 0, Boots: 0 },
-    categories: ["Cleaning"],
-    rank: 1,
-  },
-  {
-    slug: "service-6",
-    name: "Service name",
-    description: "Service description",
-    pricing: { Other: 0, "Ankle boots": 0, Boots: 0 },
-    categories: ["Preventative care"],
-    rank: 1,
-  },
-  {
-    slug: "service-7",
-    name: "Service name",
-    description: "Service description",
-    pricing: { Other: 0, "Ankle boots": 0, Boots: 0 },
-    categories: ["Cleaning", "Preventative care"],
-    rank: 2,
-  },
-  {
-    slug: "service-8",
-    name: "Service name",
-    description: "Service description",
-    pricing: { Other: 0 },
-    categories: ["Sole or heel repair"],
-    rank: 3,
-  },
-];
-
-export const getService = (slug: string) => SERVICES.find((s) => s.slug === slug);
 
 /** True when the service has more than one distinct tier price. */
 export const isPriceRange = (s: Service) => {

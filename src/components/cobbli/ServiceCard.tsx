@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { isPriceRange, minPrice, type Service } from "@/data/services";
+import { isPriceRange, minPrice, type Service } from "@/types/service";
 
 /**
  * Shared service card. Used by the homepage carousel and the Services page grid

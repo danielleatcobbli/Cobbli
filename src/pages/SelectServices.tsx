@@ -19,7 +19,7 @@ import {
   priceForShoeType,
   type Service,
   type ShoeType,
-} from "@/data/services";
+} from "@/types/service";
 import { useServices } from "@/hooks/useServices";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { usePairs } from "@/context/PairsContext";
