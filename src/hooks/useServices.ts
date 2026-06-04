@@ -6,7 +6,7 @@ import {
   type ServiceCategory,
   type ShoeType,
   tierForShoeType,
-} from "@/data/services";
+} from "@/types/service";
 
 type Row = {
   id: string;

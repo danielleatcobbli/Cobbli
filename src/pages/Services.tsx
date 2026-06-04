@@ -5,7 +5,7 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import ConsultationBanner from "@/components/cobbli/ConsultationBanner";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
-import { CATEGORIES_ORDERED, type Service } from "@/data/services";
+import { CATEGORIES_ORDERED, type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
 import ServiceCard from "@/components/cobbli/ServiceCard";
 

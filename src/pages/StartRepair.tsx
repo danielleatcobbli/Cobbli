@@ -26,7 +26,7 @@ import {
 import { Plus, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { SHOE_TYPES, type ShoeType } from "@/data/services";
+import { SHOE_TYPES, type ShoeType } from "@/types/service";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import { useBag } from "@/context/BagContext";

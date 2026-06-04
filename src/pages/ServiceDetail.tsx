@@ -13,7 +13,7 @@ import {
   priceForShoeType,
   PRICE_TIER_LABELS,
   PRICE_TIERS_ORDERED,
-} from "@/data/services";
+} from "@/types/service";
 import { useService } from "@/hooks/useServices";
 import { usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
