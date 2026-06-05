@@ -16,6 +16,10 @@ import ResetPassword from "./pages/ResetPassword";
 import LinkExpired from "./pages/LinkExpired";
 import Account from "./pages/Account";
 import StartRepair from "./pages/StartRepair";
+import StartRepairPick from "./pages/StartRepairPick";
+import AssessmentUpload from "./pages/AssessmentUpload";
+import AssessmentDetails from "./pages/AssessmentDetails";
+import Admin from "./pages/Admin";
 import SelectServices from "./pages/SelectServices";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
@@ -28,8 +32,10 @@ import { AuthProvider } from "./context/AuthContext";
 import { BagProvider } from "./context/BagContext";
 import { PairsProvider } from "./context/PairsContext";
 import { RepairFlowProvider } from "./context/RepairFlowContext";
+import { AssessmentProvider } from "./context/AssessmentContext";
 import { AccountProvider } from "./context/AccountContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./components/AdminRoute";
 
 const queryClient = new QueryClient();
 
