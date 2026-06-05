@@ -234,10 +234,9 @@ const SelectServices = () => {
 
               <p className="mt-8 text-sm text-muted-foreground">
                 Not sure what your shoes need?{" "}
-                <a href="mailto:support@cobbli.com" className="underline text-primary">
-                  Email us photos
-                </a>{" "}
-                and we'll recommend the right repairs.
+                <Link to="/start-repair/assessment" className="underline text-primary">
+                  Get a personalised recommendation <span aria-hidden>→</span>
+                </Link>
               </p>
             </div>
           </div>

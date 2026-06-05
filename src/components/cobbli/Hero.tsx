@@ -40,14 +40,13 @@ const Hero = () => {
               </Link>
             </div>
             <p className="mt-5 text-sm md:text-base text-primary-foreground/80">
-              Not sure what your shoes need? Email us photos at{" "}
-              <a
-                href="mailto:support@cobbli.com"
+              Not sure what your shoes need?{" "}
+              <Link
+                to="/start-repair/assessment"
                 className="underline underline-offset-4 decoration-primary-foreground/40 hover:decoration-primary-foreground hover:text-primary-foreground transition-colors"
               >
-                support@cobbli.com
-              </a>{" "}
-              and we'll recommend the right repairs
+                Get a personalised recommendation <span aria-hidden>→</span>
+              </Link>
             </p>
           </div>
         </div>

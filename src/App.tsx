@@ -16,6 +16,10 @@ import ResetPassword from "./pages/ResetPassword";
 import LinkExpired from "./pages/LinkExpired";
 import Account from "./pages/Account";
 import StartRepair from "./pages/StartRepair";
+import StartRepairPick from "./pages/StartRepairPick";
+import AssessmentUpload from "./pages/AssessmentUpload";
+import AssessmentDetails from "./pages/AssessmentDetails";
+import Admin from "./pages/Admin";
 import SelectServices from "./pages/SelectServices";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
@@ -28,8 +32,10 @@ import { AuthProvider } from "./context/AuthContext";
 import { BagProvider } from "./context/BagContext";
 import { PairsProvider } from "./context/PairsContext";
 import { RepairFlowProvider } from "./context/RepairFlowContext";
+import { AssessmentProvider } from "./context/AssessmentContext";
 import { AccountProvider } from "./context/AccountContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./components/AdminRoute";
 
 const queryClient = new QueryClient();
 
@@ -45,36 +51,63 @@ const App = () => (
               <BagProvider>
                 <PairsProvider>
                   <RepairFlowProvider>
-                    <Routes>
-                      <Route path="/" element={<Index />} />
-                      <Route path="/coming-soon" element={<ComingSoon />} />
-                      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                      <Route path="/cookie-policy" element={<CookiePolicy />} />
-                      <Route path="/terms-conditions" element={<TermsConditions />} />
-                      <Route path="/signin" element={<SignIn />} />
-                      <Route path="/signup" element={<SignUp />} />
-                      <Route path="/reset-password" element={<ResetPassword />} />
-                      <Route path="/link-expired" element={<LinkExpired />} />
-                      <Route path="/start-repair" element={<StartRepair />} />
-                      <Route path="/start-repair/services" element={<SelectServices />} />
-                      <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
-                      <Route path="/services" element={<Services />} />
-                      <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
-                      <Route path="/bag" element={<Bag />} />
-                      <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
-                      <Route path="/order-confirmation" element={<OrderConfirmation />} />
-                      <Route path="/faqs" element={<Faqs />} />
-                      <Route
-                        path="/account/*"
-                        element={
-                          <ProtectedRoute>
-                            <Account />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                    <CookieConsent />
+                    <AssessmentProvider>
+                      <Routes>
+                        <Route path="/" element={<Index />} />
+                        <Route path="/coming-soon" element={<ComingSoon />} />
+                        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                        <Route path="/cookie-policy" element={<CookiePolicy />} />
+                        <Route path="/terms-conditions" element={<TermsConditions />} />
+                        <Route path="/signin" element={<SignIn />} />
+                        <Route path="/signup" element={<SignUp />} />
+                        <Route path="/reset-password" element={<ResetPassword />} />
+                        <Route path="/link-expired" element={<LinkExpired />} />
+                        <Route path="/start-repair" element={<StartRepair />} />
+                        <Route path="/start-repair/pick" element={<StartRepairPick />} />
+                        <Route
+                          path="/start-repair/assessment"
+                          element={
+                            <ProtectedRoute>
+                              <AssessmentUpload />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/start-repair/assessment/details"
+                          element={
+                            <ProtectedRoute>
+                              <AssessmentDetails />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route path="/start-repair/services" element={<SelectServices />} />
+                        <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
+                        <Route path="/services" element={<Services />} />
+                        <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
+                        <Route path="/bag" element={<Bag />} />
+                        <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+                        <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                        <Route path="/faqs" element={<Faqs />} />
+                        <Route
+                          path="/admin"
+                          element={
+                            <AdminRoute>
+                              <Admin />
+                            </AdminRoute>
+                          }
+                        />
+                        <Route
+                          path="/account/*"
+                          element={
+                            <ProtectedRoute>
+                              <Account />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                      <CookieConsent />
+                    </AssessmentProvider>
                   </RepairFlowProvider>
                 </PairsProvider>
               </BagProvider>
