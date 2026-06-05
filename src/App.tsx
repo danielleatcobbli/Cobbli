@@ -51,36 +51,63 @@ const App = () => (
               <BagProvider>
                 <PairsProvider>
                   <RepairFlowProvider>
-                    <Routes>
-                      <Route path="/" element={<Index />} />
-                      <Route path="/coming-soon" element={<ComingSoon />} />
-                      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                      <Route path="/cookie-policy" element={<CookiePolicy />} />
-                      <Route path="/terms-conditions" element={<TermsConditions />} />
-                      <Route path="/signin" element={<SignIn />} />
-                      <Route path="/signup" element={<SignUp />} />
-                      <Route path="/reset-password" element={<ResetPassword />} />
-                      <Route path="/link-expired" element={<LinkExpired />} />
-                      <Route path="/start-repair" element={<StartRepair />} />
-                      <Route path="/start-repair/services" element={<SelectServices />} />
-                      <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
-                      <Route path="/services" element={<Services />} />
-                      <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
-                      <Route path="/bag" element={<Bag />} />
-                      <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
-                      <Route path="/order-confirmation" element={<OrderConfirmation />} />
-                      <Route path="/faqs" element={<Faqs />} />
-                      <Route
-                        path="/account/*"
-                        element={
-                          <ProtectedRoute>
-                            <Account />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                    <CookieConsent />
+                    <AssessmentProvider>
+                      <Routes>
+                        <Route path="/" element={<Index />} />
+                        <Route path="/coming-soon" element={<ComingSoon />} />
+                        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                        <Route path="/cookie-policy" element={<CookiePolicy />} />
+                        <Route path="/terms-conditions" element={<TermsConditions />} />
+                        <Route path="/signin" element={<SignIn />} />
+                        <Route path="/signup" element={<SignUp />} />
+                        <Route path="/reset-password" element={<ResetPassword />} />
+                        <Route path="/link-expired" element={<LinkExpired />} />
+                        <Route path="/start-repair" element={<StartRepair />} />
+                        <Route path="/start-repair/pick" element={<StartRepairPick />} />
+                        <Route
+                          path="/start-repair/assessment"
+                          element={
+                            <ProtectedRoute>
+                              <AssessmentUpload />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/start-repair/assessment/details"
+                          element={
+                            <ProtectedRoute>
+                              <AssessmentDetails />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route path="/start-repair/services" element={<SelectServices />} />
+                        <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
+                        <Route path="/services" element={<Services />} />
+                        <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
+                        <Route path="/bag" element={<Bag />} />
+                        <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+                        <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                        <Route path="/faqs" element={<Faqs />} />
+                        <Route
+                          path="/admin"
+                          element={
+                            <AdminRoute>
+                              <Admin />
+                            </AdminRoute>
+                          }
+                        />
+                        <Route
+                          path="/account/*"
+                          element={
+                            <ProtectedRoute>
+                              <Account />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                      <CookieConsent />
+                    </AssessmentProvider>
                   </RepairFlowProvider>
                 </PairsProvider>
               </BagProvider>
