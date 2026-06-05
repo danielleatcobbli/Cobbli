@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { SHOE_TYPES, type ShoeType } from "@/types/service";
@@ -53,7 +53,10 @@ const AddPairModal = ({
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [uploadedPaths, setUploadedPaths] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [userEdited, setUserEdited] = useState({ shoeType: false, colors: false, brand: false });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -64,6 +67,9 @@ const AddPairModal = ({
       setDescription("");
       setPhotos([]);
       setPhotoPreviews([]);
+      setUploadedPaths([]);
+      setAnalyzing(false);
+      setUserEdited({ shoeType: false, colors: false, brand: false });
     }
   }, [open]);
 
@@ -73,11 +79,47 @@ const AddPairModal = ({
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, [photos]);
 
-  const MAX_PHOTOS = 5;
+  const MAX_PHOTOS = 3;
   const MAX_SIZE = 10 * 1024 * 1024;
   const ACCEPTED = ["image/jpeg", "image/jpg", "image/png", "image/heic", "image/heif"];
 
-  const handleFiles = (files: FileList | null) => {
+  const analyzePhotos = async (paths: string[]) => {
+    if (paths.length === 0) return;
+    setAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-shoe-photos", {
+        body: { photoPaths: paths, bucket: "pair-photos" },
+      });
+      if (error) throw error;
+      const result = data as { shoeType: string | null; colors: string[]; brand: string | null };
+      setShoeType((prev) => {
+        if (userEdited.shoeType || prev) return prev;
+        return result?.shoeType && SHOE_TYPES.includes(result.shoeType as ShoeType)
+          ? (result.shoeType as ShoeType)
+          : prev;
+      });
+      setColors((prev) => {
+        if (userEdited.colors || prev.length > 0) return prev;
+        const valid = (result?.colors || []).filter((c) => COLORS.includes(c));
+        return valid.length > 0 ? valid : prev;
+      });
+      setBrand((prev) => {
+        if (userEdited.brand || prev) return prev;
+        return result?.brand ? result.brand : prev;
+      });
+    } catch (e) {
+      console.error("analyze failed", e);
+      toast({
+        title: "Couldn't auto-fill",
+        description: "We couldn't analyze your photos. Please fill in the details manually.",
+        variant: "destructive",
+      });
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleFiles = async (files: FileList | null) => {
     if (!files) return;
     const incoming = Array.from(files);
     const accepted: File[] = [];
@@ -94,62 +136,69 @@ const AddPairModal = ({
       }
       accepted.push(f);
     }
-    setPhotos((prev) => {
-      const remaining = MAX_PHOTOS - prev.length;
-      if (accepted.length > remaining) {
-        toast({ title: "Photo limit", description: `You can upload up to ${MAX_PHOTOS} photos.`, variant: "destructive" });
-      }
-      return [...prev, ...accepted.slice(0, remaining)];
-    });
+    const remaining = MAX_PHOTOS - photos.length;
+    if (accepted.length > remaining) {
+      toast({ title: "Photo limit", description: `You can upload up to ${MAX_PHOTOS} photos.`, variant: "destructive" });
+    }
+    const toAdd = accepted.slice(0, remaining);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  };
+    if (toAdd.length === 0) return;
 
-  const removePhoto = (idx: number) => setPhotos((prev) => prev.filter((_, i) => i !== idx));
+    const { data: userData } = await supabase.auth.getUser();
+    const uid = userData.user?.id;
+    if (!uid) {
+      toast({ title: "Sign in required", description: "Please sign in to upload photos.", variant: "destructive" });
+      return;
+    }
 
-  const valid = shoeType !== "" && colors.length > 0;
-
-  const toggleColor = (c: string) =>
-    setColors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
-
-  const onSave = async () => {
-    if (!valid || uploading) return;
+    setPhotos((prev) => [...prev, ...toAdd]);
     setUploading(true);
-    let photoUrls: string[] = [];
+    const newPaths: string[] = [];
     try {
-      if (photos.length > 0) {
-        const { data: userData } = await supabase.auth.getUser();
-        const uid = userData.user?.id;
-        if (!uid) {
-          toast({ title: "Sign in required", description: "Please sign in to upload photos.", variant: "destructive" });
-          setUploading(false);
-          return;
-        }
-        const pairFolder = (typeof crypto !== "undefined" && "randomUUID" in crypto) ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-        for (const file of photos) {
-          const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-          const path = `${uid}/${pairFolder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-          const { error } = await supabase.storage.from("pair-photos").upload(path, file, {
-            contentType: file.type || undefined,
-            upsert: false,
-          });
-          if (error) throw error;
-          photoUrls.push(path);
-        }
+      for (const file of toAdd) {
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await supabase.storage.from("pair-photos").upload(path, file, {
+          contentType: file.type || undefined,
+          upsert: false,
+        });
+        if (error) throw error;
+        newPaths.push(path);
       }
-      const pair = addPair({
-        shoeType: shoeType as ShoeType,
-        colors,
-        brand: brand.trim() || undefined,
-        description: description.trim() || undefined,
-        photoUrls: photoUrls.length ? photoUrls : undefined,
-      });
-      onSaved(pair.id);
-      onOpenChange(false);
+      const allPaths = [...uploadedPaths, ...newPaths];
+      setUploadedPaths(allPaths);
+      void analyzePhotos(allPaths);
     } catch (e: any) {
       toast({ title: "Upload failed", description: e?.message || "Could not upload photos.", variant: "destructive" });
+      setPhotos((prev) => prev.slice(0, prev.length - toAdd.length));
     } finally {
       setUploading(false);
     }
+  };
+
+  const removePhoto = (idx: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+    setUploadedPaths((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const valid = shoeType !== "" && colors.length > 0;
+
+  const toggleColor = (c: string) => {
+    setUserEdited((p) => ({ ...p, colors: true }));
+    setColors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+  };
+
+  const onSave = async () => {
+    if (!valid || uploading) return;
+    const pair = addPair({
+      shoeType: shoeType as ShoeType,
+      colors,
+      brand: brand.trim() || undefined,
+      description: description.trim() || undefined,
+      photoUrls: uploadedPaths.length ? uploadedPaths : undefined,
+    });
+    onSaved(pair.id);
+    onOpenChange(false);
   };
 
 
@@ -162,21 +211,83 @@ const AddPairModal = ({
 
         <div className="space-y-5">
           <div className="space-y-2">
+            <Label>Photos (optional)</Label>
+            <p className="text-[13px] text-muted-foreground -mt-1">
+              Upload a photo and we'll fill in the details for you.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
+              multiple
+              className="hidden"
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+            <div className="flex flex-wrap gap-2">
+              {photoPreviews.map((src, idx) => (
+                <div key={idx} className="relative h-20 w-20 rounded-md overflow-hidden border border-border">
+                  <img src={src} alt={`Photo ${idx + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(idx)}
+                    aria-label={`Remove photo ${idx + 1}`}
+                    className="absolute top-0.5 right-0.5 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              {photos.length < MAX_PHOTOS && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="h-20 w-20 rounded-md border border-dashed border-border flex flex-col items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors disabled:opacity-50"
+                >
+                  {uploading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                  <span className="text-[11px] mt-1">{uploading ? "Uploading" : "Add"}</span>
+                </button>
+              )}
+            </div>
+            <p className="text-[12px] text-muted-foreground">
+              Up to {MAX_PHOTOS} photos · JPG, PNG, HEIC · max 10MB each
+            </p>
+            {analyzing && (
+              <p className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                <Loader2 size={12} className="animate-spin" />
+                Analyzing photos…
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="shoe-type">
               Shoe Type <span className="text-destructive">*</span>
             </Label>
-            <Select value={shoeType} onValueChange={(v) => setShoeType(v as ShoeType)}>
-              <SelectTrigger id="shoe-type">
-                <SelectValue placeholder="Select shoe type" />
-              </SelectTrigger>
-              <SelectContent>
-                {SHOE_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="relative">
+              <Select
+                value={shoeType}
+                onValueChange={(v) => {
+                  setUserEdited((p) => ({ ...p, shoeType: true }));
+                  setShoeType(v as ShoeType);
+                }}
+                disabled={analyzing}
+              >
+                <SelectTrigger id="shoe-type" className={analyzing ? "opacity-60" : ""}>
+                  <SelectValue placeholder={analyzing ? "Analyzing…" : "Select shoe type"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {SHOE_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {analyzing && (
+                <Loader2 size={14} className="absolute right-9 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground pointer-events-none" />
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -184,9 +295,9 @@ const AddPairModal = ({
               Color <span className="text-destructive">*</span>
             </Label>
             <p className="text-[13px] text-muted-foreground -mt-1">
-              Select all that apply
+              {analyzing ? "Analyzing…" : "Select all that apply"}
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className={`flex flex-wrap gap-2 ${analyzing ? "opacity-60 pointer-events-none" : ""}`}>
               {COLORS.map((c) => {
                 const selected = colors.includes(c);
                 return (
@@ -214,13 +325,23 @@ const AddPairModal = ({
 
           <div className="space-y-2">
             <Label htmlFor="brand">Brand</Label>
-            <Input
-              id="brand"
-              maxLength={250}
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              placeholder="Optional"
-            />
+            <div className="relative">
+              <Input
+                id="brand"
+                maxLength={250}
+                value={brand}
+                onChange={(e) => {
+                  setUserEdited((p) => ({ ...p, brand: true }));
+                  setBrand(e.target.value);
+                }}
+                placeholder={analyzing ? "Analyzing…" : "Optional"}
+                disabled={analyzing}
+                className={analyzing ? "opacity-60" : ""}
+              />
+              {analyzing && (
+                <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -233,47 +354,6 @@ const AddPairModal = ({
               placeholder="Optional"
               rows={3}
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Photos (optional)</Label>
-            <p className="text-[13px] text-muted-foreground -mt-1">Add photos of your shoes</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
-              multiple
-              className="hidden"
-              onChange={(e) => handleFiles(e.target.files)}
-            />
-            <div className="flex flex-wrap gap-2">
-              {photoPreviews.map((src, idx) => (
-                <div key={idx} className="relative h-20 w-20 rounded-md overflow-hidden border border-border">
-                  <img src={src} alt={`Photo ${idx + 1}`} className="h-full w-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => removePhoto(idx)}
-                    aria-label={`Remove photo ${idx + 1}`}
-                    className="absolute top-0.5 right-0.5 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-              {photos.length < 5 && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="h-20 w-20 rounded-md border border-dashed border-border flex flex-col items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors"
-                >
-                  <Plus size={18} />
-                  <span className="text-[11px] mt-1">Add</span>
-                </button>
-              )}
-            </div>
-            <p className="text-[12px] text-muted-foreground">
-              Up to 5 photos · JPG, PNG, HEIC · max 10MB each
-            </p>
           </div>
         </div>
 

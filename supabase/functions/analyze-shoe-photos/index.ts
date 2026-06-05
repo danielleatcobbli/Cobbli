@@ -19,13 +19,14 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    const { photoPaths } = (await req.json()) as { photoPaths?: string[] };
+    const { photoPaths, bucket } = (await req.json()) as { photoPaths?: string[]; bucket?: string };
     if (!Array.isArray(photoPaths) || photoPaths.length === 0) {
       return new Response(JSON.stringify({ error: "photoPaths required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const bucketName = bucket === "pair-photos" ? "pair-photos" : "assessment-uploads";
 
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -35,7 +36,7 @@ Deno.serve(async (req) => {
     const urls: string[] = [];
     for (const p of photoPaths.slice(0, 6)) {
       const { data, error } = await admin.storage
-        .from("assessment-uploads")
+        .from(bucketName)
         .createSignedUrl(p, 60 * 5);
       if (!error && data?.signedUrl) urls.push(data.signedUrl);
     }
