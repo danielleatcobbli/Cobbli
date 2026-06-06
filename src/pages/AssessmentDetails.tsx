@@ -65,7 +65,7 @@ const AssessmentDetails = () => {
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <Header />
-      <AssessmentStepIndicator current={2} />
+      <StepIndicator steps={ASSESSMENT_STEPS} current="details" ariaLabel="Assessment progress" />
 
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">
