@@ -196,9 +196,7 @@ const AssessmentUpload = () => {
             className="mt-6 rounded-lg p-4 text-sm text-primary"
             style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
           >
-            <strong>Tip:</strong> Upload both sides of the shoe, the sole, and any areas of damage or wear.
-            A short video of the shoe from all sides works great too. The more we can see, the better our
-            recommendation.
+            <strong>Tip:</strong> Upload a short video or photos of the shoe from all sides. Make sure to capture any areas of damage or wear. The more we can see, the better our recommendation.
           </div>
 
           <div className="mt-8">
