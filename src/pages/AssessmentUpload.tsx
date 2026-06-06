@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Plus, X, FileVideo } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
-import AssessmentStepIndicator from "@/components/cobbli/AssessmentStepIndicator";
+import StepIndicator from "@/components/cobbli/StepIndicator";
+import { ASSESSMENT_STEPS } from "@/components/cobbli/assessmentSteps";
 import { Button } from "@/components/ui/button";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/context/AuthContext";
@@ -137,7 +138,7 @@ const AssessmentUpload = () => {
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <Header />
-      <AssessmentStepIndicator current={1} />
+      <StepIndicator steps={ASSESSMENT_STEPS} current="upload" ariaLabel="Assessment progress" />
 
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">

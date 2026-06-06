@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
-import AssessmentStepIndicator from "@/components/cobbli/AssessmentStepIndicator";
+import StepIndicator from "@/components/cobbli/StepIndicator";
+import { ASSESSMENT_STEPS } from "@/components/cobbli/assessmentSteps";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,7 +65,7 @@ const AssessmentDetails = () => {
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <Header />
-      <AssessmentStepIndicator current={2} />
+      <StepIndicator steps={ASSESSMENT_STEPS} current="details" ariaLabel="Assessment progress" />
 
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">
