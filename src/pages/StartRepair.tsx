@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Camera, Wrench } from "lucide-react";
+import { Camera, Pointer } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { usePageMeta } from "@/hooks/usePageMeta";
