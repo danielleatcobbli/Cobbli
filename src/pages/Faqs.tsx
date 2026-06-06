@@ -112,9 +112,12 @@ const faqs: { q: string; a: ReactNode }[] = [
           </ul>
         </div>
         <p>
-          If you're unsure whether your shoes are worth repairing, send us a photo at <Email /> before
-          booking and we'll give you an honest assessment. We'd rather save you the money.
-        </p>
+        If you're unsure whether your shoes are worth repairing,{" "}
+        <Link to="/start-repair/assessment" className="underline underline-offset-4 hover:text-primary">
+          get a personalised recommendation
+        </Link>{" "}
+        before booking and we'll give you an honest assessment. We'd rather save you the money.
+      </p>
       </div>
     ),
   },
