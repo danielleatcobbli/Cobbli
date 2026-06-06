@@ -138,7 +138,7 @@ const AssessmentUpload = () => {
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <Header />
-      <AssessmentStepIndicator current={1} />
+      <StepIndicator steps={ASSESSMENT_STEPS} current="upload" ariaLabel="Assessment progress" />
 
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">
