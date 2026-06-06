@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Camera, Wrench } from "lucide-react";
+import { Camera, Pointer } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { usePageMeta } from "@/hooks/usePageMeta";
@@ -11,7 +11,7 @@ const PathCard = ({
   ctaLabel,
   to,
 }: {
-  icon: typeof Wrench;
+  icon: typeof Pointer;
   title: string;
   description: string;
   ctaLabel: string;
@@ -55,7 +55,7 @@ const StartRepair = () => {
 
           <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
             <PathCard
-              icon={Wrench}
+              icon={Pointer}
               title="I know what I need"
               description="Confirm your shoe details, browse services, and add what you need to your bag."
               ctaLabel="Start a repair"
