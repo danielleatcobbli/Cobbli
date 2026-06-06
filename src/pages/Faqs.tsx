@@ -69,7 +69,10 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "What if I don't know what services I need?",
     a: (
       <p>
-        Email us photos of your shoes to <Email /> and we will recommend the right services.
+        Not sure what your shoes need? Upload photos or a short video and we'll recommend the right repairs.{" "}
+        <Link to="/start-repair/assessment" className="underline underline-offset-4 hover:text-primary">
+          Get a personalised recommendation →
+        </Link>
       </p>
     ),
   },

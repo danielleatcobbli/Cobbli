@@ -1,14 +1,15 @@
+import { Link } from "react-router-dom";
+
 const steps = [
   {
     n: "1",
     title: "Choose your services",
     desc: (
       <>
-        Browse services and add what you need to your bag. Not sure? Email us photos at{" "}
-        <a href="mailto:support@cobbli.com" className="underline hover:text-primary">
-          support@cobbli.com
-        </a>{" "}
-        and we’ll recommend the right repairs.
+        Browse services and add what you need to your bag. Not sure what you need?{" "}
+        <Link to="/start-repair/assessment" className="underline hover:text-primary">
+          Get a personalised recommendation →
+        </Link>
       </>
     ),
   },
