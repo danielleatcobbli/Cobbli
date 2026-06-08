@@ -18,7 +18,54 @@ const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/heic", "imag
 const VIDEO_TYPES = ["video/mp4", "video/quicktime"];
 const ACCEPT = "image/jpeg,image/png,image/heic,image/heif,video/mp4,video/quicktime,.jpg,.jpeg,.png,.heic,.heif,.mp4,.mov";
 
-type Picked = { file: File; preview: string; kind: "image" | "video" };
+type Picked = { file: File; preview: string; kind: "image" | "video"; thumbnail?: string; thumbnailFailed?: boolean };
+
+const generateVideoThumbnail = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.muted = true;
+      video.playsInline = true;
+      video.crossOrigin = "anonymous";
+      video.src = url;
+
+      const cleanup = () => URL.revokeObjectURL(url);
+
+      const onError = () => {
+        cleanup();
+        reject(new Error("video load error"));
+      };
+
+      video.onloadedmetadata = () => {
+        try {
+          video.currentTime = Math.min(0.1, (video.duration || 1) / 2);
+        } catch (e) {
+          onError();
+        }
+      };
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth || 320;
+          canvas.height = video.videoHeight || 240;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("no canvas ctx");
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const data = canvas.toDataURL("image/jpeg", 0.7);
+          cleanup();
+          resolve(data);
+        } catch (e) {
+          cleanup();
+          reject(e);
+        }
+      };
+      video.onerror = onError;
+    } catch (e) {
+      reject(e);
+    }
+  });
 
 const isImage = (f: File) => {
   const ext = f.name.toLowerCase().split(".").pop() || "";
