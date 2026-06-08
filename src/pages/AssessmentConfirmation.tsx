@@ -24,7 +24,7 @@ const AssessmentConfirmation = () => {
             <CheckCircle2 className="text-primary" size={32} />
           </div>
           <h1 className="mt-6 font-display text-3xl md:text-4xl text-primary">
-            Your assessment is in
+            We're on it
           </h1>
           <p className="mt-3 text-primary/80">
             Thanks — our cobblers have everything they need to start your proposal.
@@ -34,17 +34,13 @@ const AssessmentConfirmation = () => {
             <h2 className="font-display text-xl text-primary">What happens next</h2>
             <ol className="mt-4 space-y-3 text-sm text-primary/90 list-decimal pl-5">
               <li>
-                Our cobblers review your photos and prepare a repair proposal — usually within 1
-                business day.
+                Our cobblers review your photos and/or videos and prepare a repair proposal.
               </li>
               <li>
                 You'll get an email with the proposal: recommended services, prices, and a link to
-                approve or decline.
+                approve, edit, or decline.
               </li>
-              <li>
-                If you accept, we'll send a prepaid label so you can ship your shoes. The $20
-                deposit hold is released once they arrive.
-              </li>
+              <li>Place your order.</li>
             </ol>
           </div>
 
@@ -55,11 +51,6 @@ const AssessmentConfirmation = () => {
           )}
 
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            {id && (
-              <Button asChild size="lg">
-                <Link to={`/start-repair/assessment/proposal/${id}`}>Review proposal</Link>
-              </Button>
-            )}
             <Button asChild variant="outline" size="lg">
               <Link to="/account">View my account</Link>
             </Button>
