@@ -107,6 +107,14 @@ const App = () => (
                             </ProtectedRoute>
                           }
                         />
+                        <Route
+                          path="/proposal/:id"
+                          element={
+                            <ProtectedRoute>
+                              <AssessmentProposal />
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route path="/start-repair/services" element={<SelectServices />} />
                         <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
                         <Route path="/services" element={<Services />} />

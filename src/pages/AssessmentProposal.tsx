@@ -4,16 +4,17 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/context/AuthContext";
 import { useAccount } from "@/context/AccountContext";
 import { formatPrice } from "@/context/BagContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, Sparkles } from "lucide-react";
 
 const DEPOSIT_CENTS = 2000;
-const COURIER_FEE_CENTS = 0; // free with proposal acceptance
+const COURIER_FEE_CENTS = 0;
 
 type Pair = {
   shoeType?: string | null;
@@ -28,34 +29,12 @@ type Pair = {
   };
 };
 
-type ProposalLine = { id: string; name: string; price_cents: number };
-
-const mockProposalFor = (pair: Pair): ProposalLine[] => {
-  const t = (pair.shoeType ?? "").toLowerCase();
-  if (t.includes("boot")) {
-    return [
-      { id: "sole", name: "Full sole replacement", price_cents: 9500 },
-      { id: "heel", name: "Heel rebuild", price_cents: 3500 },
-      { id: "condition", name: "Leather clean & condition", price_cents: 2500 },
-    ];
-  }
-  if (t.includes("sneaker") || t.includes("trainer")) {
-    return [
-      { id: "midsole", name: "Midsole repaint & restoration", price_cents: 6500 },
-      { id: "clean", name: "Deep clean & deodorize", price_cents: 2500 },
-    ];
-  }
-  if (t.includes("heel") || t.includes("pump") || t.includes("dress")) {
-    return [
-      { id: "heel-tip", name: "Heel tip replacement", price_cents: 1800 },
-      { id: "sole", name: "Half sole replacement", price_cents: 4500 },
-      { id: "polish", name: "Polish & finish", price_cents: 1500 },
-    ];
-  }
-  return [
-    { id: "sole", name: "Sole repair", price_cents: 5500 },
-    { id: "polish", name: "Clean & polish", price_cents: 2000 },
-  ];
+type ProposedService = {
+  service_id: string;
+  slug: string;
+  name: string;
+  price_cents: number;
+  tier: "essential" | "recommended";
 };
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -69,12 +48,14 @@ const AssessmentProposal = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pairs, setPairs] = useState<Pair[]>([]);
+  const [proposedServices, setProposedServices] = useState<ProposedService[]>([]);
   const [status, setStatus] = useState<string>("");
   const [thumbsByPair, setThumbsByPair] = useState<string[][]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedRecommended, setSelectedRecommended] = useState<Set<string>>(new Set());
 
   usePageMeta({
-    title: "Review your proposal — Cobbli",
+    title: "Your repair proposal — Cobbli",
     description: "Review your repair proposal, approve, and pay the remaining balance.",
   });
 
@@ -88,7 +69,7 @@ const AssessmentProposal = () => {
       }
       const { data, error: e } = await supabase
         .from("assessments")
-        .select("id, pairs, status")
+        .select("id, pairs, status, proposed_services")
         .eq("id", id)
         .single();
       if (cancelled) return;
@@ -98,8 +79,14 @@ const AssessmentProposal = () => {
         return;
       }
       const ps = (data.pairs as unknown as Pair[]) ?? [];
+      const services = (data.proposed_services as unknown as ProposedService[]) ?? [];
       setPairs(ps);
       setStatus(data.status);
+      setProposedServices(services);
+      // Pre-select all recommended by default
+      setSelectedRecommended(
+        new Set(services.filter((s) => s.tier === "recommended").map((s) => s.service_id)),
+      );
 
       const all: string[][] = [];
       for (const p of ps) {
@@ -120,24 +107,47 @@ const AssessmentProposal = () => {
     };
   }, [id]);
 
-  const proposals = useMemo(() => pairs.map((p) => mockProposalFor(p)), [pairs]);
-  const repairsSubtotal = useMemo(
-    () => proposals.reduce((s, lines) => s + lines.reduce((a, l) => a + l.price_cents, 0), 0),
-    [proposals],
+  const essential = useMemo(
+    () => proposedServices.filter((s) => s.tier === "essential"),
+    [proposedServices],
   );
+  const recommended = useMemo(
+    () => proposedServices.filter((s) => s.tier === "recommended"),
+    [proposedServices],
+  );
+
+  const essentialSubtotal = essential.reduce((a, l) => a + l.price_cents, 0);
+  const recommendedSubtotal = recommended
+    .filter((l) => selectedRecommended.has(l.service_id))
+    .reduce((a, l) => a + l.price_cents, 0);
+  const repairsSubtotal = essentialSubtotal + recommendedSubtotal;
   const depositHeld = pairs.length * DEPOSIT_CENTS;
   const totalDueToday = Math.max(0, repairsSubtotal + COURIER_FEE_CENTS - depositHeld);
 
+  const proposalReady = status === "proposal_sent" || status === "booked";
   const alreadyBooked = status === "booked";
 
+  const toggleRecommended = (sid: string) =>
+    setSelectedRecommended((prev) => {
+      const next = new Set(prev);
+      if (next.has(sid)) next.delete(sid);
+      else next.add(sid);
+      return next;
+    });
+
   const onApprove = async () => {
-    if (!id || !user || submitting || alreadyBooked) return;
+    if (!id || !user || submitting || alreadyBooked || !proposalReady) return;
+    if (essential.length + recommended.length === 0) return;
     setSubmitting(true);
     try {
-      // (1) Mock capture of each pair's authorization hold + (2) mock charge of remainder.
+      const acceptedServices: ProposedService[] = [
+        ...essential,
+        ...recommended.filter((r) => selectedRecommended.has(r.service_id)),
+      ];
+
+      // (1) Mock capture of each pair's pi_mock_... PaymentIntent already on the assessment.
       const updatedPairs = pairs.map((p, i) => ({
         ...p,
-        proposal: { lines: proposals[i] },
         deposit: {
           amount_cents: p.deposit?.amount_cents ?? DEPOSIT_CENTS,
           currency: p.deposit?.currency ?? "usd",
@@ -146,30 +156,13 @@ const AssessmentProposal = () => {
             p.deposit?.payment_intent_id ?? `pi_mock_${Date.now()}_${i}`,
           captured_at: new Date().toISOString(),
         },
-        remainder_payment: {
-          amount_cents: Math.max(
-            0,
-            proposals[i].reduce((a, l) => a + l.price_cents, 0) -
-              (p.deposit?.amount_cents ?? DEPOSIT_CENTS),
-          ),
-          currency: "usd",
-          status: "succeeded" as const,
-          payment_intent_id: `pi_mock_remainder_${Date.now()}_${i}`,
-          confirmed_at: new Date().toISOString(),
-        },
       }));
 
       await wait(600); // simulate Stripe round-trips
 
-      // (3) Create the order record in Supabase.
+      // (2) Create the order record in Supabase.
       const address = addresses[0];
       const pm = paymentMethods[0];
-      const orderPairsSnapshot = proposals.map((lines, i) => ({
-        pairIndex: i,
-        pair: pairs[i],
-        lines,
-      }));
-
       const { data: orderRow, error: orderErr } = await supabase
         .from("orders")
         .insert({
@@ -191,11 +184,16 @@ const AssessmentProposal = () => {
         .single();
       if (orderErr) throw orderErr;
 
-      const itemRows = orderPairsSnapshot.flatMap((snap) =>
-        snap.lines.map((l) => ({
+      const itemRows = pairs.flatMap((p) =>
+        acceptedServices.map((l) => ({
           order_id: orderRow.id,
-          pair_snapshot: snap.pair as unknown as never,
-          service_snapshot: { id: l.id, name: l.name } as unknown as never,
+          pair_snapshot: p as unknown as never,
+          service_snapshot: {
+            id: l.service_id,
+            slug: l.slug,
+            name: l.name,
+            tier: l.tier,
+          } as unknown as never,
           price_cents: l.price_cents,
         })),
       );
@@ -204,7 +202,7 @@ const AssessmentProposal = () => {
         if (itemsErr) throw itemsErr;
       }
 
-      // Update assessment with captured deposit + status='booked'.
+      // (3) Update assessment with captured deposit + status='booked'.
       const { error: aErr } = await supabase
         .from("assessments")
         .update({
@@ -227,12 +225,12 @@ const AssessmentProposal = () => {
           isDefault: false,
         } as never),
         paymentLast4: pm?.last4 ?? "0000",
-        pairs: orderPairsSnapshot.map((snap, i) => ({
+        pairs: pairs.map((p, i) => ({
           id: `pair-${i}`,
           label: `Pair ${i + 1}`,
           addedAt: new Date().toISOString(),
-          services: snap.lines.map((l) => ({
-            id: l.id,
+          services: acceptedServices.map((l) => ({
+            id: `${l.service_id}-${i}`,
             name: l.name,
             price: l.price_cents,
           })),
@@ -257,54 +255,76 @@ const AssessmentProposal = () => {
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <Header />
-      <section className="flex-1 py-12 md:py-16">
+      <section className="flex-1 py-10 md:py-14">
         <div className="container max-w-3xl">
-          <h1 className="font-display text-3xl md:text-4xl text-primary">
-            Review your repair proposal
-          </h1>
-          <p className="mt-2 text-primary/80">
-            Approve to capture your deposit and charge the remaining balance to your saved card.
-          </p>
-
           {loading ? (
             <BrandSpinner className="py-16" size="lg" />
           ) : error ? (
-            <div className="mt-8 rounded-xl border border-border p-6">
+            <div className="rounded-xl border border-border p-6">
               <p className="text-destructive">{error}</p>
               <Button asChild variant="outline" className="mt-4">
                 <Link to="/account">Back to account</Link>
               </Button>
             </div>
-          ) : pairs.length === 0 ? (
-            <div className="mt-8 rounded-xl border border-border p-10 text-center">
-              <p className="font-display text-xl text-primary mb-1">Nothing to review</p>
-              <p className="text-muted-foreground">
-                We couldn't find any pairs on this assessment.
+          ) : !proposalReady ? (
+            <div className="rounded-xl border border-border p-10 text-center">
+              <p className="font-display text-2xl text-primary mb-2">
+                Your proposal isn't ready yet
               </p>
+              <p className="text-muted-foreground">
+                Our cobblers are still preparing it. We'll email you the moment it's ready —
+                usually within 1 business day.
+              </p>
+              <Button asChild variant="outline" className="mt-6">
+                <Link to="/account">Back to account</Link>
+              </Button>
             </div>
           ) : (
             <>
-              {alreadyBooked && (
+              {/* Amber banner */}
+              <div
+                className="rounded-xl p-5 md:p-6 flex items-start gap-3"
+                style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
+              >
                 <div
-                  className="mt-6 rounded-xl p-4 text-sm text-primary"
-                  style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
+                  className="h-10 w-10 rounded-full flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
                 >
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h1 className="font-display text-2xl md:text-3xl text-primary">
+                    Your repair proposal is ready
+                  </h1>
+                  <p className="mt-1 text-sm md:text-base text-primary/80">
+                    Our cobblers have reviewed your photos. Approve below to capture your deposit
+                    and charge the remaining balance to your saved card.
+                  </p>
+                </div>
+              </div>
+
+              {alreadyBooked && (
+                <div className="mt-4 rounded-md border border-border bg-secondary/50 p-3 text-sm text-primary">
                   This proposal has already been approved.
                 </div>
               )}
 
-              <div className="mt-8 space-y-6">
-                {pairs.map((p, i) => (
-                  <div key={i} className="rounded-xl border border-border p-5">
-                    <div className="flex items-start justify-between gap-4">
+              {/* Pair identifiers */}
+              <div className="mt-8 space-y-4">
+                {pairs.map((p, i) => {
+                  const identifier =
+                    [p.colors?.join(" / "), p.brand, p.shoeType].filter(Boolean).join(" · ") ||
+                    "Your pair";
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-xl border border-border p-5 flex items-start justify-between gap-4"
+                    >
                       <div>
-                        <h2 className="font-display text-xl text-primary">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
                           Pair {i + 1}
-                          {p.shoeType ? ` · ${p.shoeType}` : ""}
-                        </h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {[p.colors?.join(", "), p.brand].filter(Boolean).join(" · ") || "—"}
                         </p>
+                        <p className="mt-1 font-display text-lg text-primary">{identifier}</p>
                       </div>
                       {thumbsByPair[i]?.length ? (
                         <div className="flex gap-2">
@@ -319,24 +339,106 @@ const AssessmentProposal = () => {
                         </div>
                       ) : null}
                     </div>
-                    <ul className="mt-4 divide-y divide-border border-y border-border text-sm">
-                      {proposals[i].map((l) => (
-                        <li key={l.id} className="py-2 flex justify-between gap-4">
-                          <span className="text-primary">{l.name}</span>
-                          <span>{formatPrice(l.price_cents)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
-              <div className="mt-8 rounded-xl border border-border p-5">
+              {/* Essential services */}
+              <section className="mt-8">
+                <div className="flex items-baseline justify-between">
+                  <h2 className="font-display text-xl text-primary">Essential</h2>
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Included
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  These services are required to restore your shoes properly.
+                </p>
+                {essential.length === 0 ? (
+                  <div className="mt-4 rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground text-center">
+                    No essential services proposed.
+                  </div>
+                ) : (
+                  <ul className="mt-4 divide-y divide-border border border-border rounded-lg">
+                    {essential.map((s) => (
+                      <li key={s.service_id} className="p-4 flex items-center justify-between gap-4">
+                        <span className="text-primary">{s.name}</span>
+                        <span className="font-medium">
+                          {formatPrice(s.price_cents)}
+                          {pairs.length > 1 ? <span className="text-xs text-muted-foreground"> /pair</span> : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              {/* Recommended services */}
+              <section className="mt-8">
+                <div className="flex items-baseline justify-between">
+                  <h2 className="font-display text-xl text-primary">Recommended</h2>
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Optional
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Add-ons our cobblers suggest. Tick to include in your order.
+                </p>
+                {recommended.length === 0 ? (
+                  <div className="mt-4 rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground text-center">
+                    No optional add-ons proposed.
+                  </div>
+                ) : (
+                  <ul className="mt-4 divide-y divide-border border border-border rounded-lg">
+                    {recommended.map((s) => {
+                      const checked = selectedRecommended.has(s.service_id);
+                      return (
+                        <li
+                          key={s.service_id}
+                          className="p-4 flex items-center justify-between gap-4"
+                        >
+                          <label className="flex items-center gap-3 cursor-pointer flex-1">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => toggleRecommended(s.service_id)}
+                              disabled={alreadyBooked}
+                            />
+                            <span className="text-primary">{s.name}</span>
+                          </label>
+                          <span className="font-medium">
+                            {formatPrice(s.price_cents)}
+                            {pairs.length > 1 ? <span className="text-xs text-muted-foreground"> /pair</span> : null}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+
+              {/* Deposit credit pill */}
+              <div
+                className="mt-8 rounded-full px-4 py-3 flex items-start gap-3"
+                style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
+              >
+                <ShieldCheck className="mt-0.5 shrink-0" />
+                <p className="text-sm text-primary">
+                  The $20 deposit per pair already held on your card will be applied to your
+                  total.
+                </p>
+              </div>
+
+              {/* Order summary */}
+              <section className="mt-6 rounded-xl border border-border p-5">
                 <h2 className="font-display text-xl text-primary">Order summary</h2>
                 <dl className="mt-4 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Repairs subtotal</dt>
-                    <dd>{formatPrice(repairsSubtotal)}</dd>
+                    <dt className="text-muted-foreground">Essential repairs</dt>
+                    <dd>{formatPrice(essentialSubtotal)}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Recommended add-ons</dt>
+                    <dd>{formatPrice(recommendedSubtotal)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Delivery & pickup</dt>
@@ -354,18 +456,7 @@ const AssessmentProposal = () => {
                     <dd>{formatPrice(totalDueToday)}</dd>
                   </div>
                 </dl>
-
-                <div
-                  className="mt-5 rounded-lg p-4 flex items-start gap-3"
-                  style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
-                >
-                  <ShieldCheck className="mt-0.5 shrink-0" />
-                  <p className="text-sm text-primary">
-                    Your $20 per-pair deposit hold is captured now and applied against your repair
-                    total. The remaining balance is charged to your saved card.
-                  </p>
-                </div>
-              </div>
+              </section>
 
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button asChild variant="outline" disabled={submitting}>
@@ -375,9 +466,17 @@ const AssessmentProposal = () => {
                   type="button"
                   size="lg"
                   onClick={onApprove}
-                  disabled={submitting || alreadyBooked}
+                  disabled={
+                    submitting ||
+                    alreadyBooked ||
+                    essential.length + recommended.length === 0
+                  }
                   className={
-                    submitting || alreadyBooked ? "opacity-50 cursor-not-allowed" : ""
+                    submitting ||
+                    alreadyBooked ||
+                    essential.length + recommended.length === 0
+                      ? "opacity-50 cursor-not-allowed"
+                      : ""
                   }
                 >
                   {submitting
