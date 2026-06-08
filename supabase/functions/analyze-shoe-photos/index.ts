@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
           `You are helping classify a pair of shoes from customer photos for a shoe repair service.\n` +
           `Identify, from the photos:\n` +
           `1) shoeType — one of: ${SHOE_TYPES.join(", ")}.\n` +
-          `2) colors — primary color(s) ONLY from this list: ${COLORS.join(", ")}.\n` +
+          `2) colors — Look carefully at the shoe in the image. List ONLY the colors that are clearly and visibly present on the shoe itself — including the upper, sole, laces, and lining if visible. Do not include colors you are uncertain about. Do not guess. If a color is only marginally present or you are not confident it is there, omit it. Return only colors from this exact list: ${COLORS.join(", ")}. Return a maximum of 3 colors. If you can only confidently identify 1 color, return only 1.\n` +
           `3) brand — visible brand name if clearly readable, otherwise null.\n` +
           `Reply ONLY with strict JSON: {"shoeType": string|null, "colors": string[], "brand": string|null}.`,
       },
