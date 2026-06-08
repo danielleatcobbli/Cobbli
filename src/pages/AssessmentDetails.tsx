@@ -70,10 +70,21 @@ const AssessmentDetails = () => {
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">
           <h1 className="font-display text-3xl md:text-4xl text-primary">Confirm your shoe details</h1>
-          <p className="mt-2 text-primary/80">
-            We've done our best to fill these in from your photos. Please check and update anything that's
-            not right.
-          </p>
+          {(() => {
+            const ai = draft.aiPrefill;
+            const aiFailed =
+              !ai || (!ai.shoeType && (!ai.colors || ai.colors.length === 0) && !ai.brand);
+            return aiFailed ? (
+              <p className="mt-2 italic text-muted-foreground">
+                We weren't able to pull shoe details from your upload. Please fill in your shoe details below.
+              </p>
+            ) : (
+              <p className="mt-2 text-primary/80">
+                We've done our best to fill these in from your photos. Please check and update anything that's
+                not right.
+              </p>
+            );
+          })()}
 
           <div className="mt-8 space-y-6">
             <div className="space-y-2">
