@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
     }
     const shoeType = SHOE_TYPES.includes(parsed.shoeType as string) ? parsed.shoeType : null;
     const colors = Array.isArray(parsed.colors)
-      ? parsed.colors.filter((c) => COLORS.includes(c)).slice(0, 5)
+      ? parsed.colors.filter((c) => COLORS.includes(c)).slice(0, 3)
       : [];
     const brand = typeof parsed.brand === "string" && parsed.brand.trim() ? parsed.brand.trim().slice(0, 100) : null;
 
