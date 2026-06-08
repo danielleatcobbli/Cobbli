@@ -10,7 +10,7 @@ import { useAssessment } from "@/context/AssessmentContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { ShieldCheck } from "lucide-react";
+
 
 const DEPOSIT_CENTS = 2000;
 
