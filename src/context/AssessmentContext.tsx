@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ShoeType } from "@/types/service";
 
 export type AssessmentAiPrefill = {
@@ -18,6 +18,8 @@ export type AssessmentDraftPair = {
 
 type State = {
   draft: AssessmentDraftPair;
+  aiLoading: boolean;
+  setAiLoading: (v: boolean) => void;
   setUploads: (photoPaths: string[], videoPaths: string[]) => void;
   setAiPrefill: (p: AssessmentAiPrefill) => void;
   setDetails: (d: Pick<AssessmentDraftPair, "shoeType" | "colors" | "brand">) => void;
@@ -49,6 +51,7 @@ const read = (): AssessmentDraftPair => {
 
 export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
   const [draft, setDraft] = useState<AssessmentDraftPair>(() => read());
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     try {
@@ -79,15 +82,15 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       setDraft((prev) => ({ ...prev, ...d })),
     [],
   );
-  const reset = useCallback(() => setDraft(empty), []);
+  const reset = useCallback(() => {
+    setDraft(empty);
+    setAiLoading(false);
+  }, []);
 
-  const value = useMemo(() => ({ draft, setUploads, setAiPrefill, setDetails, reset }), [
-    draft,
-    setUploads,
-    setAiPrefill,
-    setDetails,
-    reset,
-  ]);
+  const value = useMemo(
+    () => ({ draft, aiLoading, setAiLoading, setUploads, setAiPrefill, setDetails, reset }),
+    [draft, aiLoading, setUploads, setAiPrefill, setDetails, reset],
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };
 
