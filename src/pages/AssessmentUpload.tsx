@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, X, FileVideo } from "lucide-react";
+import { Plus, X, FileVideo, Play } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
