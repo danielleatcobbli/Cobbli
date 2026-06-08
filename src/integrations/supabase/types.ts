@@ -59,6 +59,7 @@ export type Database = {
           id: string
           pairs: Json
           proposal_token: string
+          proposed_services: Json
           status: string
           updated_at: string
           user_id: string
@@ -68,6 +69,7 @@ export type Database = {
           id?: string
           pairs?: Json
           proposal_token?: string
+          proposed_services?: Json
           status?: string
           updated_at?: string
           user_id: string
@@ -77,6 +79,7 @@ export type Database = {
           id?: string
           pairs?: Json
           proposal_token?: string
+          proposed_services?: Json
           status?: string
           updated_at?: string
           user_id?: string
