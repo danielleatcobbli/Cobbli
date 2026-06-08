@@ -1,9 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { toast } from "@/hooks/use-toast";
+import { Copy, Link2 } from "lucide-react";
 
 type AssessmentRow = {
   id: string;
@@ -17,39 +30,186 @@ type AssessmentRow = {
   }>;
   status: string;
   created_at: string;
+  proposed_services: ProposedService[];
   profile?: { first_name: string | null; last_name: string | null; phone: string | null } | null;
 };
+
+type Service = {
+  id: string;
+  slug: string;
+  name: string;
+  base_price_cents: number;
+};
+
+type ProposedService = {
+  service_id: string;
+  slug: string;
+  name: string;
+  price_cents: number;
+  tier: "essential" | "recommended";
+};
+
+type SelectionRow = {
+  service: Service;
+  checked: boolean;
+  tier: "essential" | "recommended";
+  price_cents: number;
+};
+
+const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+const STATUS_TABS: { id: "pending" | "proposal_sent" | "booked"; label: string }[] = [
+  { id: "pending", label: "Pending" },
+  { id: "proposal_sent", label: "Proposal sent" },
+  { id: "booked", label: "Booked" },
+];
 
 const Admin = () => {
   usePageMeta({ title: "Admin — Cobbli", description: "Cobbli internal admin." });
   const [rows, setRows] = useState<AssessmentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [services, setServices] = useState<Service[]>([]);
+  const [tab, setTab] = useState<(typeof STATUS_TABS)[number]["id"]>("pending");
+
+  // Editor state
+  const [editing, setEditing] = useState<AssessmentRow | null>(null);
+  const [selection, setSelection] = useState<SelectionRow[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const fetchRows = async (status: (typeof STATUS_TABS)[number]["id"]) => {
+    setRows(null);
+    setError(null);
+    const { data: assessments, error: aErr } = await supabase
+      .from("assessments")
+      .select("id, user_id, pairs, status, created_at, proposed_services")
+      .eq("status", status)
+      .order("created_at", { ascending: false });
+    if (aErr) {
+      setError(aErr.message);
+      setRows([]);
+      return;
+    }
+    const ids = Array.from(new Set((assessments ?? []).map((a) => a.user_id)));
+    const { data: profiles } = ids.length
+      ? await supabase.from("profiles").select("user_id, first_name, last_name, phone").in("user_id", ids)
+      : { data: [] as any[] };
+    const profileMap = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
+    setRows(
+      (assessments ?? []).map((a: any) => ({
+        ...a,
+        profile: profileMap.get(a.user_id) ?? null,
+      })),
+    );
+  };
+
+  useEffect(() => {
+    fetchRows(tab);
+  }, [tab]);
 
   useEffect(() => {
     (async () => {
-      const { data: assessments, error: aErr } = await supabase
-        .from("assessments")
-        .select("id, user_id, pairs, status, created_at")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
-      if (aErr) {
-        setError(aErr.message);
-        setRows([]);
-        return;
-      }
-      const ids = Array.from(new Set((assessments ?? []).map((a) => a.user_id)));
-      const { data: profiles } = ids.length
-        ? await supabase.from("profiles").select("user_id, first_name, last_name, phone").in("user_id", ids)
-        : { data: [] as any[] };
-      const profileMap = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
-      setRows(
-        (assessments ?? []).map((a: any) => ({
-          ...a,
-          profile: profileMap.get(a.user_id) ?? null,
-        })),
-      );
+      const { data } = await supabase
+        .from("services")
+        .select("id, slug, name, base_price_cents")
+        .eq("is_active", true)
+        .order("popularity_rank", { ascending: true });
+      setServices(data ?? []);
     })();
   }, []);
+
+  const openEditor = (row: AssessmentRow) => {
+    const existing = new Map(row.proposed_services?.map((s) => [s.service_id, s]) ?? []);
+    setSelection(
+      services.map((svc) => {
+        const e = existing.get(svc.id);
+        return {
+          service: svc,
+          checked: !!e,
+          tier: e?.tier ?? "essential",
+          price_cents: e?.price_cents ?? svc.base_price_cents,
+        };
+      }),
+    );
+    setEditing(row);
+  };
+
+  const closeEditor = () => {
+    setEditing(null);
+    setSelection([]);
+  };
+
+  const toggleService = (sid: string) =>
+    setSelection((rows) =>
+      rows.map((r) =>
+        r.service.id === sid ? { ...r, checked: !r.checked } : r,
+      ),
+    );
+
+  const setTier = (sid: string, tier: "essential" | "recommended") =>
+    setSelection((rows) =>
+      rows.map((r) => (r.service.id === sid ? { ...r, tier } : r)),
+    );
+
+  const setPrice = (sid: string, dollars: string) => {
+    const cents = Math.max(0, Math.round(Number(dollars || "0") * 100));
+    setSelection((rows) =>
+      rows.map((r) => (r.service.id === sid ? { ...r, price_cents: cents } : r)),
+    );
+  };
+
+  const selectedCount = selection.filter((r) => r.checked).length;
+
+  const saveProposal = async () => {
+    if (!editing || saving) return;
+    if (selectedCount === 0) {
+      toast({ title: "Select at least one service", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    const proposed_services: ProposedService[] = selection
+      .filter((r) => r.checked)
+      .map((r) => ({
+        service_id: r.service.id,
+        slug: r.service.slug,
+        name: r.service.name,
+        price_cents: r.price_cents,
+        tier: r.tier,
+      }));
+    const { error: e } = await supabase
+      .from("assessments")
+      .update({
+        proposed_services: proposed_services as unknown as never,
+        status: "proposal_sent",
+      })
+      .eq("id", editing.id);
+    setSaving(false);
+    if (e) {
+      toast({ title: "Could not save", description: e.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: "Proposal sent",
+      description: "Shareable link copied to clipboard.",
+    });
+    const url = `${window.location.origin}/proposal/${editing.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      /* ignore */
+    }
+    closeEditor();
+    fetchRows(tab);
+  };
+
+  const copyLink = async (id: string) => {
+    const url = `${window.location.origin}/proposal/${id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copied", description: url });
+    } catch {
+      toast({ title: "Copy failed", description: url, variant: "destructive" });
+    }
+  };
 
   return (
     <main className="min-h-screen bg-white flex flex-col">
@@ -57,7 +217,23 @@ const Admin = () => {
       <section className="flex-1 py-10">
         <div className="container">
           <h1 className="font-display text-3xl md:text-4xl text-primary mb-2">Admin</h1>
-          <p className="text-muted-foreground mb-8">Pending photo assessments</p>
+          <p className="text-muted-foreground mb-6">Photo assessments</p>
+
+          <div className="mb-6 inline-flex rounded-lg border border-border overflow-hidden">
+            {STATUS_TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`px-4 py-2 text-sm ${
+                  tab === t.id
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-white text-primary hover:bg-secondary/50"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
           {rows === null ? (
             <BrandSpinner className="py-16" size="lg" />
@@ -65,8 +241,16 @@ const Admin = () => {
             <p className="text-destructive">{error}</p>
           ) : rows.length === 0 ? (
             <div className="rounded-lg border border-border p-10 text-center">
-              <p className="font-display text-xl text-primary mb-1">No pending assessments</p>
-              <p className="text-muted-foreground">New customer photo submissions will show up here.</p>
+              <p className="font-display text-xl text-primary mb-1">
+                No {STATUS_TABS.find((t) => t.id === tab)?.label.toLowerCase()} assessments
+              </p>
+              <p className="text-muted-foreground">
+                {tab === "pending"
+                  ? "New customer photo submissions will show up here."
+                  : tab === "proposal_sent"
+                  ? "Proposals you've sent will show up here."
+                  : "Booked orders from approved proposals will show up here."}
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-border">
@@ -78,7 +262,7 @@ const Admin = () => {
                     <th className="text-left p-3">Pairs</th>
                     <th className="text-left p-3">Pair identifier</th>
                     <th className="text-left p-3">Submitted</th>
-                    <th className="text-left p-3">Review</th>
+                    <th className="text-left p-3">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -93,7 +277,40 @@ const Admin = () => {
                         <td className="p-3">{r.pairs?.length ?? 0}</td>
                         <td className="p-3">{id}</td>
                         <td className="p-3">{new Date(r.created_at).toLocaleString()}</td>
-                        <td className="p-3 text-muted-foreground">Review (coming in Phase 3)</td>
+                        <td className="p-3">
+                          <div className="flex flex-wrap gap-2">
+                            {tab === "pending" && (
+                              <Button size="sm" onClick={() => openEditor(r)}>
+                                Build proposal
+                              </Button>
+                            )}
+                            {tab === "proposal_sent" && (
+                              <>
+                                <Button size="sm" variant="outline" onClick={() => openEditor(r)}>
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => copyLink(r.id)}
+                                  className="gap-1"
+                                >
+                                  <Copy size={14} /> Copy link
+                                </Button>
+                              </>
+                            )}
+                            {tab === "booked" && (
+                              <a
+                                href={`/proposal/${r.id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-primary underline text-sm"
+                              >
+                                <Link2 size={14} /> View
+                              </a>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -104,6 +321,93 @@ const Admin = () => {
         </div>
       </section>
       <Footer />
+
+      {/* Build / edit proposal */}
+      <Dialog open={!!editing} onOpenChange={(open) => !open && closeEditor()}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Build proposal</DialogTitle>
+            <DialogDescription>
+              Tick the services to include, choose Essential vs Recommended, and adjust the price.
+              Saving will set the status to "Proposal sent" and copy a shareable link.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 mt-2">
+            {selection.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No active services available.</p>
+            ) : (
+              selection.map((row) => (
+                <div
+                  key={row.service.id}
+                  className={`rounded-lg border p-3 ${
+                    row.checked ? "border-primary bg-secondary/30" : "border-border"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      checked={row.checked}
+                      onCheckedChange={() => toggleService(row.service.id)}
+                      className="mt-1"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-primary truncate">{row.service.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Default {formatCents(row.service.base_price_cents)}
+                      </p>
+                    </div>
+                  </div>
+                  {row.checked && (
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 pl-7">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Tier</p>
+                        <div className="inline-flex rounded-md border border-border overflow-hidden">
+                          {(["essential", "recommended"] as const).map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setTier(row.service.id, t)}
+                              className={`px-3 py-1.5 text-xs capitalize ${
+                                row.tier === t
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-white text-primary"
+                              }`}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Price ($)</p>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={(row.price_cents / 100).toString()}
+                          onChange={(e) => setPrice(row.service.id, e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter className="mt-4">
+            <p className="text-xs text-muted-foreground mr-auto self-center">
+              {selectedCount} service{selectedCount === 1 ? "" : "s"} selected
+            </p>
+            <Button variant="outline" onClick={closeEditor} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={saveProposal} disabled={saving || selectedCount === 0}>
+              {saving ? "Saving…" : "Save & copy link"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 };
