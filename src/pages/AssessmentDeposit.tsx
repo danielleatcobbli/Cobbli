@@ -131,21 +131,6 @@ const AssessmentDeposit = () => {
             </dl>
           </div>
 
-          <div
-            className="mt-6 rounded-xl p-5"
-            style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
-          >
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 shrink-0" />
-              <div className="text-sm text-primary">
-                <p className="font-medium">$20 refundable deposit hold</p>
-                <p className="mt-1">
-                  The hold is released automatically once your shoes arrive at our workshop, or if
-                  you decline the proposal.
-                </p>
-              </div>
-            </div>
-          </div>
 
           <div className="mt-6 flex items-baseline justify-between rounded-xl border border-border p-5">
             <span className="text-primary font-medium">Deposit hold</span>
