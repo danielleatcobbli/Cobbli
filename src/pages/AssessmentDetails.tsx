@@ -134,9 +134,6 @@ const AssessmentDetails = () => {
               />
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              These details help us make the right recommendation. The more accurate they are, the better.
-            </p>
           </div>
 
           <div className="mt-10 flex flex-wrap gap-3">
