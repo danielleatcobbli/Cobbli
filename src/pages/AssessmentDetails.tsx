@@ -27,7 +27,7 @@ const COLORS = [
 
 const AssessmentDetails = () => {
   const navigate = useNavigate();
-  const { draft, setDetails } = useAssessment();
+  const { draft, setDetails, aiLoading } = useAssessment();
 
   usePageMeta({
     title: "Confirm your shoe details — Cobbli",
@@ -37,6 +37,12 @@ const AssessmentDetails = () => {
   const [shoeType, setShoeType] = useState<ShoeType | "">(draft.shoeType ?? "");
   const [colors, setColors] = useState<string[]>(draft.colors);
   const [brand, setBrand] = useState<string>(draft.brand);
+  const [minDelayElapsed, setMinDelayElapsed] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMinDelayElapsed(true), 500);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     setShoeType(draft.shoeType ?? "");
@@ -44,9 +50,12 @@ const AssessmentDetails = () => {
     setBrand(draft.brand);
   }, [draft.shoeType, draft.colors, draft.brand]);
 
-  if (draft.photoPaths.length === 0 && draft.videoPaths.length === 0) {
+  if (draft.photoPaths.length === 0 && draft.videoPaths.length === 0 && !aiLoading) {
     return <Navigate to="/start-repair/assessment" replace />;
   }
+
+  const showSkeleton = aiLoading || !minDelayElapsed;
+
 
   const toggleColor = (c: string) =>
     setColors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
