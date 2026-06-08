@@ -27,7 +27,7 @@ const COLORS = [
 
 const AssessmentDetails = () => {
   const navigate = useNavigate();
-  const { draft, setDetails } = useAssessment();
+  const { draft, setDetails, aiLoading } = useAssessment();
 
   usePageMeta({
     title: "Confirm your shoe details — Cobbli",
@@ -37,6 +37,12 @@ const AssessmentDetails = () => {
   const [shoeType, setShoeType] = useState<ShoeType | "">(draft.shoeType ?? "");
   const [colors, setColors] = useState<string[]>(draft.colors);
   const [brand, setBrand] = useState<string>(draft.brand);
+  const [minDelayElapsed, setMinDelayElapsed] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMinDelayElapsed(true), 500);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     setShoeType(draft.shoeType ?? "");
@@ -44,9 +50,12 @@ const AssessmentDetails = () => {
     setBrand(draft.brand);
   }, [draft.shoeType, draft.colors, draft.brand]);
 
-  if (draft.photoPaths.length === 0 && draft.videoPaths.length === 0) {
+  if (draft.photoPaths.length === 0 && draft.videoPaths.length === 0 && !aiLoading) {
     return <Navigate to="/start-repair/assessment" replace />;
   }
+
+  const showSkeleton = aiLoading || !minDelayElapsed;
+
 
   const toggleColor = (c: string) =>
     setColors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
@@ -70,7 +79,9 @@ const AssessmentDetails = () => {
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">
           <h1 className="font-display text-3xl md:text-4xl text-primary">Confirm your shoe details</h1>
-          {(() => {
+          {showSkeleton ? (
+            <p className="mt-2 text-primary/80">Analysing your photos…</p>
+          ) : (() => {
             const ai = draft.aiPrefill;
             const aiFailed =
               !ai || (!ai.shoeType && (!ai.colors || ai.colors.length === 0) && !ai.brand);
@@ -91,61 +102,83 @@ const AssessmentDetails = () => {
               <Label htmlFor="shoe-type">
                 Shoe type <span className="text-destructive">*</span>
               </Label>
-              <Select value={shoeType} onValueChange={(v) => setShoeType(v as ShoeType)}>
-                <SelectTrigger id="shoe-type">
-                  <SelectValue placeholder="Select shoe type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SHOE_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {showSkeleton ? (
+                <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+              ) : (
+                <Select value={shoeType} onValueChange={(v) => setShoeType(v as ShoeType)}>
+                  <SelectTrigger id="shoe-type">
+                    <SelectValue placeholder="Select shoe type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SHOE_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label>
                 Color(s) <span className="text-destructive">*</span>
               </Label>
-              <p className="text-[13px] text-muted-foreground -mt-1">Select all that apply</p>
-              <div className="flex flex-wrap gap-2">
-                {COLORS.map((c) => {
-                  const selected = colors.includes(c);
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => toggleColor(c)}
-                      aria-pressed={selected}
-                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                        selected ? "bg-secondary text-primary" : "bg-card text-muted-foreground hover:text-primary"
-                      }`}
-                      style={{
-                        borderColor: selected ? "#3d1700" : "hsl(var(--border))",
-                        borderWidth: selected ? 2 : 1,
-                      }}
-                    >
-                      {c}
-                    </button>
-                  );
-                })}
-              </div>
+              {showSkeleton ? (
+                <div className="space-y-2">
+                  <div className="h-4 w-40 rounded bg-muted animate-pulse" />
+                  <div className="flex flex-wrap gap-2">
+                    {[...Array(6)].map((_, i) => (
+                      <div key={i} className="h-8 w-16 rounded-full bg-muted animate-pulse" />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-[13px] text-muted-foreground -mt-1">Select all that apply</p>
+                  <div className="flex flex-wrap gap-2">
+                    {COLORS.map((c) => {
+                      const selected = colors.includes(c);
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => toggleColor(c)}
+                          aria-pressed={selected}
+                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                            selected ? "bg-secondary text-primary" : "bg-card text-muted-foreground hover:text-primary"
+                          }`}
+                          style={{
+                            borderColor: selected ? "#3d1700" : "hsl(var(--border))",
+                            borderWidth: selected ? 2 : 1,
+                          }}
+                        >
+                          {c}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="brand">Brand</Label>
-              <Input
-                id="brand"
-                maxLength={250}
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-                placeholder="Optional"
-              />
+              {showSkeleton ? (
+                <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+              ) : (
+                <Input
+                  id="brand"
+                  maxLength={250}
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  placeholder="Optional"
+                />
+              )}
             </div>
 
           </div>
+
 
           <div className="mt-10 flex flex-wrap gap-3">
             <Button
