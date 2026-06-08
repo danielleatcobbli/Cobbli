@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, X, FileVideo } from "lucide-react";
+import { Plus, X, FileVideo, Play } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
@@ -18,7 +18,54 @@ const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/heic", "imag
 const VIDEO_TYPES = ["video/mp4", "video/quicktime"];
 const ACCEPT = "image/jpeg,image/png,image/heic,image/heif,video/mp4,video/quicktime,.jpg,.jpeg,.png,.heic,.heif,.mp4,.mov";
 
-type Picked = { file: File; preview: string; kind: "image" | "video" };
+type Picked = { file: File; preview: string; kind: "image" | "video"; thumbnail?: string; thumbnailFailed?: boolean };
+
+const generateVideoThumbnail = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.muted = true;
+      video.playsInline = true;
+      video.crossOrigin = "anonymous";
+      video.src = url;
+
+      const cleanup = () => URL.revokeObjectURL(url);
+
+      const onError = () => {
+        cleanup();
+        reject(new Error("video load error"));
+      };
+
+      video.onloadedmetadata = () => {
+        try {
+          video.currentTime = Math.min(0.1, (video.duration || 1) / 2);
+        } catch (e) {
+          onError();
+        }
+      };
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth || 320;
+          canvas.height = video.videoHeight || 240;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("no canvas ctx");
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const data = canvas.toDataURL("image/jpeg", 0.7);
+          cleanup();
+          resolve(data);
+        } catch (e) {
+          cleanup();
+          reject(e);
+        }
+      };
+      video.onerror = onError;
+    } catch (e) {
+      reject(e);
+    }
+  });
 
 const isImage = (f: File) => {
   const ext = f.name.toLowerCase().split(".").pop() || "";
@@ -76,7 +123,22 @@ const AssessmentUpload = () => {
       if (accepted.length > remaining) {
         toast({ title: "File limit", description: `You can upload up to ${MAX_FILES} files.`, variant: "destructive" });
       }
-      return [...prev, ...accepted.slice(0, remaining)];
+      const added = accepted.slice(0, remaining);
+      added.forEach((picked) => {
+        if (picked.kind !== "video") return;
+        generateVideoThumbnail(picked.file)
+          .then((thumb) => {
+            setFiles((curr) =>
+              curr.map((p) => (p.file === picked.file ? { ...p, thumbnail: thumb } : p)),
+            );
+          })
+          .catch(() => {
+            setFiles((curr) =>
+              curr.map((p) => (p.file === picked.file ? { ...p, thumbnailFailed: true } : p)),
+            );
+          });
+      });
+      return [...prev, ...added];
     });
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -174,6 +236,18 @@ const AssessmentUpload = () => {
                 <div key={idx} className="relative aspect-square rounded-md overflow-hidden border border-border bg-secondary/40">
                   {f.kind === "image" ? (
                     <img src={f.preview} alt={`Upload ${idx + 1}`} className="h-full w-full object-cover" />
+                  ) : f.thumbnail ? (
+                    <>
+                      <img src={f.thumbnail} alt={`Video ${idx + 1}`} className="h-full w-full object-cover" />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div
+                          className="h-10 w-10 rounded-full flex items-center justify-center"
+                          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+                        >
+                          <Play size={18} className="text-white fill-white ml-0.5" />
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <div className="h-full w-full flex flex-col items-center justify-center text-muted-foreground p-2">
                       <FileVideo size={28} />
