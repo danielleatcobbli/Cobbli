@@ -104,8 +104,7 @@ const AssessmentDeposit = () => {
         <div className="container max-w-2xl">
           <h1 className="font-display text-3xl md:text-4xl text-primary">Confirm your deposit</h1>
           <p className="mt-2 text-primary/80">
-            We place a $20 hold per pair so our cobblers can prepare your repair proposal. You're
-            only charged if you accept the proposal and don't ship your shoes within 14 days.
+            We hold a $20 deposit per pair while we review your photos. It's applied to your repair when you place your order, or released in full if you decide not to proceed.
           </p>
 
           <div className="mt-8 rounded-xl border border-border p-5">
