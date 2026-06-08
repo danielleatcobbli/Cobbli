@@ -236,6 +236,18 @@ const AssessmentUpload = () => {
                 <div key={idx} className="relative aspect-square rounded-md overflow-hidden border border-border bg-secondary/40">
                   {f.kind === "image" ? (
                     <img src={f.preview} alt={`Upload ${idx + 1}`} className="h-full w-full object-cover" />
+                  ) : f.thumbnail ? (
+                    <>
+                      <img src={f.thumbnail} alt={`Video ${idx + 1}`} className="h-full w-full object-cover" />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div
+                          className="h-10 w-10 rounded-full flex items-center justify-center"
+                          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+                        >
+                          <Play size={18} className="text-white fill-white ml-0.5" />
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <div className="h-full w-full flex flex-col items-center justify-center text-muted-foreground p-2">
                       <FileVideo size={28} />
