@@ -17,7 +17,7 @@ import {
 import { SHOE_TYPES, type ShoeType } from "@/types/service";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAssessment } from "@/context/AssessmentContext";
-import { toast } from "@/hooks/use-toast";
+
 
 const COLORS = [
   "Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
@@ -65,10 +65,7 @@ const AssessmentDetails = () => {
   const onNext = () => {
     if (!valid) return;
     setDetails({ shoeType: shoeType as ShoeType, colors, brand: brand.trim() });
-    toast({
-      title: "Details saved",
-      description: "Deposit and proposal flow coming in the next phase.",
-    });
+    navigate("/start-repair/assessment/deposit");
   };
 
   return (

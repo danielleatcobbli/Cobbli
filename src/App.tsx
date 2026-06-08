@@ -19,6 +19,8 @@ import StartRepair from "./pages/StartRepair";
 import StartRepairPick from "./pages/StartRepairPick";
 import AssessmentUpload from "./pages/AssessmentUpload";
 import AssessmentDetails from "./pages/AssessmentDetails";
+import AssessmentDeposit from "./pages/AssessmentDeposit";
+import AssessmentConfirmation from "./pages/AssessmentConfirmation";
 import Admin from "./pages/Admin";
 import SelectServices from "./pages/SelectServices";
 import Services from "./pages/Services";
@@ -77,6 +79,22 @@ const App = () => (
                           element={
                             <ProtectedRoute>
                               <AssessmentDetails />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/start-repair/assessment/deposit"
+                          element={
+                            <ProtectedRoute>
+                              <AssessmentDeposit />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/start-repair/assessment/confirmation"
+                          element={
+                            <ProtectedRoute>
+                              <AssessmentConfirmation />
                             </ProtectedRoute>
                           }
                         />
