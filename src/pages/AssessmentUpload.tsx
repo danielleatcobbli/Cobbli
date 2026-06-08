@@ -123,7 +123,22 @@ const AssessmentUpload = () => {
       if (accepted.length > remaining) {
         toast({ title: "File limit", description: `You can upload up to ${MAX_FILES} files.`, variant: "destructive" });
       }
-      return [...prev, ...accepted.slice(0, remaining)];
+      const added = accepted.slice(0, remaining);
+      added.forEach((picked) => {
+        if (picked.kind !== "video") return;
+        generateVideoThumbnail(picked.file)
+          .then((thumb) => {
+            setFiles((curr) =>
+              curr.map((p) => (p.file === picked.file ? { ...p, thumbnail: thumb } : p)),
+            );
+          })
+          .catch(() => {
+            setFiles((curr) =>
+              curr.map((p) => (p.file === picked.file ? { ...p, thumbnailFailed: true } : p)),
+            );
+          });
+      });
+      return [...prev, ...added];
     });
     if (inputRef.current) inputRef.current.value = "";
   };
