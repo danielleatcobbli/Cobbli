@@ -10,7 +10,7 @@ import { useAssessment } from "@/context/AssessmentContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { ShieldCheck } from "lucide-react";
+
 
 const DEPOSIT_CENTS = 2000;
 
@@ -104,8 +104,7 @@ const AssessmentDeposit = () => {
         <div className="container max-w-2xl">
           <h1 className="font-display text-3xl md:text-4xl text-primary">Confirm your deposit</h1>
           <p className="mt-2 text-primary/80">
-            We place a $20 hold per pair so our cobblers can prepare your repair proposal. You're
-            only charged if you accept the proposal and don't ship your shoes within 14 days.
+            We hold a $20 deposit per pair while we review your photos. It's applied to your repair when you place your order, or released in full if you decide not to proceed.
           </p>
 
           <div className="mt-8 rounded-xl border border-border p-5">
@@ -132,21 +131,6 @@ const AssessmentDeposit = () => {
             </dl>
           </div>
 
-          <div
-            className="mt-6 rounded-xl p-5"
-            style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
-          >
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 shrink-0" />
-              <div className="text-sm text-primary">
-                <p className="font-medium">$20 refundable deposit hold</p>
-                <p className="mt-1">
-                  The hold is released automatically once your shoes arrive at our workshop, or if
-                  you decline the proposal.
-                </p>
-              </div>
-            </div>
-          </div>
 
           <div className="mt-6 flex items-baseline justify-between rounded-xl border border-border p-5">
             <span className="text-primary font-medium">Deposit hold</span>
