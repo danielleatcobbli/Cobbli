@@ -65,10 +65,7 @@ const AssessmentDetails = () => {
   const onNext = () => {
     if (!valid) return;
     setDetails({ shoeType: shoeType as ShoeType, colors, brand: brand.trim() });
-    toast({
-      title: "Details saved",
-      description: "Deposit and proposal flow coming in the next phase.",
-    });
+    navigate("/start-repair/assessment/deposit");
   };
 
   return (
