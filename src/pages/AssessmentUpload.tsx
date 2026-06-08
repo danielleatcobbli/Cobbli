@@ -76,13 +76,17 @@ const isVideo = (f: File) => {
   return VIDEO_TYPES.includes(f.type) || ["mp4", "mov"].includes(ext);
 };
 
+type UploadEntry = { kind: "image" | "video"; promise: Promise<string> };
+
 const AssessmentUpload = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
-  const { setUploads, setAiPrefill, reset } = useAssessment();
+  const { setUploads, setAiPrefill, reset, setAiLoading } = useAssessment();
   const [files, setFiles] = useState<Picked[]>([]);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadMapRef = useRef<Map<File, UploadEntry>>(new Map());
+  const sessionTsRef = useRef<string>("");
 
   usePageMeta({
     title: "Show us your shoes — Cobbli",
@@ -100,6 +104,21 @@ const AssessmentUpload = () => {
     return () => files.forEach((f) => URL.revokeObjectURL(f.preview));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const startUpload = (picked: Picked): Promise<string> => {
+    if (!user) return Promise.reject(new Error("not signed in"));
+    if (!sessionTsRef.current) sessionTsRef.current = Date.now().toString();
+    const ts = sessionTsRef.current;
+    const ext = (picked.file.name.split(".").pop() || (picked.kind === "image" ? "jpg" : "mp4")).toLowerCase();
+    const path = `${user.id}/${ts}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    return supabase.storage
+      .from("assessment-uploads")
+      .upload(path, picked.file, { contentType: picked.file.type || undefined, upsert: false })
+      .then(({ error }) => {
+        if (error) throw error;
+        return path;
+      });
+  };
 
   const onPick = (list: FileList | null) => {
     if (!list) return;
@@ -125,6 +144,13 @@ const AssessmentUpload = () => {
       }
       const added = accepted.slice(0, remaining);
       added.forEach((picked) => {
+        // kick upload immediately in parallel
+        const promise = startUpload(picked).catch((e) => {
+          console.warn("upload failed", e);
+          throw e;
+        });
+        uploadMapRef.current.set(picked.file, { kind: picked.kind, promise });
+
         if (picked.kind !== "video") return;
         generateVideoThumbnail(picked.file)
           .then((thumb) => {
@@ -147,52 +173,59 @@ const AssessmentUpload = () => {
     setFiles((prev) => {
       const next = [...prev];
       const [gone] = next.splice(idx, 1);
-      if (gone) URL.revokeObjectURL(gone.preview);
+      if (gone) {
+        URL.revokeObjectURL(gone.preview);
+        uploadMapRef.current.delete(gone.file);
+      }
       return next;
     });
 
-  const onNext = async () => {
+  const onNext = () => {
     if (!user || files.length === 0 || busy) return;
     setBusy(true);
     reset();
-    const ts = Date.now().toString();
-    const photoPaths: string[] = [];
-    const videoPaths: string[] = [];
-    try {
-      for (const picked of files) {
-        const ext = (picked.file.name.split(".").pop() || (picked.kind === "image" ? "jpg" : "mp4")).toLowerCase();
-        const path = `${user.id}/${ts}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error } = await supabase.storage
-          .from("assessment-uploads")
-          .upload(path, picked.file, { contentType: picked.file.type || undefined, upsert: false });
-        if (error) throw error;
-        if (picked.kind === "image") photoPaths.push(path);
-        else videoPaths.push(path);
-      }
-      setUploads(photoPaths, videoPaths);
+    setAiLoading(true);
 
-      // Best-effort AI prefill (don't block navigation if it fails)
+    const currentFiles = [...files];
+    const entries = currentFiles
+      .map((p) => ({ picked: p, entry: uploadMapRef.current.get(p.file) }))
+      .filter((x): x is { picked: Picked; entry: UploadEntry } => !!x.entry);
+
+    // Fire-and-forget: complete uploads + AI in background. Navigation is immediate.
+    (async () => {
       try {
-        const { data, error: fnErr } = await supabase.functions.invoke("analyze-shoe-photos", {
-          body: { photoPaths },
-        });
-        if (fnErr) throw fnErr;
-        setAiPrefill({
-          shoeType: data?.shoeType ?? null,
-          colors: Array.isArray(data?.colors) ? data.colors : [],
-          brand: data?.brand ?? null,
-        });
-      } catch (e) {
-        console.warn("AI prefill failed", e);
-        setAiPrefill({ shoeType: null, colors: [], brand: null });
-      }
+        const results = await Promise.all(
+          entries.map((x) => x.entry.promise.then((path) => ({ kind: x.picked.kind, path }))),
+        );
+        const photoPaths = results.filter((r) => r.kind === "image").map((r) => r.path);
+        const videoPaths = results.filter((r) => r.kind === "video").map((r) => r.path);
+        setUploads(photoPaths, videoPaths);
 
-      navigate("/start-repair/assessment/details");
-    } catch (e: any) {
-      toast({ title: "Upload failed", description: e?.message || "Could not upload your files.", variant: "destructive" });
-    } finally {
-      setBusy(false);
-    }
+        try {
+          const { data, error: fnErr } = await supabase.functions.invoke("analyze-shoe-photos", {
+            body: { photoPaths },
+          });
+          if (fnErr) throw fnErr;
+          setAiPrefill({
+            shoeType: data?.shoeType ?? null,
+            colors: Array.isArray(data?.colors) ? data.colors : [],
+            brand: data?.brand ?? null,
+          });
+        } catch (e) {
+          console.warn("AI prefill failed", e);
+          setAiPrefill({ shoeType: null, colors: [], brand: null });
+        }
+      } catch (e: any) {
+        console.warn("Upload failed", e);
+        setAiPrefill({ shoeType: null, colors: [], brand: null });
+        toast({ title: "Upload failed", description: e?.message || "Could not upload your files.", variant: "destructive" });
+      } finally {
+        setAiLoading(false);
+      }
+    })();
+
+    navigate("/start-repair/assessment/details");
+    setBusy(false);
   };
 
   const canNext = files.length > 0 && !busy;
