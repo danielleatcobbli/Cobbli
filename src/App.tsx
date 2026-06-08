@@ -21,6 +21,7 @@ import AssessmentUpload from "./pages/AssessmentUpload";
 import AssessmentDetails from "./pages/AssessmentDetails";
 import AssessmentDeposit from "./pages/AssessmentDeposit";
 import AssessmentConfirmation from "./pages/AssessmentConfirmation";
+import AssessmentProposal from "./pages/AssessmentProposal";
 import Admin from "./pages/Admin";
 import SelectServices from "./pages/SelectServices";
 import Services from "./pages/Services";
@@ -98,13 +99,21 @@ const App = () => (
                             </ProtectedRoute>
                           }
                         />
+                        <Route
+                          path="/start-repair/assessment/proposal/:id"
+                          element={
+                            <ProtectedRoute>
+                              <AssessmentProposal />
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route path="/start-repair/services" element={<SelectServices />} />
                         <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
                         <Route path="/services" element={<Services />} />
                         <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
                         <Route path="/bag" element={<Bag />} />
                         <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
-                        <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                        <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
                         <Route path="/faqs" element={<Faqs />} />
                         <Route
                           path="/admin"

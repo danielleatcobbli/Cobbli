@@ -55,7 +55,12 @@ const AssessmentConfirmation = () => {
           )}
 
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Button asChild size="lg">
+            {id && (
+              <Button asChild size="lg">
+                <Link to={`/start-repair/assessment/proposal/${id}`}>Review proposal</Link>
+              </Button>
+            )}
+            <Button asChild variant="outline" size="lg">
               <Link to="/account">View my account</Link>
             </Button>
             <Button asChild variant="outline" size="lg">
