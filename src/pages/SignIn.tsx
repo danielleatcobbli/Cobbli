@@ -21,7 +21,10 @@ const SignIn = () => {
   const navState = location.state as { from?: string; resetSuccess?: string } | null;
   const from = navState?.from;
   const resetSuccess = navState?.resetSuccess;
-  const successRedirect = from === "/checkout" ? "/checkout" : "/account";
+  const successRedirect =
+    from && (from === "/checkout" || from.startsWith("/start-repair") || from.startsWith("/proposal"))
+      ? from
+      : "/account";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

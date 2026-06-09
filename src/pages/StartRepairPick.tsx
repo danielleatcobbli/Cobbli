@@ -146,10 +146,9 @@ const AddPairModal = ({
 
     const { data: userData } = await supabase.auth.getUser();
     const uid = userData.user?.id;
-    if (!uid) {
-      toast({ title: "Sign in required", description: "Please sign in to upload photos.", variant: "destructive" });
-      return;
-    }
+    if (!uid) return;
+
+
 
     setPhotos((prev) => [...prev, ...toAdd]);
     setUploading(true);
