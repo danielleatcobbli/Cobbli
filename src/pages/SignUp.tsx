@@ -25,7 +25,10 @@ const SignUp = () => {
   const location = useLocation();
   const { user } = useAuth();
   const from = (location.state as { from?: string } | null)?.from;
-  const successRedirect = from === "/checkout" ? "/checkout" : "/account";
+  const successRedirect =
+    from && (from === "/checkout" || from.startsWith("/start-repair") || from.startsWith("/proposal"))
+      ? from
+      : "/account";
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
