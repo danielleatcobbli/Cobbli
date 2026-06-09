@@ -1,25 +1,27 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Camera, Pointer } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { useAuth } from "@/context/AuthContext";
 
 const PathCard = ({
   icon: Icon,
   title,
   description,
   ctaLabel,
-  to,
+  onClick,
 }: {
   icon: typeof Pointer;
   title: string;
   description: string;
   ctaLabel: string;
-  to: string;
+  onClick: () => void;
 }) => (
-  <Link
-    to={to}
-    className="group flex flex-col rounded-xl bg-white p-6 md:p-8 transition-shadow hover:shadow-md"
+  <button
+    type="button"
+    onClick={onClick}
+    className="group flex flex-col rounded-xl bg-white p-6 md:p-8 transition-shadow hover:shadow-md text-left"
     style={{ border: "1.5px solid #3d1700" }}
   >
     <div
@@ -33,15 +35,26 @@ const PathCard = ({
     <span className="mt-6 inline-flex items-center gap-1 font-medium text-primary group-hover:underline">
       {ctaLabel} <span aria-hidden>→</span>
     </span>
-  </Link>
+  </button>
 );
 
 const StartRepair = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
   usePageMeta({
     title: "Start your repair — Cobbli",
     description:
       "Start a Cobbli shoe repair. Choose your own services, or upload photos and let our cobblers recommend the right repairs for your shoes.",
   });
+
+  const go = (to: string) => {
+    if (user) {
+      navigate(to);
+    } else {
+      navigate("/signin", { state: { from: to } });
+    }
+  };
 
   return (
     <main className="min-h-screen bg-white flex flex-col">
@@ -59,14 +72,14 @@ const StartRepair = () => {
               title="I know what I need"
               description="Confirm your shoe details, browse services, and add what you need to your bag."
               ctaLabel="Start a repair"
-              to="/start-repair/pick"
+              onClick={() => go("/start-repair/pick")}
             />
             <PathCard
               icon={Camera}
               title="Not sure what I need"
               description="Upload photos or a short video and we'll recommend the right repairs."
               ctaLabel="Get a recommendation"
-              to="/start-repair/assessment"
+              onClick={() => go("/start-repair/assessment")}
             />
           </div>
         </div>
