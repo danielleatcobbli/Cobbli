@@ -51,12 +51,29 @@ type PaymentMethod = {
   is_default: boolean;
 };
 
+type OrderItem = {
+  pair_snapshot: { shoeType?: string; colors?: string[]; brand?: string } | null;
+  service_snapshot: { name?: string } | null;
+};
+
 type Order = {
   id: string;
   order_number: string;
   placed_at: string;
   total_cents: number;
+  status: string;
+  order_items: OrderItem[];
 };
+
+type AssessmentPair = { shoeType?: string; colors?: string[]; brand?: string };
+
+type Assessment = {
+  id: string;
+  status: string;
+  created_at: string;
+  pairs: AssessmentPair[];
+};
+
 
 const NAV = [
   { to: "/account/orders", label: "My Orders" },
