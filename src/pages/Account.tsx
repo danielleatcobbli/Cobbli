@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Eye, EyeOff } from "lucide-react";
+import { Camera, Eye, EyeOff } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
@@ -49,12 +51,29 @@ type PaymentMethod = {
   is_default: boolean;
 };
 
+type OrderItem = {
+  pair_snapshot: { shoeType?: string; colors?: string[]; brand?: string } | null;
+  service_snapshot: { name?: string } | null;
+};
+
 type Order = {
   id: string;
   order_number: string;
   placed_at: string;
   total_cents: number;
+  status: string;
+  order_items: OrderItem[];
 };
+
+type AssessmentPair = { shoeType?: string; colors?: string[]; brand?: string };
+
+type Assessment = {
+  id: string;
+  status: string;
+  created_at: string;
+  pairs: AssessmentPair[];
+};
+
 
 const NAV = [
   { to: "/account/orders", label: "My Orders" },
@@ -139,69 +158,278 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => {
   );
 };
 
+const pairIdentifier = (p: { shoeType?: string; colors?: string[]; brand?: string } | null | undefined) =>
+  [p?.colors?.join(" / "), p?.brand, p?.shoeType].filter(Boolean).join(" · ") || "Your pair";
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+const ORDER_STATUS_PILL: Record<string, string> = {
+  placed: "bg-blue-100 text-blue-800",
+  in_progress: "bg-amber-100 text-amber-900",
+  completed: "bg-green-100 text-green-800",
+  cancelled: "bg-gray-200 text-gray-700",
+};
+
+const orderStatusLabel = (s: string) =>
+  s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const PROPOSAL_STATUS: Record<
+  string,
+  { label: string; pill: string; desc: string; action: string; active: boolean; depositReleased: boolean }
+> = {
+  pending: {
+    label: "Pending review",
+    pill: "bg-amber-100 text-amber-900",
+    desc: "We're preparing your proposal",
+    action: "View details",
+    active: true,
+    depositReleased: false,
+  },
+  proposal_sent: {
+    label: "Proposal sent",
+    pill: "bg-blue-100 text-blue-800",
+    desc: "Your proposal is ready to review",
+    action: "Review proposal →",
+    active: true,
+    depositReleased: false,
+  },
+  expired: {
+    label: "Expired",
+    pill: "bg-gray-200 text-gray-700",
+    desc: "Your proposal expired. You can still review and place your order",
+    action: "Review proposal →",
+    active: false,
+    depositReleased: true,
+  },
+  declined: {
+    label: "Declined",
+    pill: "bg-red-100 text-red-800",
+    desc: "You declined this proposal. Changed your mind? Review and place your order",
+    action: "Review proposal →",
+    active: false,
+    depositReleased: true,
+  },
+};
+
+const OrderCard = ({ o }: { o: Order }) => {
+  const firstPair = o.order_items[0]?.pair_snapshot ?? null;
+  const services = Array.from(
+    new Set(o.order_items.map((it) => it.service_snapshot?.name).filter(Boolean) as string[]),
+  );
+  const pillCls = ORDER_STATUS_PILL[o.status] ?? "bg-gray-100 text-gray-800";
+  return (
+    <li className="rounded-lg border border-border bg-card p-5 shadow-soft">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold">Order #{o.order_number}</p>
+          <p className="text-sm text-muted-foreground">Placed {formatDate(o.placed_at)}</p>
+          <p className="mt-2 text-sm font-medium text-primary">{pairIdentifier(firstPair)}</p>
+          {services.length > 0 && (
+            <p className="text-sm text-foreground/80">{services.join(", ")}</p>
+          )}
+        </div>
+        <div className="text-right shrink-0">
+          <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold mb-2", pillCls)}>
+            {orderStatusLabel(o.status)}
+          </span>
+          <p className="font-semibold">{formatPrice(o.total_cents)}</p>
+          <Link
+            to={`/order-confirmation/${o.id}`}
+            className="text-sm text-primary underline underline-offset-4"
+          >
+            View order
+          </Link>
+        </div>
+      </div>
+    </li>
+  );
+};
+
+const ProposalCard = ({ a }: { a: Assessment }) => {
+  const meta = PROPOSAL_STATUS[a.status] ?? PROPOSAL_STATUS.pending;
+  const ref = a.id.slice(0, 8).toUpperCase();
+  const firstPair = a.pairs?.[0];
+  const numPairs = a.pairs?.length ?? 1;
+  const depositAmount = 20 * numPairs;
+  const depositLine = `$${depositAmount} deposit ${meta.depositReleased ? "released" : "held"}`;
+  const link =
+    a.status === "pending" ? `/proposal/${a.id}` : `/proposal/${a.id}`;
+  return (
+    <li
+      className="rounded-lg border border-border bg-card p-5 shadow-soft border-l-[3px]"
+      style={{ borderLeftColor: meta.active ? "#fdb600" : "#9ca3af" }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold text-foreground">
+              <Camera size={12} /> Proposal
+            </span>
+            <span className="text-xs text-muted-foreground">#{ref}</span>
+          </div>
+          <p className="text-sm text-muted-foreground">Submitted {formatDate(a.created_at)}</p>
+          <p className="mt-2 text-sm font-medium text-primary">{pairIdentifier(firstPair)}</p>
+          <p className="text-sm text-foreground/80 mt-1">{meta.desc}</p>
+        </div>
+        <div className="text-right shrink-0">
+          <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold", meta.pill)}>
+            {meta.label}
+          </span>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+        <div className="text-sm">
+          <p className="font-medium">{depositLine}</p>
+          <p className="text-xs text-muted-foreground">$20 per pair</p>
+        </div>
+        <Link to={link} className="text-sm text-primary underline underline-offset-4">
+          {meta.action}
+        </Link>
+      </div>
+    </li>
+  );
+};
+
+const EmptyState = ({
+  message,
+  cta,
+  to,
+}: {
+  message: string;
+  cta: string;
+  to: string;
+}) => (
+  <div className="rounded-lg border border-border bg-card p-8 text-center">
+    <p className="text-foreground/80 mb-4">{message}</p>
+    <Button asChild variant="hero">
+      <Link to={to}>{cta}</Link>
+    </Button>
+  </div>
+);
+
 const Orders = () => {
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [assessments, setAssessments] = useState<Assessment[] | null>(null);
   usePageMeta({
     title: "My orders — Cobbli",
     description:
-      "View your past Cobbli shoe repair orders, see what's been picked up and returned, and quickly start a new repair from your account dashboard.",
+      "View your Cobbli shoe repair orders and proposals in one place, track their status, and place new repairs from your account dashboard.",
   });
+
   useEffect(() => {
     if (!user) return;
     supabase
       .from("orders")
-      .select("id,order_number,placed_at,total_cents")
+      .select("id,order_number,placed_at,total_cents,status,order_items(pair_snapshot,service_snapshot)")
       .eq("user_id", user.id)
       .order("placed_at", { ascending: false })
-      .then(({ data }) => setOrders((data ?? []) as Order[]));
+      .then(({ data }) => setOrders((data ?? []) as unknown as Order[]));
+    supabase
+      .from("assessments")
+      .select("id,status,created_at,pairs")
+      .eq("user_id", user.id)
+      .neq("status", "booked")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setAssessments((data ?? []) as unknown as Assessment[]));
   }, [user]);
+
+  const visibleProposals = useMemo(() => {
+    if (!assessments) return [];
+    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    return assessments.filter((a) => {
+      if ((a.status === "expired" || a.status === "declined") && new Date(a.created_at).getTime() < cutoff) {
+        return false;
+      }
+      return true;
+    });
+  }, [assessments]);
+
+  const combined = useMemo(() => {
+    type Combined = { date: number; kind: "order" | "proposal"; order?: Order; proposal?: Assessment };
+    const items: Combined[] = [];
+    (orders ?? []).forEach((o) => items.push({ date: new Date(o.placed_at).getTime(), kind: "order", order: o }));
+    visibleProposals.forEach((p) =>
+      items.push({ date: new Date(p.created_at).getTime(), kind: "proposal", proposal: p }),
+    );
+    return items.sort((a, b) => b.date - a.date);
+  }, [orders, visibleProposals]);
+
+  const loading = orders === null || assessments === null;
 
   return (
     <section>
-      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My Orders</h1>
-      {orders === null ? (
+      <h1 className="text-2xl md:text-3xl font-semibold">My orders</h1>
+      <p className="text-muted-foreground mt-1 mb-6">Your repairs and proposals.</p>
+
+      {loading ? (
         <BrandSpinner className="py-10" />
-      ) : orders.length === 0 ? (
-        <div className="rounded-lg border border-border bg-card p-8 text-center">
-          <p className="text-foreground/80 mb-4">You haven't placed any orders yet</p>
-          <Button asChild variant="hero">
-            <Link to="/start-repair">Start a repair</Link>
-          </Button>
-        </div>
       ) : (
-        <ul className="space-y-4">
-          {orders.map((o) => (
-            <li key={o.id} className="rounded-lg border border-border bg-card p-5 shadow-soft">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold">Order #{o.order_number}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Placed{" "}
-                    {new Date(o.placed_at).toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold">{formatPrice(o.total_cents)}</p>
-                  <Link
-                    to={`/order-confirmation/${o.id}`}
-                    className="text-sm text-primary underline underline-offset-4"
-                  >
-                    View details
-                  </Link>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <Tabs defaultValue="all">
+          <TabsList className="mb-6">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="orders">Orders</TabsTrigger>
+            <TabsTrigger value="proposals">Proposals</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="all">
+            {combined.length === 0 ? (
+              <EmptyState
+                message="No orders or proposals yet. Start a repair to get started."
+                cta="Start a repair"
+                to="/start-repair"
+              />
+            ) : (
+              <ul className="space-y-4">
+                {combined.map((c) =>
+                  c.kind === "order" ? (
+                    <OrderCard key={`o-${c.order!.id}`} o={c.order!} />
+                  ) : (
+                    <ProposalCard key={`p-${c.proposal!.id}`} a={c.proposal!} />
+                  ),
+                )}
+              </ul>
+            )}
+          </TabsContent>
+
+          <TabsContent value="orders">
+            {(orders ?? []).length === 0 ? (
+              <EmptyState
+                message="No repairs yet. Start a repair to get started."
+                cta="Start a repair"
+                to="/start-repair"
+              />
+            ) : (
+              <ul className="space-y-4">
+                {(orders ?? []).map((o) => (
+                  <OrderCard key={o.id} o={o} />
+                ))}
+              </ul>
+            )}
+          </TabsContent>
+
+          <TabsContent value="proposals">
+            {visibleProposals.length === 0 ? (
+              <EmptyState
+                message="No proposals yet. Upload photos or a short video of your shoes and we'll recommend the right repairs."
+                cta="Get a recommendation"
+                to="/start-repair/assessment"
+              />
+            ) : (
+              <ul className="space-y-4">
+                {visibleProposals.map((a) => (
+                  <ProposalCard key={a.id} a={a} />
+                ))}
+              </ul>
+            )}
+          </TabsContent>
+        </Tabs>
       )}
     </section>
   );
 };
+
 
 const Addresses = () => {
   const { user } = useAuth();
