@@ -77,7 +77,7 @@ const AssessmentDetails = () => {
         <div className="container max-w-2xl">
           <h1 className="font-display text-3xl md:text-4xl text-primary">Confirm your shoe details</h1>
           {showSkeleton ? (
-            <p className="mt-2 text-primary/80">Analysing your photos…</p>
+            <p className="mt-2 text-primary/80">Analyzing your photos…</p>
           ) : (() => {
             const ai = draft.aiPrefill;
             const aiFailed =
