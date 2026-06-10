@@ -212,6 +212,31 @@ const Admin = () => {
     }
   };
 
+  const markUnavailable = async (row: AssessmentRow) => {
+    if (!confirm("Mark this assessment as Service unavailable? The customer will be notified by email and the order will be closed.")) return;
+    const { error: e } = await supabase
+      .from("assessments")
+      .update({ status: "service_unavailable" })
+      .eq("id", row.id);
+    if (e) {
+      toast({ title: "Could not update", description: e.message, variant: "destructive" });
+      return;
+    }
+    const { error: fnErr } = await supabase.functions.invoke("send-service-unavailable", {
+      body: { assessment_id: row.id },
+    });
+    if (fnErr) {
+      toast({
+        title: "Status updated, notification failed",
+        description: fnErr.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({ title: "Marked as service unavailable", description: "Customer has been notified." });
+    }
+    fetchRows(tab);
+  };
+
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <Header />
