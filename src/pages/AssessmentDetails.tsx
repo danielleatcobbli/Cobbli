@@ -5,7 +5,6 @@ import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
 import { ASSESSMENT_STEPS } from "@/components/cobbli/assessmentSteps";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -17,6 +16,7 @@ import {
 import { SHOE_TYPES, type ShoeType } from "@/types/service";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAssessment } from "@/context/AssessmentContext";
+import BrandCombobox, { inferBrandMode, type BrandMode } from "@/components/cobbli/BrandCombobox";
 
 
 const COLORS = [
@@ -37,6 +37,7 @@ const AssessmentDetails = () => {
   const [shoeType, setShoeType] = useState<ShoeType | "">(draft.shoeType ?? "");
   const [colors, setColors] = useState<string[]>(draft.colors);
   const [brand, setBrand] = useState<string>(draft.brand);
+  const [brandMode, setBrandMode] = useState<BrandMode>(inferBrandMode(draft.brand));
   const [minDelayElapsed, setMinDelayElapsed] = useState(false);
 
   useEffect(() => {
@@ -48,6 +49,7 @@ const AssessmentDetails = () => {
     setShoeType(draft.shoeType ?? "");
     setColors(draft.colors);
     setBrand(draft.brand);
+    setBrandMode(inferBrandMode(draft.brand));
   }, [draft.shoeType, draft.colors, draft.brand]);
 
   if (draft.photoPaths.length === 0 && draft.videoPaths.length === 0 && !aiLoading) {
@@ -60,7 +62,13 @@ const AssessmentDetails = () => {
   const toggleColor = (c: string) =>
     setColors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
 
-  const valid = shoeType !== "" && colors.length > 0;
+  const brandValid =
+    brandMode === "list" ? !!brand
+    : brandMode === "unknown" ? true
+    : brandMode === "custom" ? brand.trim().length > 0
+    : false;
+
+  const valid = shoeType !== "" && colors.length > 0 && brandValid;
 
   const onNext = () => {
     if (!valid) return;
@@ -160,16 +168,20 @@ const AssessmentDetails = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="brand">Brand</Label>
+              <Label htmlFor="brand">
+                Brand <span className="text-destructive">*</span>
+              </Label>
               {showSkeleton ? (
                 <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
               ) : (
-                <Input
+                <BrandCombobox
                   id="brand"
-                  maxLength={250}
+                  mode={brandMode}
                   value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  placeholder="Optional"
+                  onChange={(m, v) => {
+                    setBrandMode(m);
+                    setBrand(v);
+                  }}
                 />
               )}
             </div>
