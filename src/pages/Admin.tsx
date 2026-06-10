@@ -58,10 +58,11 @@ type SelectionRow = {
 
 const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
 
-const STATUS_TABS: { id: "pending" | "proposal_sent" | "booked"; label: string }[] = [
+const STATUS_TABS: { id: "pending" | "proposal_sent" | "booked" | "service_unavailable"; label: string }[] = [
   { id: "pending", label: "Pending" },
   { id: "proposal_sent", label: "Proposal sent" },
   { id: "booked", label: "Booked" },
+  { id: "service_unavailable", label: "Service unavailable" },
 ];
 
 const Admin = () => {
