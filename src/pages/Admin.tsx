@@ -275,7 +275,9 @@ const Admin = () => {
                   ? "New customer photo submissions will show up here."
                   : tab === "proposal_sent"
                   ? "Proposals you've sent will show up here."
-                  : "Booked orders from approved proposals will show up here."}
+                  : tab === "booked"
+                  ? "Booked orders from approved proposals will show up here."
+                  : "Assessments marked as service unavailable will show up here."}
               </p>
             </div>
           ) : (
