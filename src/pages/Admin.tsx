@@ -308,9 +308,18 @@ const Admin = () => {
                         <td className="p-3">
                           <div className="flex flex-wrap gap-2">
                             {tab === "pending" && (
-                              <Button size="sm" onClick={() => openEditor(r)}>
-                                Build proposal
-                              </Button>
+                              <>
+                                <Button size="sm" onClick={() => openEditor(r)}>
+                                  Build proposal
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => markUnavailable(r)}
+                                >
+                                  Service unavailable
+                                </Button>
+                              </>
                             )}
                             {tab === "proposal_sent" && (
                               <>
@@ -325,6 +334,13 @@ const Admin = () => {
                                 >
                                   <Copy size={14} /> Copy link
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => markUnavailable(r)}
+                                >
+                                  Service unavailable
+                                </Button>
                               </>
                             )}
                             {tab === "booked" && (
@@ -336,6 +352,9 @@ const Admin = () => {
                               >
                                 <Link2 size={14} /> View
                               </a>
+                            )}
+                            {tab === "service_unavailable" && (
+                              <span className="text-xs text-muted-foreground">Closed · customer notified</span>
                             )}
                           </div>
                         </td>
