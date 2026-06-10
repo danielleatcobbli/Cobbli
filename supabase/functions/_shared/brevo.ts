@@ -7,7 +7,10 @@ const SENDER = { name: "Danielle from Cobbli", email: "noreply@cobbli.com" };
 const REPLY_TO = { email: "support@cobbli.com" };
 
 export interface SendBrevoEmailOptions {
-  templateId: number;
+  templateId?: number;
+  subject?: string;
+  htmlContent?: string;
+  textContent?: string;
   to: { email: string; name?: string }[];
   params?: Record<string, unknown>;
   tags?: string[];
