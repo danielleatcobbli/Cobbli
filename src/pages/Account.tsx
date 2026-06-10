@@ -210,6 +210,14 @@ const PROPOSAL_STATUS: Record<
     active: false,
     depositReleased: true,
   },
+  service_unavailable: {
+    label: "Service unavailable",
+    pill: "bg-gray-200 text-gray-700",
+    desc: "We don't currently offer the service your item needs. No charge has been made.",
+    action: "View details",
+    active: false,
+    depositReleased: true,
+  },
 };
 
 const OrderCard = ({ o }: { o: Order }) => {
@@ -339,7 +347,7 @@ const Orders = () => {
     if (!assessments) return [];
     const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
     return assessments.filter((a) => {
-      if ((a.status === "expired" || a.status === "declined") && new Date(a.created_at).getTime() < cutoff) {
+      if ((a.status === "expired" || a.status === "declined" || a.status === "service_unavailable") && new Date(a.created_at).getTime() < cutoff) {
         return false;
       }
       return true;

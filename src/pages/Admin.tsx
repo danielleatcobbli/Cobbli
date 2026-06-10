@@ -58,10 +58,11 @@ type SelectionRow = {
 
 const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
 
-const STATUS_TABS: { id: "pending" | "proposal_sent" | "booked"; label: string }[] = [
+const STATUS_TABS: { id: "pending" | "proposal_sent" | "booked" | "service_unavailable"; label: string }[] = [
   { id: "pending", label: "Pending" },
   { id: "proposal_sent", label: "Proposal sent" },
   { id: "booked", label: "Booked" },
+  { id: "service_unavailable", label: "Service unavailable" },
 ];
 
 const Admin = () => {
@@ -211,6 +212,31 @@ const Admin = () => {
     }
   };
 
+  const markUnavailable = async (row: AssessmentRow) => {
+    if (!confirm("Mark this assessment as Service unavailable? The customer will be notified by email and the order will be closed.")) return;
+    const { error: e } = await supabase
+      .from("assessments")
+      .update({ status: "service_unavailable" })
+      .eq("id", row.id);
+    if (e) {
+      toast({ title: "Could not update", description: e.message, variant: "destructive" });
+      return;
+    }
+    const { error: fnErr } = await supabase.functions.invoke("send-service-unavailable", {
+      body: { assessment_id: row.id },
+    });
+    if (fnErr) {
+      toast({
+        title: "Status updated, notification failed",
+        description: fnErr.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({ title: "Marked as service unavailable", description: "Customer has been notified." });
+    }
+    fetchRows(tab);
+  };
+
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <Header />
@@ -249,7 +275,9 @@ const Admin = () => {
                   ? "New customer photo submissions will show up here."
                   : tab === "proposal_sent"
                   ? "Proposals you've sent will show up here."
-                  : "Booked orders from approved proposals will show up here."}
+                  : tab === "booked"
+                  ? "Booked orders from approved proposals will show up here."
+                  : "Assessments marked as service unavailable will show up here."}
               </p>
             </div>
           ) : (
@@ -280,9 +308,18 @@ const Admin = () => {
                         <td className="p-3">
                           <div className="flex flex-wrap gap-2">
                             {tab === "pending" && (
-                              <Button size="sm" onClick={() => openEditor(r)}>
-                                Build proposal
-                              </Button>
+                              <>
+                                <Button size="sm" onClick={() => openEditor(r)}>
+                                  Build proposal
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => markUnavailable(r)}
+                                >
+                                  Service unavailable
+                                </Button>
+                              </>
                             )}
                             {tab === "proposal_sent" && (
                               <>
@@ -297,6 +334,13 @@ const Admin = () => {
                                 >
                                   <Copy size={14} /> Copy link
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => markUnavailable(r)}
+                                >
+                                  Service unavailable
+                                </Button>
                               </>
                             )}
                             {tab === "booked" && (
@@ -308,6 +352,9 @@ const Admin = () => {
                               >
                                 <Link2 size={14} /> View
                               </a>
+                            )}
+                            {tab === "service_unavailable" && (
+                              <span className="text-xs text-muted-foreground">Closed · customer notified</span>
                             )}
                           </div>
                         </td>

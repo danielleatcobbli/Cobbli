@@ -7,7 +7,10 @@ const SENDER = { name: "Danielle from Cobbli", email: "noreply@cobbli.com" };
 const REPLY_TO = { email: "support@cobbli.com" };
 
 export interface SendBrevoEmailOptions {
-  templateId: number;
+  templateId?: number;
+  subject?: string;
+  htmlContent?: string;
+  textContent?: string;
   to: { email: string; name?: string }[];
   params?: Record<string, unknown>;
   tags?: string[];
@@ -17,14 +20,19 @@ export async function sendBrevoEmail(opts: SendBrevoEmailOptions) {
   const apiKey = Deno.env.get("BREVO_API_KEY");
   if (!apiKey) throw new Error("BREVO_API_KEY is not configured");
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     sender: SENDER,
     replyTo: REPLY_TO,
     to: opts.to,
-    templateId: opts.templateId,
-    params: opts.params ?? {},
     tags: opts.tags,
   };
+  if (opts.templateId) {
+    payload.templateId = opts.templateId;
+    payload.params = opts.params ?? {};
+  }
+  if (opts.subject) payload.subject = opts.subject;
+  if (opts.htmlContent) payload.htmlContent = opts.htmlContent;
+  if (opts.textContent) payload.textContent = opts.textContent;
 
   const res = await fetch(BREVO_API_URL, {
     method: "POST",
