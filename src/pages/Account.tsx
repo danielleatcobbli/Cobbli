@@ -210,6 +210,14 @@ const PROPOSAL_STATUS: Record<
     active: false,
     depositReleased: true,
   },
+  service_unavailable: {
+    label: "Service unavailable",
+    pill: "bg-gray-200 text-gray-700",
+    desc: "We don't currently offer the service your item needs. No charge has been made.",
+    action: "View details",
+    active: false,
+    depositReleased: true,
+  },
 };
 
 const OrderCard = ({ o }: { o: Order }) => {
