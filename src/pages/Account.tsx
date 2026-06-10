@@ -347,7 +347,7 @@ const Orders = () => {
     if (!assessments) return [];
     const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
     return assessments.filter((a) => {
-      if ((a.status === "expired" || a.status === "declined") && new Date(a.created_at).getTime() < cutoff) {
+      if ((a.status === "expired" || a.status === "declined" || a.status === "service_unavailable") && new Date(a.created_at).getTime() < cutoff) {
         return false;
       }
       return true;
