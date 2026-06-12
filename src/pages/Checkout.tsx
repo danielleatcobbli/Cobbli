@@ -29,18 +29,20 @@ import { cn } from "@/lib/utils";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { StripeEmbeddedCheckoutPanel } from "@/components/StripeEmbeddedCheckout";
 
+const FREE_COURIER_THRESHOLD = 10000;
+const COURIER_FEE = 1500;
 type Step = "contact" | "address" | "payment";
 
 const Checkout = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user: authUser } = useAuth();
   const { pairs, subtotal, clear } = useBag();
   const {
     user,
     updateContact,
     addresses,
     addAddress,
-    paymentMethods,
-    addPaymentMethod,
     addOrder,
   } = useAccount();
 
@@ -53,11 +55,15 @@ const Checkout = () => {
   const courierFee = subtotal >= FREE_COURIER_THRESHOLD ? 0 : COURIER_FEE;
   const orderSubtotal = subtotal + courierFee;
 
+  // Stripe returns user here with ?session_id=...&order_id=...
+  const returningSessionId = searchParams.get("session_id");
+  const returningOrderId = searchParams.get("order_id");
+
   // ---------- Contact ----------
   const [contactEditing, setContactEditing] = useState(false);
   const [email, setEmail] = useState(user.email);
   const [phone, setPhone] = useState(user.phone);
-  const [contactDone, setContactDone] = useState(true); // pre-filled from account
+  const [contactDone, setContactDone] = useState(true);
   const contactValid = /\S+@\S+\.\S+/.test(email) && phone.replace(/\D/g, "").length >= 10;
 
   // ---------- Address ----------
@@ -85,39 +91,45 @@ const Checkout = () => {
   const addressDone = !addingAddr && !!selectedAddrId;
   const selectedAddress = addresses.find((a) => a.id === selectedAddrId);
 
-  // ---------- Payment ----------
-  const validPMs = useMemo(() => paymentMethods.filter((p) => !isExpired(p)), [paymentMethods]);
-  const defaultPMId = useMemo(
-    () => validPMs.find((p) => p.isDefault)?.id ?? validPMs[0]?.id ?? null,
-    [validPMs],
-  );
-  const [selectedPMId, setSelectedPMId] = useState<string | null>(defaultPMId);
-  const [addingPM, setAddingPM] = useState(paymentMethods.length === 0);
-  const [pmForm, setPmForm] = useState({
-    cardNumber: "",
-    exp: "", // MM/YY
-    cvv: "",
-    sameAsShipping: true,
-    save: false,
-  });
-  const pmFormValid =
-    pmForm.cardNumber.replace(/\s/g, "").length >= 13 &&
-    /^(0[1-9]|1[0-2])\/\d{2}$/.test(pmForm.exp) &&
-    /^\d{3,4}$/.test(pmForm.cvv);
-  const paymentDone = !addingPM && !!selectedPMId;
+  // ---------- Payment (Stripe handles details) ----------
+  const paymentDone = addressDone; // Stripe collects card details
 
   // ---------- Step orchestration ----------
   const [openStep, setOpenStep] = useState<Step>("contact");
+  const [placing, setPlacing] = useState(false);
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [showStripe, setShowStripe] = useState(false);
 
-  // Re-default selections when underlying lists change
   useEffect(() => {
     if (!selectedAddrId && defaultAddrId) setSelectedAddrId(defaultAddrId);
   }, [defaultAddrId, selectedAddrId]);
-  useEffect(() => {
-    if (!selectedPMId && defaultPMId) setSelectedPMId(defaultPMId);
-  }, [defaultPMId, selectedPMId]);
 
-  if (pairs.length === 0) return <Navigate to="/bag" replace />;
+  // Handle return from Stripe — finalize local order copy + navigate to confirmation.
+  useEffect(() => {
+    if (!returningSessionId || !returningOrderId) return;
+    const addr = addresses.find((a) => a.id === selectedAddrId) ?? addresses[0];
+    if (!addr || pairs.length === 0) {
+      // Nothing local to mirror — go directly.
+      navigate(`/order-confirmation/${returningOrderId}`, { replace: true });
+      return;
+    }
+    const order = addOrder({
+      email,
+      phone,
+      address: addr,
+      paymentLast4: "••••",
+      pairs,
+      repairsSubtotal: subtotal,
+      courierFee,
+      subtotal: orderSubtotal,
+    });
+    clear();
+    // Use the supabase order id when present for stable linking.
+    navigate(`/order-confirmation/${returningOrderId || order.id}`, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returningSessionId, returningOrderId]);
+
+  if (pairs.length === 0 && !returningSessionId) return <Navigate to="/bag" replace />;
 
   // ----- handlers -----
   const saveContact = () => {
@@ -148,47 +160,77 @@ const Checkout = () => {
     setOpenStep("payment");
   };
 
-  const savePayment = () => {
-    if (!pmFormValid) return;
-    const [mm, yy] = pmForm.exp.split("/");
-    const last4 = pmForm.cardNumber.replace(/\s/g, "").slice(-4);
-    const pm = addPaymentMethod({
-      brand: detectBrand(pmForm.cardNumber),
-      last4,
-      expMonth: Number(mm),
-      expYear: 2000 + Number(yy),
-      isDefault: pmForm.save && paymentMethods.length === 0,
-    });
-    if (pmForm.save) {
-      setSelectedPMId(pm.id);
-    } else {
-      setSelectedPMId(pm.id);
-    }
-    setAddingPM(false);
-  };
-
   const allDone = contactDone && addressDone && paymentDone;
 
-  const placeOrder = () => {
-    if (!allDone || !selectedAddress || !selectedPMId) return;
-    const pm = paymentMethods.find((p) => p.id === selectedPMId);
-    const order = addOrder({
-      email,
-      phone,
-      address: selectedAddress,
-      paymentLast4: pm?.last4 ?? "0000",
-      pairs,
-      repairsSubtotal: subtotal,
-      courierFee,
-      subtotal: orderSubtotal,
-    });
-    clear();
-    navigate(`/order-confirmation/${order.id}`, { replace: true });
+  const placeOrder = async () => {
+    if (!allDone || !selectedAddress || !authUser || placing) return;
+    setPlacing(true);
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .insert({
+          user_id: authUser.id,
+          status: "pending_payment",
+          delivery_method: "door-to-door",
+          delivery_address: (selectedAddress as unknown as never),
+          contact_email: email,
+          contact_phone: phone,
+          payment_method_snapshot: null,
+          repairs_subtotal_cents: subtotal,
+          courier_fee_cents: courierFee,
+          tax_cents: 0,
+          total_cents: orderSubtotal,
+          payment_status: "pending",
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      setPendingOrderId(data.id);
+      setShowStripe(true);
+    } catch (e: any) {
+      console.error("place order failed", e);
+      toast({
+        title: "Could not start checkout",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+      setPlacing(false);
+    }
   };
+
+  const returnUrl = pendingOrderId
+    ? `${window.location.origin}/checkout?session_id={CHECKOUT_SESSION_ID}&order_id=${pendingOrderId}`
+    : "";
+
+  if (showStripe && pendingOrderId) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <Header />
+        <PaymentTestModeBanner />
+        <main className="flex-1">
+          <div className="container py-10 max-w-2xl">
+            <h1 className="text-2xl md:text-3xl font-semibold mb-2">Payment</h1>
+            <p className="text-sm text-muted-foreground mb-6">
+              Total <span className="font-medium text-foreground">{formatPrice(orderSubtotal)}</span> — payment is processed securely by Stripe.
+            </p>
+            <div className="rounded-lg border border-border overflow-hidden bg-card">
+              <StripeEmbeddedCheckoutPanel
+                kind="order"
+                rowId={pendingOrderId}
+                returnUrl={returnUrl}
+              />
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
+      <PaymentTestModeBanner />
       <main className="flex-1">
         <div className="container py-10">
           <h1 className="text-3xl md:text-4xl font-semibold mb-8">Checkout</h1>
@@ -376,136 +418,30 @@ const Checkout = () => {
                 )}
               </StepCard>
 
-              {/* Step 3: Payment */}
+              {/* Step 3: Payment — handled by Stripe */}
               <StepCard
                 index={3}
                 title="Payment"
                 open={openStep === "payment"}
                 done={paymentDone && openStep !== "payment"}
-                onOpen={() => setOpenStep("payment")}
+                onOpen={() => addressDone && setOpenStep("payment")}
                 summary={
-                  paymentDone && selectedPMId && openStep !== "payment" ? (
-                    <span className="text-sm text-foreground/80">
-                      {(() => {
-                        const pm = paymentMethods.find((p) => p.id === selectedPMId);
-                        return pm ? `${pm.brand} ending in ${pm.last4}` : "";
-                      })()}
+                  paymentDone && openStep !== "payment" ? (
+                    <span className="text-sm text-foreground/80 inline-flex items-center gap-1.5">
+                      <Lock size={12} /> Securely collected by Stripe
                     </span>
                   ) : null
                 }
               >
-                {paymentMethods.length > 0 && !addingPM && (
-                  <div className="space-y-3">
-                    <ul className="space-y-2">
-                      {paymentMethods.map((p) => {
-                        const expired = isExpired(p);
-                        return (
-                          <li key={p.id}>
-                            <label
-                              className={cn(
-                                "flex items-center gap-3 rounded-lg border p-4 transition-colors",
-                                expired
-                                  ? "border-border bg-muted/40 cursor-not-allowed opacity-60"
-                                  : selectedPMId === p.id
-                                  ? "border-primary bg-accent/30 cursor-pointer"
-                                  : "border-border hover:bg-accent/20 cursor-pointer",
-                              )}
-                            >
-                              <input
-                                type="radio"
-                                name="pm"
-                                disabled={expired}
-                                checked={selectedPMId === p.id}
-                                onChange={() => setSelectedPMId(p.id)}
-                              />
-                              <div className="text-sm flex-1">
-                                <div className="font-medium">
-                                  {p.brand} ending in {p.last4}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  Exp {String(p.expMonth).padStart(2, "0")}/{String(p.expYear).slice(-2)}
-                                  {p.isDefault && <span className="ml-2">(Default)</span>}
-                                </div>
-                              </div>
-                              {expired && (
-                                <span className="text-xs font-medium px-2 py-0.5 rounded bg-destructive/10 text-destructive">
-                                  Expired
-                                </span>
-                              )}
-                            </label>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    <button
-                      type="button"
-                      onClick={() => setAddingPM(true)}
-                      className="text-sm text-primary underline underline-offset-4"
-                    >
-                      + Add a new card
-                    </button>
-                  </div>
-                )}
-
-                {(paymentMethods.length === 0 || addingPM) && (
-                  <div className="space-y-4">
-                    <Field id="card" label="Card number">
-                      <Input
-                        id="card"
-                        inputMode="numeric"
-                        value={pmForm.cardNumber}
-                        onChange={(e) =>
-                          setPmForm({ ...pmForm, cardNumber: e.target.value.replace(/[^\d ]/g, "").slice(0, 19) })
-                        }
-                        placeholder="1234 5678 9012 3456"
-                      />
-                    </Field>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Field id="exp" label="Expiration (MM/YY)">
-                        <Input
-                          id="exp"
-                          value={pmForm.exp}
-                          onChange={(e) => setPmForm({ ...pmForm, exp: formatExp(e.target.value) })}
-                          placeholder="MM/YY"
-                          maxLength={5}
-                        />
-                      </Field>
-                      <Field id="cvv" label="CVV">
-                        <Input
-                          id="cvv"
-                          inputMode="numeric"
-                          maxLength={4}
-                          value={pmForm.cvv}
-                          onChange={(e) => setPmForm({ ...pmForm, cvv: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                        />
-                      </Field>
-                    </div>
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={pmForm.sameAsShipping}
-                        onCheckedChange={(v) => setPmForm({ ...pmForm, sameAsShipping: !!v })}
-                      />
-                      Billing address same as shipping address
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={pmForm.save}
-                        onCheckedChange={(v) => setPmForm({ ...pmForm, save: !!v })}
-                      />
-                      Save this card to my account for faster checkout
-                    </label>
-                    <div className="flex gap-3">
-                      <Button variant="hero" disabled={!pmFormValid} onClick={savePayment}>
-                        Save card
-                      </Button>
-                      {paymentMethods.length > 0 && (
-                        <Button variant="ghost" onClick={() => setAddingPM(false)}>
-                          Cancel
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <div className="space-y-4">
+                  <p className="text-sm text-foreground/80 inline-flex items-center gap-2">
+                    <Lock size={14} className="text-primary" />
+                    Your card details are entered securely on the next step, powered by Stripe.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    We accept all major credit and debit cards. You'll review your total before confirming the payment.
+                  </p>
+                </div>
               </StepCard>
             </div>
 
@@ -534,14 +470,14 @@ const Checkout = () => {
                   type="button"
                   variant="hero"
                   size="lg"
-                  className="w-full mt-6"
-                  disabled={!allDone}
+                  className={cn("w-full mt-6", (!allDone || placing) && "opacity-50 cursor-not-allowed")}
+                  disabled={!allDone || placing}
                   onClick={placeOrder}
                 >
-                  Place Order
+                  {placing ? "Preparing payment…" : "Continue to payment"}
                 </Button>
                 <p className="mt-3 text-xs text-muted-foreground text-center">
-                  Taxes calculated after order placement.
+                  Taxes calculated at the payment step.
                 </p>
               </div>
             </aside>
@@ -628,20 +564,5 @@ const Row = ({ label, value }: { label: string; value: string }) => (
 
 const formatAddr = (a: Address) =>
   `${a.street}${a.street2 ? `, ${a.street2}` : ""}, ${a.city}, ${a.state} ${a.zip}`;
-
-const formatExp = (raw: string) => {
-  const digits = raw.replace(/\D/g, "").slice(0, 4);
-  if (digits.length < 3) return digits;
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-};
-
-const detectBrand = (num: string) => {
-  const n = num.replace(/\D/g, "");
-  if (n.startsWith("4")) return "Visa";
-  if (/^5[1-5]/.test(n) || /^2[2-7]/.test(n)) return "Mastercard";
-  if (/^3[47]/.test(n)) return "Amex";
-  if (/^6/.test(n)) return "Discover";
-  return "Card";
-};
 
 export default Checkout;
