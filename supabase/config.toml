@@ -18,5 +18,5 @@ verify_jwt = false
 [functions.payments-webhook]
 verify_jwt = false
 
-[functions._smoke-checkout]
+[functions.smoke-checkout]
 verify_jwt = false
