@@ -124,8 +124,8 @@ const Checkout = () => {
       subtotal: orderSubtotal,
     });
     clear();
-    // Use the supabase order id when present for stable linking.
-    navigate(`/order-confirmation/${returningOrderId || order.id}`, { replace: true });
+    // Confirmation page reads from local order store; use its id.
+    navigate(`/order-confirmation/${order.id}`, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [returningSessionId, returningOrderId]);
 
