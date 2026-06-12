@@ -56,31 +56,46 @@ export type Database = {
       assessments: {
         Row: {
           created_at: string
+          deposit_amount_cents: number | null
+          deposit_paid_at: string | null
+          deposit_status: string
           id: string
           pairs: Json
           proposal_token: string
           proposed_services: Json
           status: string
+          stripe_payment_intent_id: string | null
+          stripe_session_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          deposit_amount_cents?: number | null
+          deposit_paid_at?: string | null
+          deposit_status?: string
           id?: string
           pairs?: Json
           proposal_token?: string
           proposed_services?: Json
           status?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          deposit_amount_cents?: number | null
+          deposit_paid_at?: string | null
+          deposit_status?: string
           id?: string
           pairs?: Json
           proposal_token?: string
           proposed_services?: Json
           status?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -179,10 +194,14 @@ export type Database = {
           delivery_method: string
           id: string
           order_number: string
+          paid_at: string | null
           payment_method_snapshot: Json | null
+          payment_status: string
           placed_at: string
           repairs_subtotal_cents: number
           status: string
+          stripe_payment_intent_id: string | null
+          stripe_session_id: string | null
           tax_cents: number
           total_cents: number
           updated_at: string
@@ -197,10 +216,14 @@ export type Database = {
           delivery_method: string
           id?: string
           order_number?: string
+          paid_at?: string | null
           payment_method_snapshot?: Json | null
+          payment_status?: string
           placed_at?: string
           repairs_subtotal_cents: number
           status?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
           tax_cents?: number
           total_cents: number
           updated_at?: string
@@ -215,10 +238,14 @@ export type Database = {
           delivery_method?: string
           id?: string
           order_number?: string
+          paid_at?: string | null
           payment_method_snapshot?: Json | null
+          payment_status?: string
           placed_at?: string
           repairs_subtotal_cents?: number
           status?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
           tax_cents?: number
           total_cents?: number
           updated_at?: string
