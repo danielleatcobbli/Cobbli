@@ -39,7 +39,7 @@ Deno.serve(async (_req) => {
       customer: customer.id,
       payment_intent_data: { description: "Cobbli assessment deposit (smoke)" },
       metadata: { userId, kind: "deposit", assessmentId: asmt.id },
-      automatic_tax: { enabled: true },
+      
     });
     out.deposit_session = { id: depositSession.id, has_secret: !!depositSession.client_secret };
 
@@ -66,7 +66,7 @@ Deno.serve(async (_req) => {
           currency: "usd",
           product_data: { name: `Cobbli order ${ord.order_number}` },
           unit_amount: ord.total_cents,
-          tax_behavior: "exclusive",
+          
         },
         quantity: 1,
       }],
@@ -76,7 +76,7 @@ Deno.serve(async (_req) => {
       customer: customer.id,
       payment_intent_data: { description: `Cobbli order ${ord.order_number} (smoke)` },
       metadata: { userId, kind: "order", orderId: ord.id },
-      automatic_tax: { enabled: true },
+      
     });
     out.order_session = { id: orderSession.id, has_secret: !!orderSession.client_secret };
 
