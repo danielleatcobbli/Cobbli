@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { Link, Navigate, useNavigate } from "react-router-dom";
-import { Check, ChevronDown, Pencil } from "lucide-react";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Check, ChevronDown, Pencil, Lock } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { Button } from "@/components/ui/button";
@@ -18,16 +18,17 @@ import {
 import { useBag, formatPrice } from "@/context/BagContext";
 import {
   useAccount,
-  isExpired,
   US_STATES,
   type Address,
-  type PaymentMethod,
 } from "@/context/AccountContext";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import { isServiceableZip } from "@/data/serviceAreas";
 import { cn } from "@/lib/utils";
+import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
+import { StripeEmbeddedCheckoutPanel } from "@/components/StripeEmbeddedCheckout";
 
-const FREE_COURIER_THRESHOLD = 10000;
-const COURIER_FEE = 1500;
 type Step = "contact" | "address" | "payment";
 
 const Checkout = () => {
