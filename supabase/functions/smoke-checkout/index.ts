@@ -51,7 +51,7 @@ Deno.serve(async (_req) => {
         order_number: "CB-SMOKE",
         payment_status: "pending_payment",
         total_cents: 4599,
-        subtotal_cents: 4599,
+        repairs_subtotal_cents: 4599, courier_fee_cents: 0, tax_cents: 0, contact_email: "smoke@test.com", contact_phone: "5555555555",
         delivery_method: "door-to-door",
         status: "pending",
       })
