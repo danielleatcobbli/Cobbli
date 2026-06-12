@@ -121,7 +121,6 @@ Deno.serve(async (req) => {
           currency: "usd",
           product_data: { name: `Cobbli order ${row.order_number}` },
           unit_amount: row.total_cents,
-          tax_behavior: "exclusive",
         },
         quantity: 1,
       }];
@@ -140,7 +139,6 @@ Deno.serve(async (req) => {
         metadata,
       },
       metadata,
-      automatic_tax: { enabled: true },
     });
 
     // Stamp the row with the session id so the webhook can update it.
