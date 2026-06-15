@@ -271,7 +271,7 @@ const AssessmentProposal = () => {
               <p className="font-display text-2xl text-primary mb-2">
                 Your proposal isn't ready yet
               </p>
-              <p className is_muted-foreground">
+              <p className="text-muted-foreground">
                 Our cobblers are preparing your proposal and will email you when it's ready
                 (usually within 1 - 2 business days).
               </p>
