@@ -64,7 +64,8 @@ const AddPairModal = ({
     if (open) {
       setShoeType("");
       setColors([]);
-      setBrand("");
+      setBrandMode("");
+      setBrandValue("");
       setDescription("");
       setPhotos([]);
       setPhotoPreviews([]);
