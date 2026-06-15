@@ -342,7 +342,13 @@ const AddPairModal = ({
               mode={brandMode}
               value={brandValue}
               onChange={(m, v) => {
-                setUserEdited((p) => 
+                setUserEdited((p) => ({ ...p, brand: true }));
+                setBrandMode(m);
+                setBrandValue(v);
+              }}
+              disabled={analyzing}
+            />
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
