@@ -5,8 +5,8 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
 import ConsultationBanner from "@/components/cobbli/ConsultationBanner";
+import BrandCombobox, { BRANDS, BRAND_UNKNOWN, type BrandMode } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -49,7 +49,8 @@ const AddPairModal = ({
   const { addPair } = usePairs();
   const [shoeType, setShoeType] = useState<ShoeType | "">("");
   const [colors, setColors] = useState<string[]>([]);
-  const [brand, setBrand] = useState("");
+  const [brandMode, setBrandMode] = useState<BrandMode>("");
+  const [brandValue, setBrandValue] = useState("");
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
@@ -63,7 +64,8 @@ const AddPairModal = ({
     if (open) {
       setShoeType("");
       setColors([]);
-      setBrand("");
+      setBrandMode("");
+      setBrandValue("");
       setDescription("");
       setPhotos([]);
       setPhotoPreviews([]);
@@ -103,10 +105,16 @@ const AddPairModal = ({
         const valid = (result?.colors || []).filter((c) => COLORS.includes(c));
         return valid.length > 0 ? valid : prev;
       });
-      setBrand((prev) => {
-        if (userEdited.brand || prev) return prev;
-        return result?.brand ? result.brand : prev;
-      });
+      if (!userEdited.brand && !brandMode && result?.brand) {
+        const detected = result.brand;
+        if (BRANDS.includes(detected)) {
+          setBrandMode("list");
+          setBrandValue(detected);
+        } else {
+          setBrandMode("custom");
+          setBrandValue(detected);
+        }
+      }
     } catch (e) {
       console.error("analyze failed", e);
       toast({
@@ -180,7 +188,7 @@ const AddPairModal = ({
     setUploadedPaths((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const valid = shoeType !== "" && colors.length > 0;
+  const valid = shoeType !== "" && colors.length > 0 && brandMode !== "";
 
   const toggleColor = (c: string) => {
     setUserEdited((p) => ({ ...p, colors: true }));
@@ -192,7 +200,10 @@ const AddPairModal = ({
     const pair = addPair({
       shoeType: shoeType as ShoeType,
       colors,
-      brand: brand.trim() || undefined,
+      brand: brandMode === "list" ? brandValue
+        : brandMode === "custom" ? brandValue.trim()
+        : brandMode === "unknown" ? BRAND_UNKNOWN
+        : undefined,
       description: description.trim() || undefined,
       photoUrls: uploadedPaths.length ? uploadedPaths : undefined,
     });
@@ -323,24 +334,20 @@ const AddPairModal = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="brand">Brand</Label>
-            <div className="relative">
-              <Input
-                id="brand"
-                maxLength={250}
-                value={brand}
-                onChange={(e) => {
-                  setUserEdited((p) => ({ ...p, brand: true }));
-                  setBrand(e.target.value);
-                }}
-                placeholder={analyzing ? "Analyzing…" : "Optional"}
-                disabled={analyzing}
-                className={analyzing ? "opacity-60" : ""}
-              />
-              {analyzing && (
-                <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
-              )}
-            </div>
+            <Label htmlFor="brand">
+              Brand <span className="text-destructive">*</span>
+            </Label>
+            <BrandCombobox
+              id="brand"
+              mode={brandMode}
+              value={brandValue}
+              onChange={(m, v) => {
+                setUserEdited((p) => ({ ...p, brand: true }));
+                setBrandMode(m);
+                setBrandValue(v);
+              }}
+              disabled={analyzing}
+            />
           </div>
 
           <div className="space-y-2">
