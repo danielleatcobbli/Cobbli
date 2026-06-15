@@ -105,10 +105,16 @@ const AddPairModal = ({
         const valid = (result?.colors || []).filter((c) => COLORS.includes(c));
         return valid.length > 0 ? valid : prev;
       });
-      setBrand((prev) => {
-        if (userEdited.brand || prev) return prev;
-        return result?.brand ? result.brand : prev;
-      });
+      if (!userEdited.brand && !brandMode && result?.brand) {
+        const detected = result.brand;
+        if (BRANDS.includes(detected)) {
+          setBrandMode("list");
+          setBrandValue(detected);
+        } else {
+          setBrandMode("custom");
+          setBrandValue(detected);
+        }
+      }
     } catch (e) {
       console.error("analyze failed", e);
       toast({
