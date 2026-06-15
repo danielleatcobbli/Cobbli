@@ -5,8 +5,8 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
 import ConsultationBanner from "@/components/cobbli/ConsultationBanner";
+import BrandCombobox, { BRANDS, BRAND_UNKNOWN, type BrandMode } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
