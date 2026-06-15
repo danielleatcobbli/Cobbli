@@ -334,25 +334,15 @@ const AddPairModal = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="brand">Brand</Label>
-            <div className="relative">
-              <Input
-                id="brand"
-                maxLength={250}
-                value={brand}
-                onChange={(e) => {
-                  setUserEdited((p) => ({ ...p, brand: true }));
-                  setBrand(e.target.value);
-                }}
-                placeholder={analyzing ? "Analyzing…" : "Optional"}
-                disabled={analyzing}
-                className={analyzing ? "opacity-60" : ""}
-              />
-              {analyzing && (
-                <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
-              )}
-            </div>
-          </div>
+            <Label htmlFor="brand">
+              Brand <span className="text-destructive">*</span>
+            </Label>
+            <BrandCombobox
+              id="brand"
+              mode={brandMode}
+              value={brandValue}
+              onChange={(m, v) => {
+                setUserEdited((p) => 
 
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
