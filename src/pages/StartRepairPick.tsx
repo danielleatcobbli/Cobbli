@@ -188,7 +188,7 @@ const AddPairModal = ({
     setUploadedPaths((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const valid = shoeType !== "" && colors.length > 0;
+  const valid = shoeType !== "" && colors.length > 0 && brandMode !== "";
 
   const toggleColor = (c: string) => {
     setUserEdited((p) => ({ ...p, colors: true }));
