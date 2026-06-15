@@ -200,7 +200,10 @@ const AddPairModal = ({
     const pair = addPair({
       shoeType: shoeType as ShoeType,
       colors,
-      brand: brand.trim() || undefined,
+      brand: brandMode === "list" ? brandValue
+        : brandMode === "custom" ? brandValue.trim()
+        : brandMode === "unknown" ? BRAND_UNKNOWN
+        : undefined,
       description: description.trim() || undefined,
       photoUrls: uploadedPaths.length ? uploadedPaths : undefined,
     });
