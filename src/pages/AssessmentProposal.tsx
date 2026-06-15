@@ -272,8 +272,8 @@ const AssessmentProposal = () => {
                 Your proposal isn't ready yet
               </p>
               <p className="text-muted-foreground">
-                Our cobblers are still preparing it. We'll email you the moment it's ready —
-                usually within 1 business day.
+                Our cobblers are preparing your proposal and will email you when it's ready
+                (usually within 1 - 2 business days).
               </p>
               <Button asChild variant="outline" className="mt-6">
                 <Link to="/account">Back to account</Link>
