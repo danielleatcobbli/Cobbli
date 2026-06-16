@@ -1,59 +1,50 @@
 ## Goal
-Replace the mocked payment flow with Lovable's built-in seamless Stripe integration, using **embedded in-page checkout**. Two paid flows:
-1. **$20 assessment deposit** — charged upfront when user submits an assessment.
-2. **Cart checkout total** — repairs subtotal + courier fee, charged at order placement.
+Remove the Lovable-managed (seamless) Stripe integration and replace it with a bring-your-own-key (BYOK) setup using your own Stripe account.
 
-No card hold (charge in full), no saved cards (guest-style each time).
+Heads up: the seamless integration is generally smoother (no key rotation, no webhook setup, managed go-live). Going BYOK means you manage your Stripe account, keys, and webhook endpoint yourself. Confirming this is what you want before I touch anything.
 
----
+## What gets deleted
 
-## 1. Enable Stripe + create products
+Files that exist purely to support the gateway-proxied seamless flow:
 
-- Enable the seamless Stripe integration (sandbox auto-provisioned, live unlocked later via the go-live flow).
-- Create one Stripe product/price:
-  - `assessment_deposit` — fixed $20.00 one-time.
-- For cart totals: use inline `price_data` per checkout session (amounts are dynamic — repairs + courier fee). No catalog price needed.
-- Tax handling: enable full compliance handling (`managed_payments: { enabled: true }`) by default — Stripe handles tax calc/collection/filing for buyers in ~80 countries; +3.5% per transaction; bank statement shows `LINK.COM* Cobbli`. Can be changed later.
+- `src/lib/stripe.ts` — reads `VITE_PAYMENTS_CLIENT_TOKEN` and derives sandbox/live from the token prefix
+- `src/components/PaymentTestModeBanner.tsx` — banner driven by the seamless token
+- `src/components/StripeEmbeddedCheckout.tsx` — current wrapper (will be rebuilt simpler)
+- `supabase/functions/_shared/stripe.ts` — connector-gateway proxy client
+- `supabase/functions/create-checkout/index.ts` — gateway-based session creator
+- `supabase/functions/payments-webhook/index.ts` — gateway webhook handler
+- Corresponding `[functions.create-checkout]` / `[functions.payments-webhook]` blocks in `supabase/config.toml`
+- The two deployed edge functions removed from the backend
 
-## 2. Backend (Supabase)
+I will also unwire any imports of the deleted modules in `src/pages/Checkout.tsx` and `src/pages/AssessmentDeposit.tsx` so the app keeps compiling. Those two pages currently call into the seamless checkout — see "Open question" below for how you want them rebuilt.
 
-### Schema changes (one migration)
-- `assessments`: add `deposit_status` (default `'pending'`), `stripe_session_id`, `stripe_payment_intent_id`, `deposit_amount_cents`, `deposit_paid_at`.
-- `orders`: add `payment_status` (default `'pending'`), `stripe_session_id`, `stripe_payment_intent_id`, `paid_at`.
-- Keep the local `payment_methods` table as-is for now, but stop writing to it from these flows.
+## What gets added (BYOK)
 
-### Edge functions
-- `create-checkout` — accepts `{ kind: 'deposit' | 'order', assessmentId? | orderId?, environment }`, resolves/creates a Stripe Customer with `metadata.userId`, builds the Embedded Checkout session (`ui_mode: 'embedded_page'`, `managed_payments`, `return_url`), returns `clientSecret`. `verify_jwt = false` + in-code auth check.
-- `payments-webhook` — handles `checkout.session.completed` and `payment_intent.succeeded`/`failed`. Updates `assessments.deposit_status` or `orders.payment_status` based on session metadata (`kind`, `assessmentId`/`orderId`). Idempotent.
+1. **Secrets** (via the secrets tool, not committed to `.env`):
+   - `STRIPE_SECRET_KEY` — your `sk_test_...` or `sk_live_...` key
+   - `STRIPE_WEBHOOK_SECRET` — `whsec_...` from the webhook endpoint you create in your Stripe dashboard
+2. **Publishable key in env** (safe to commit):
+   - `VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...` in `.env` / `.env.development`
+3. **New `src/lib/stripe.ts`** — `loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)`
+4. **New edge functions** using the Stripe SDK directly with `STRIPE_SECRET_KEY`:
+   - `create-checkout` — creates an Embedded Checkout session, returns `clientSecret`
+   - `stripe-webhook` — verifies signature with `STRIPE_WEBHOOK_SECRET` and handles `checkout.session.completed`, etc.
+5. **Rebuilt `StripeEmbeddedCheckout.tsx`** — same UX (embedded, inline), just pointed at the new function and using the publishable key directly.
+6. **Webhook URL** I'll give you after deploy — you paste it into Stripe Dashboard → Webhooks, then send me back the signing secret to store.
 
-### Row creation order
-- **Assessment**: insert assessment row first (current behavior), then attach Stripe IDs and flip `deposit_status` on webhook.
-- **Order**: insert `orders` row with `payment_status='pending'` first, open embedded checkout in-page, return URL navigates to `OrderConfirmation` which subscribes/polls until webhook marks it paid.
+## Order of operations
 
-## 3. Frontend changes
+1. You confirm the plan.
+2. I delete the seamless files + config blocks and call `supabase--delete_edge_functions` for the two old functions.
+3. I request `STRIPE_SECRET_KEY` via the secrets tool (you paste it in the secure form).
+4. I add `VITE_STRIPE_PUBLISHABLE_KEY` to `.env` (you tell me the `pk_...` value or paste it — publishable keys are safe in code).
+5. I write the new `src/lib/stripe.ts`, edge functions, and rebuilt embedded checkout component, and rewire `Checkout.tsx` / `AssessmentDeposit.tsx`.
+6. I give you the webhook URL; you create the endpoint in Stripe and send back `whsec_...`; I store it as `STRIPE_WEBHOOK_SECRET`.
 
-- Install `@stripe/stripe-js@9.2.0` and `@stripe/react-stripe-js@6.2.0`.
-- Add `src/lib/stripe.ts` (env detection from `VITE_PAYMENTS_CLIENT_TOKEN` prefix) and a `<PaymentTestModeBanner />` at the top of `AssessmentDeposit` and `Checkout`.
-- New `StripeEmbeddedCheckout` component + `useStripeCheckout` hook.
-- **`AssessmentDeposit.tsx`**: replace mock `pi_mock_...` submit with: insert assessment row → call `create-checkout` (`kind: 'deposit'`) → render embedded checkout in-page → on return, navigate to confirmation.
-- **`Checkout.tsx`**: replace the existing "place order" handler that writes a fake `paymentLast4`. New flow: validate contact/address → insert `orders` row (pending) → embedded checkout → return URL hits `OrderConfirmation`, which shows a branded skeleton (per memory) until the webhook marks the order paid.
-- Remove the "Payment processing is mocked" disclaimer copy on both pages.
-- The existing Payment Methods page stays but is no longer part of these flows; we can deprecate it in a later sprint.
+## Open question
 
-## 4. Out of scope (this pass)
-- Saved cards / Stripe Customer Portal.
-- Authorization-only card holds (charging full amount upfront).
-- Refund automation (admin refunds from Stripe dashboard).
-- Final repair charge after proposal acceptance (`AssessmentProposal.tsx`) — remains mocked unless you want it added.
+`Checkout.tsx` and `AssessmentDeposit.tsx` are real app flows (not just demo). Do you want me to:
+- **(a)** Port them 1:1 to the new BYOK setup (same UX, same prices, just different backend) — recommended, or
+- **(b)** Strip the Stripe wiring out of them entirely and leave them as placeholders for you to rebuild later?
 
-## 5. Technical notes
-- Stripe metadata: set `{ userId, kind, assessmentId | orderId }` on both Session and Customer so webhook + future read paths work.
-- Webhook is idempotent via `onConflict` on `stripe_session_id`.
-- `return_url` includes `{CHECKOUT_SESSION_ID}` so the return page can confirm session.
-- Failure UX: if webhook reports failure, show retry CTA that re-opens checkout for the same row.
-- `verify_jwt = false` on both payment edge functions (required for CORS preflight + webhook).
-
-## Files touched (approx)
-- **New**: `supabase/functions/create-checkout/index.ts`, `supabase/functions/payments-webhook/index.ts`, `supabase/functions/_shared/stripe.ts`, `src/lib/stripe.ts`, `src/components/StripeEmbeddedCheckout.tsx`, `src/components/PaymentTestModeBanner.tsx`, `src/hooks/useStripeCheckout.tsx`.
-- **Edited**: `src/pages/AssessmentDeposit.tsx`, `src/pages/Checkout.tsx`, `src/pages/OrderConfirmation.tsx`, `src/pages/AssessmentConfirmation.tsx`, `supabase/config.toml`.
-- **Migration**: payment columns on `assessments` + `orders`.
+Also: do you already have the Stripe account ready (test mode keys handy), or do you need a moment to grab them before I proceed?
