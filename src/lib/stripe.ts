@@ -1,27 +1,21 @@
 import { loadStripe, Stripe } from "@stripe/stripe-js";
 
-const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as
-  | string
-  | undefined;
+const PUBLISHABLE_KEY =
+  "pk_live_51T4kZ0JMi25gSdBj4jlvMmhJLCJm3fJExmxbACkie3rn2op6vmNqihiXCO7opCPQ9tQs6ipfrgIcOHSNZNdeOd4A00MqI2QctQ";
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
 export function getStripe(): Promise<Stripe | null> {
-  if (!publishableKey) {
-    throw new Error(
-      "VITE_STRIPE_PUBLISHABLE_KEY is not set. Add it to your environment to enable checkout.",
-    );
-  }
   if (!stripePromise) {
-    stripePromise = loadStripe(publishableKey);
+    stripePromise = loadStripe(PUBLISHABLE_KEY);
   }
   return stripePromise;
 }
 
 export function hasStripeKey(): boolean {
-  return !!publishableKey;
+  return true;
 }
 
 export function isStripeTestMode(): boolean {
-  return !!publishableKey?.startsWith("pk_test_");
+  return PUBLISHABLE_KEY.startsWith("pk_test_");
 }
