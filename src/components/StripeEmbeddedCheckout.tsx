@@ -1,5 +1,5 @@
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import { getStripe, getStripeEnvironment } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { supabase } from "@/integrations/supabase/client";
 
 export type CheckoutKind = "deposit" | "order";
@@ -18,12 +18,7 @@ export function StripeEmbeddedCheckoutPanel({
 }: StripeEmbeddedCheckoutProps) {
   const fetchClientSecret = async (): Promise<string> => {
     const { data, error } = await supabase.functions.invoke("create-checkout", {
-      body: {
-        kind,
-        rowId,
-        returnUrl,
-        environment: getStripeEnvironment(),
-      },
+      body: { kind, rowId, returnUrl },
     });
     if (error || !data?.clientSecret) {
       throw new Error(error?.message || "Failed to create checkout session");
