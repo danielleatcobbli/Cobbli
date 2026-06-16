@@ -4,7 +4,7 @@ export function PaymentTestModeBanner() {
   if (!hasStripeKey()) {
     return (
       <div className="w-full bg-red-100 border-b border-red-300 px-4 py-2 text-center text-sm text-red-800">
-        Stripe is not configured. Set VITE_STRIPE_PUBLISHABLE_KEY in your environment to accept payments.
+        Stripe is not configured. Add your publishable key to enable payments.
       </div>
     );
   }
