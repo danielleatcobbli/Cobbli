@@ -1,6 +1,6 @@
 import { loadStripe, Stripe } from "@stripe/stripe-js";
 
-const PUBLISHADOWABLE_KEY =
+const PUBLISHABLE_KEY =
   "pk_test_51T4kZ0JMi25gSdBjocbDzVWiHwyFcEG5Gl9uupHVvDnWKgCIlkovH0PPWP7ObWBsEfootUkROq9MlrwmBqOzoshc00nSD3Yu0H";
 
 let stripePromise: Promise<Stripe | null> | null = null;
