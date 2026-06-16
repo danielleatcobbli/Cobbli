@@ -1,7 +1,7 @@
 import { loadStripe, Stripe } from "@stripe/stripe-js";
 
 const PUBLISHABLE_KEY =
-  "pk_live_51T4kZ0JMi25gSdBj4jlvMmhJLCJm3fJExmxbACkie3rn2op6vmNqihiXCO7opCPQ9tQs6ipfrgIcOHSNZNdeOd4A00MqI2QctQ";
+  "pk_test_51T4kZ0JMi25gSdBjocbDzVWiHwyFcEG5Gl9uupHVvDnWKgCIlkovH0PPWP7ObWBsEfootUkROq9MlrwmBqOzoshc00nSD3Yu0H";
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
