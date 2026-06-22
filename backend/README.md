@@ -92,6 +92,46 @@ See `.env.example`. Required for runtime:
 - `AI_API_KEY` — replaces `LOVABLE_API_KEY` for `analyze-shoe-photos`.
 - `CORS_ALLOW_ORIGINS` — comma-separated, defaults to `*`.
 
+## Auth model — Supabase remains the source of truth
+
+The backend does **not** issue or own user identity. Supabase is still the auth
+provider for sign-in, sign-up, sessions, and password reset. The flow is:
+
+```
+Frontend ── supabase.auth.signInWith{Password,OAuth}() ──▶ Supabase
+Frontend ◀── access_token (JWT) ──────────────────────── Supabase
+Frontend ── apiFetch(...) attaches `Authorization: Bearer <jwt>` ─▶ Backend
+Backend  ── supabase.auth.get_user(jwt) ──────────────────▶ Supabase (verifies)
+Backend  ◀── user (id, email) ────────────────────────── Supabase
+```
+
+`backend/app/auth.py` exposes a single `CurrentUser` dependency. Routes that need
+an authenticated caller declare it as a parameter and FastAPI rejects the request
+with 401 if the JWT is missing/invalid.
+
+| Endpoint | JWT required? | Why |
+|---|---|---|
+| `GET /health` | no | smoke check |
+| `POST /checkout/` | **yes** | charges the calling user; ownership of the assessment/order is verified against `user.id` |
+| `POST /stripe/webhook` | no | Stripe HMAC signature is verified instead (`STRIPE_WEBHOOK_SECRET`) |
+| `POST /analyze-shoe-photos/` | **yes** | calls a paid AI gateway — must be authed |
+| `POST /email/password-updated` | **yes** | sends to the calling user's own email |
+| `POST /email/order-confirmation` | no | called from a Postgres trigger after order placement; identifies user via row payload |
+| `POST /email/account-locked` | no | called from a Postgres trigger on lockout; identifies user via row payload |
+| `POST /email/walkup-welcome` | no | called from admin-create flow; identifies user via payload + service-role lookup |
+| `POST /email/service-unavailable` | no | called from internal admin tooling; identifies user via assessment row |
+
+The four "no JWT" email endpoints mirror the original Edge Function behavior
+(`verify_jwt = false` in `supabase/config.toml`). They are reachable only by
+internal callers (DB triggers + admin tools) — exposing them publicly is a
+deliberate trade-off matching the existing Lovable Cloud setup. Lock down later
+by requiring a shared secret header if needed.
+
+Frontend wiring: `src/integrations/api/client.ts` reads
+`supabase.auth.getSession()` and adds `Authorization: Bearer <access_token>`
+automatically on every `apiFetch` / `apiFetchJson` call. The frontend never
+calls the email endpoints directly — those are server-to-server.
+
 ## Endpoints (1:1 with the Supabase Edge Functions)
 
 | Method | Path                      | Replaces edge function     |

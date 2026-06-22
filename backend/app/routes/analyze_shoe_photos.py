@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.auth import CurrentUser
 from app.settings import get_settings
 from app.supabase_client import get_supabase_admin
 
@@ -98,7 +99,11 @@ def _normalize(parsed: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("/")
-async def analyze_shoe_photos(payload: AnalyzeRequest) -> JSONResponse:
+async def analyze_shoe_photos(
+    payload: AnalyzeRequest,
+    user: CurrentUser,
+) -> JSONResponse:
+    _ = user  # auth-only; user identity isn't used in the request itself
     try:
         settings = get_settings()
         if not settings.ai_api_key:

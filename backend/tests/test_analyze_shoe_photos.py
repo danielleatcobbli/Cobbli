@@ -80,6 +80,13 @@ def test_missing_photo_paths_returns_400(client, admin_mock: MagicMock) -> None:
     assert res.json()["error"] == "photoPaths required"
 
 
+def test_unauthenticated_request_returns_401(unauth_client) -> None:
+    res = unauth_client.post(
+        "/analyze-shoe-photos/", json={"photoPaths": ["a.jpg"]}
+    )
+    assert res.status_code == 401
+
+
 def test_empty_photo_paths_returns_400(client, admin_mock: MagicMock) -> None:
     res = client.post("/analyze-shoe-photos/", json={"photoPaths": []})
     assert res.status_code == 400

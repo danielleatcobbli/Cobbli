@@ -89,8 +89,8 @@ def test_falls_back_to_empty_first_name_when_profile_missing(
     assert kwargs["params"] == {"first_name": ""}
 
 
-def test_requires_authorization_header(client) -> None:
-    res = client.post("/email/password-updated")
+def test_requires_authorization_header(unauth_client) -> None:
+    res = unauth_client.post("/email/password-updated")
     assert res.status_code == 401
 
 

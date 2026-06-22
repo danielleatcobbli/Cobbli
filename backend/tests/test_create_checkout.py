@@ -43,8 +43,10 @@ def _make_supabase_mock(select_response):
     return sb, chain, update_chain
 
 
-def test_missing_bearer_returns_401(client):
-    res = client.post("/checkout/", json={"kind": "deposit", "returnUrl": "https://x"})
+def test_missing_bearer_returns_401(unauth_client):
+    res = unauth_client.post(
+        "/checkout/", json={"kind": "deposit", "returnUrl": "https://x"}
+    )
     assert res.status_code == 401
 
 
