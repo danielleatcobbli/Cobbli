@@ -22,3 +22,23 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local tool state
+.claude/
+supabase/.temp/
+
+# Python (backend/)
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+
+# Vercel local link state (per-account, never commit)
+backend/.vercel/
+
+# Migration runbook stays local — contains user PII
+migration/
+
