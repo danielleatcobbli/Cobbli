@@ -57,7 +57,7 @@ const Checkout = () => {
 
   // Stripe returns user here with ?session_id=...&order_id=...
   const returningSessionId = searchParams.get("session_id");
-  const returningOrderId = searchParams.get("order_id");
+
 
   // ---------- Contact ----------
   const [contactEditing, setContactEditing] = useState(false);
@@ -97,37 +97,76 @@ const Checkout = () => {
   // ---------- Step orchestration ----------
   const [openStep, setOpenStep] = useState<Step>("contact");
   const [placing, setPlacing] = useState(false);
-  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [cartPayload, setCartPayload] = useState<unknown | null>(null);
   const [showStripe, setShowStripe] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
 
   useEffect(() => {
     if (!selectedAddrId && defaultAddrId) setSelectedAddrId(defaultAddrId);
   }, [defaultAddrId, selectedAddrId]);
 
-  // Handle return from Stripe — finalize local order copy + navigate to confirmation.
+  // Handle return from Stripe — poll for the webhook-created order row, then
+  // mirror locally and navigate to the confirmation page.
   useEffect(() => {
-    if (!returningSessionId || !returningOrderId) return;
+    if (!returningSessionId) return;
+    let cancelled = false;
+    setFinalizing(true);
+
     const addr = addresses.find((a) => a.id === selectedAddrId) ?? addresses[0];
-    if (!addr || pairs.length === 0) {
-      // Nothing local to mirror — go directly.
-      navigate(`/order-confirmation/${returningOrderId}`, { replace: true });
-      return;
-    }
-    const order = addOrder({
-      email,
-      phone,
-      address: addr,
-      paymentLast4: "••••",
-      pairs,
-      repairsSubtotal: subtotal,
-      courierFee,
-      subtotal: orderSubtotal,
-    });
-    clear();
-    // Confirmation page reads from local order store; use its id.
-    navigate(`/order-confirmation/${order.id}`, { replace: true });
+
+    const finalize = async () => {
+      // Poll the orders table for up to ~20s — the webhook may lag slightly.
+      let dbOrderId: string | null = null;
+      for (let i = 0; i < 20 && !cancelled; i++) {
+        const { data } = await supabase
+          .from("orders")
+          .select("id")
+          .eq("stripe_session_id", returningSessionId)
+          .maybeSingle();
+        if (data?.id) {
+          dbOrderId = data.id;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      if (cancelled) return;
+
+      if (!dbOrderId) {
+        toast({
+          title: "Still confirming your payment",
+          description:
+            "Your payment was received but we're still finalizing your order. Check your account in a moment.",
+        });
+        navigate("/account/orders", { replace: true });
+        return;
+      }
+
+      if (!addr || pairs.length === 0) {
+        // No local cart to mirror (page was reloaded) — go straight to the DB-backed id.
+        navigate(`/order-confirmation/${dbOrderId}`, { replace: true });
+        return;
+      }
+
+      const order = addOrder({
+        email,
+        phone,
+        address: addr,
+        paymentLast4: "••••",
+        pairs,
+        repairsSubtotal: subtotal,
+        courierFee,
+        subtotal: orderSubtotal,
+      });
+      clear();
+      navigate(`/order-confirmation/${order.id}`, { replace: true });
+    };
+
+    finalize();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [returningSessionId, returningOrderId]);
+  }, [returningSessionId]);
 
   if (pairs.length === 0 && !returningSessionId) return <Navigate to="/bag" replace />;
 
@@ -166,43 +205,25 @@ const Checkout = () => {
     if (!allDone || !selectedAddress || !authUser || placing) return;
     setPlacing(true);
     try {
-      const { data, error } = await supabase
-        .from("orders")
-        .insert({
-          user_id: authUser.id,
-          status: "pending_payment",
-          delivery_method: "door-to-door",
-          delivery_address: (selectedAddress as unknown as never),
-          contact_email: email,
-          contact_phone: phone,
-          payment_method_snapshot: null,
-          repairs_subtotal_cents: subtotal,
-          courier_fee_cents: courierFee,
-          tax_cents: 0,
-          total_cents: orderSubtotal,
-          payment_status: "pending",
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-
-      const itemRows = pairs.flatMap((p) =>
-        p.services.map((s) => ({
-          order_id: data.id,
-          pair_snapshot: p as unknown as never,
-          service_snapshot: {
-            id: s.id,
-            name: s.name,
-          } as unknown as never,
-          price_cents: s.price,
-        })),
-      );
-      if (itemRows.length) {
-        const { error: itemsErr } = await supabase.from("order_items").insert(itemRows);
-        if (itemsErr) throw itemsErr;
-      }
-
-      setPendingOrderId(data.id);
+      // Build the payload that the webhook will use to create the orders row
+      // and order_items rows once Stripe confirms payment. No DB writes happen
+      // here — abandoned checkouts leave nothing behind.
+      const payload = {
+        contact_email: email,
+        contact_phone: phone,
+        delivery_address: selectedAddress,
+        repairs_subtotal_cents: subtotal,
+        courier_fee_cents: courierFee,
+        total_cents: orderSubtotal,
+        items: pairs.flatMap((p) =>
+          p.services.map((s) => ({
+            pair_snapshot: p,
+            service_snapshot: { id: s.id, name: s.name },
+            price_cents: s.price,
+          })),
+        ),
+      };
+      setCartPayload(payload);
       setShowStripe(true);
     } catch (e: any) {
       console.error("place order failed", e);
@@ -215,11 +236,26 @@ const Checkout = () => {
     }
   };
 
-  const returnUrl = pendingOrderId
-    ? `${window.location.origin}/checkout?session_id={CHECKOUT_SESSION_ID}&order_id=${pendingOrderId}`
-    : "";
+  const returnUrl = `${window.location.origin}/checkout?session_id={CHECKOUT_SESSION_ID}`;
 
-  if (showStripe && pendingOrderId) {
+  if (returningSessionId && finalizing) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <Header />
+        <main className="flex-1">
+          <div className="container py-16 text-center">
+            <h1 className="text-2xl font-semibold mb-3">Finalizing your order…</h1>
+            <p className="text-sm text-muted-foreground">
+              Hang tight — we're confirming your payment.
+            </p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (showStripe && cartPayload) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <Header />
@@ -232,8 +268,8 @@ const Checkout = () => {
             </p>
             <div className="rounded-lg border border-border overflow-hidden bg-card">
               <StripeEmbeddedCheckoutPanel
-                kind="order"
-                rowId={pendingOrderId}
+                kind="cart"
+                cartPayload={cartPayload}
                 returnUrl={returnUrl}
               />
             </div>
@@ -243,6 +279,7 @@ const Checkout = () => {
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
