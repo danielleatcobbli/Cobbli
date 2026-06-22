@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/context/AuthContext";
 import {
   PASSWORD_HELPER_TEXT,
@@ -77,13 +76,14 @@ const SignUp = () => {
 
   const handleGoogle = async () => {
     setFormError(null);
-    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
-    if (result.error) {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}${successRedirect}` },
+    });
+    if (error) {
       setFormError("Google sign-in failed. Please try again.");
-      return;
     }
-    if (result.redirected) return;
-    navigate(successRedirect, { replace: true });
+    // On success the browser redirects to Google; nothing else to do here.
   };
 
   const handleSubmit = async (e: FormEvent) => {
