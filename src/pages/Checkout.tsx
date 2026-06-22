@@ -57,7 +57,7 @@ const Checkout = () => {
 
   // Stripe returns user here with ?session_id=...&order_id=...
   const returningSessionId = searchParams.get("session_id");
-  const returningOrderId = searchParams.get("order_id");
+
 
   // ---------- Contact ----------
   const [contactEditing, setContactEditing] = useState(false);
