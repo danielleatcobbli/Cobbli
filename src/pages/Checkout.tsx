@@ -185,6 +185,23 @@ const Checkout = () => {
         .select("id")
         .single();
       if (error) throw error;
+
+      const itemRows = pairs.flatMap((p) =>
+        p.services.map((s) => ({
+          order_id: data.id,
+          pair_snapshot: p as unknown as never,
+          service_snapshot: {
+            id: s.id,
+            name: s.name,
+          } as unknown as never,
+          price_cents: s.price,
+        })),
+      );
+      if (itemRows.length) {
+        const { error: itemsErr } = await supabase.from("order_items").insert(itemRows);
+        if (itemsErr) throw itemsErr;
+      }
+
       setPendingOrderId(data.id);
       setShowStripe(true);
     } catch (e: any) {
