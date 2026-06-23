@@ -4,7 +4,7 @@ Replaces the Supabase Edge Functions with a single FastAPI service deployable to
 
 ## Why a separate backend?
 
-- Supabase Developer-tier access can't reconfigure auth providers; we now own the project (`ajoyprzrzoyxftfkrxgn`).
+- Supabase Developer-tier access can't reconfigure auth providers; we now own the project (`vzyrzhfxdrtgyhpddvlj`).
 - Server-side logic is easier to test, observe, and version with a real Python service.
 - One deploy target (Vercel) — same project as the frontend, but a separate function set.
 

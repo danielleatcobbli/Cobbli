@@ -1,4 +1,4 @@
-project_id = "ajoyprzrzoyxftfkrxgn"
+project_id = "vzyrzhfxdrtgyhpddvlj"
 
 [functions.send-order-confirmation]
 verify_jwt = false
