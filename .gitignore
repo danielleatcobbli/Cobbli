@@ -27,6 +27,11 @@ dist-ssr
 .claude/
 supabase/.temp/
 
+# Per-developer secrets — never commit
+.env.local
+.envrc
+.envrc.local
+
 # Python (backend/)
 backend/.venv/
 backend/__pycache__/
