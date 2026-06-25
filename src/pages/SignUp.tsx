@@ -78,12 +78,11 @@ const SignUp = () => {
     setFormError(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}${successRedirect}` },
+      options: { redirectTo: `${window.location.origin}/signup` },
     });
     if (error) {
       setFormError("Google sign-in failed. Please try again.");
     }
-    // On success the browser redirects to Google; nothing else to do here.
   };
 
   const handleSubmit = async (e: FormEvent) => {
