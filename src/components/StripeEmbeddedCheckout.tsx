@@ -1,6 +1,6 @@
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { getStripe } from "@/lib/stripe";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetchJson } from "@/integrations/api/client";
 
 export type CheckoutKind = "deposit" | "order" | "cart";
 
@@ -20,13 +20,14 @@ export function StripeEmbeddedCheckoutPanel({
   returnUrl,
 }: StripeEmbeddedCheckoutProps) {
   const fetchClientSecret = async (): Promise<string> => {
-    const { data, error } = await supabase.functions.invoke("create-checkout", {
-      body: { kind, rowId, cartPayload, returnUrl },
+    const data = await apiFetchJson<{ clientSecret?: string }>("/checkout/", {
+      method: "POST",
+      body: JSON.stringify({ kind, rowId, cartPayload, returnUrl }),
     });
-    if (error || !data?.clientSecret) {
-      throw new Error(error?.message || "Failed to create checkout session");
+    if (!data?.clientSecret) {
+      throw new Error("Failed to create checkout session");
     }
-    return data.clientSecret as string;
+    return data.clientSecret;
   };
 
   return (

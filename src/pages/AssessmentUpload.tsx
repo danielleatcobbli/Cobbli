@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetchJson } from "@/integrations/api/client";
 import { toast } from "@/hooks/use-toast";
 import { useAssessment } from "@/context/AssessmentContext";
 
@@ -202,10 +203,10 @@ const AssessmentUpload = () => {
         setUploads(photoPaths, videoPaths);
 
         try {
-          const { data, error: fnErr } = await supabase.functions.invoke("analyze-shoe-photos", {
-            body: { photoPaths },
-          });
-          if (fnErr) throw fnErr;
+          const data = await apiFetchJson<{ shoeType?: string | null; colors?: string[]; brand?: string | null }>(
+            "/analyze-shoe-photos/",
+            { method: "POST", body: JSON.stringify({ photoPaths }) },
+          );
           setAiPrefill({
             shoeType: data?.shoeType ?? null,
             colors: Array.isArray(data?.colors) ? data.colors : [],

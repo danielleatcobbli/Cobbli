@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetchJson } from "@/integrations/api/client";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { toast } from "@/hooks/use-toast";
 import { Copy, Link2 } from "lucide-react";
@@ -222,17 +223,18 @@ const Admin = () => {
       toast({ title: "Could not update", description: e.message, variant: "destructive" });
       return;
     }
-    const { error: fnErr } = await supabase.functions.invoke("send-service-unavailable", {
-      body: { assessment_id: row.id },
-    });
-    if (fnErr) {
+    try {
+      await apiFetchJson("/email/service-unavailable", {
+        method: "POST",
+        body: JSON.stringify({ assessment_id: row.id }),
+      });
+      toast({ title: "Marked as service unavailable", description: "Customer has been notified." });
+    } catch (fnErr) {
       toast({
         title: "Status updated, notification failed",
-        description: fnErr.message,
+        description: fnErr instanceof Error ? fnErr.message : "Notification failed",
         variant: "destructive",
       });
-    } else {
-      toast({ title: "Marked as service unavailable", description: "Customer has been notified." });
     }
     fetchRows(tab);
   };
