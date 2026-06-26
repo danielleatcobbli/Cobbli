@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetchJson } from "@/integrations/api/client";
 import { toast } from "@/hooks/use-toast";
 import { SHOE_TYPES, type ShoeType } from "@/types/service";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
@@ -89,11 +90,10 @@ const AddPairModal = ({
     if (paths.length === 0) return;
     setAnalyzing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-shoe-photos", {
-        body: { photoPaths: paths, bucket: "pair-photos" },
-      });
-      if (error) throw error;
-      const result = data as { shoeType: string | null; colors: string[]; brand: string | null };
+      const result = await apiFetchJson<{ shoeType: string | null; colors: string[]; brand: string | null }>(
+        "/analyze-shoe-photos/",
+        { method: "POST", body: JSON.stringify({ photoPaths: paths, bucket: "pair-photos" }) },
+      );
       setShoeType((prev) => {
         if (userEdited.shoeType || prev) return prev;
         return result?.shoeType && SHOE_TYPES.includes(result.shoeType as ShoeType)

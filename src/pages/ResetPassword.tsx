@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/integrations/api/client";
 import {
   PASSWORD_HELPER_TEXT,
   validatePassword,
@@ -256,7 +257,7 @@ const ResetPassword = () => {
       }
       // Send password-updated confirmation email (best-effort; don't block on failure)
       try {
-        await supabase.functions.invoke("send-password-updated");
+        await apiFetch("/email/password-updated", { method: "POST" });
       } catch (e) {
         console.warn("send-password-updated invocation failed", e);
       }
