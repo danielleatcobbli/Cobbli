@@ -25,6 +25,7 @@ import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import { useBag, type BagService } from "@/context/BagContext";
+import { trackEvent } from "@/lib/analytics";
 
 const ALL = "All services" as const;
 const sidebarCategories = [ALL, ...CATEGORIES_ORDERED];
@@ -123,6 +124,7 @@ const SelectServices = () => {
 
   const onAddRepairToBag = () => {
     if (!canCheckout) return;
+    trackEvent("repair_added_to_bag");
     const bagServices: BagService[] = selectedServices.map((s) => ({
       id: s.slug,
       name: s.name,
@@ -226,7 +228,7 @@ const SelectServices = () => {
                       s={s}
                       shoeType={pair.shoeType}
                       selected={selectedServiceSlugs.includes(s.slug)}
-                      onAdd={() => addService(s.slug)}
+                      onAdd={() => { trackEvent("service_added"); addService(s.slug); }}
                     />
                   ))}
                 </div>

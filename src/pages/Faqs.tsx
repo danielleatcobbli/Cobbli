@@ -4,9 +4,14 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { Plus, Minus } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
+import { trackEvent } from "@/lib/analytics";
 
 const Email = () => (
-  <a href="mailto:support@cobbli.com" className="underline underline-offset-4">
+  <a
+    href="mailto:support@cobbli.com"
+    className="underline underline-offset-4"
+    onClick={() => trackEvent("consultation_email_clicked")}
+  >
     support@cobbli.com
   </a>
 );

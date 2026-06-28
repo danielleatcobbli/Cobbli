@@ -30,6 +30,7 @@ import { SHOE_TYPES, type ShoeType } from "@/types/service";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import { useBag } from "@/context/BagContext";
+import { trackEvent } from "@/lib/analytics";
 
 const COLORS = [
   "Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
@@ -398,6 +399,7 @@ const StartRepair = () => {
 
   const onConfirm = () => {
     if (!selectedPairId) return;
+    trackEvent("pair_confirmed");
     const existing = findByPairId(selectedPairId);
     setSelectedServiceSlugs(existing ? existing.services.map((s) => s.id) : []);
     navigate("/start-repair/services");

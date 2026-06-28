@@ -4,6 +4,7 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/context/AuthContext";
+import { trackEvent } from "@/lib/analytics";
 
 const PathCard = ({
   icon: Icon,
@@ -49,6 +50,7 @@ const StartRepair = () => {
   });
 
   const go = (to: string) => {
+    trackEvent("start_repair");
     if (user) {
       navigate(to);
     } else {

@@ -16,6 +16,7 @@ import {
   validatePassword,
   mapSupabasePasswordError,
 } from "@/lib/passwordValidation";
+import { trackEvent } from "@/lib/analytics";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -157,6 +158,7 @@ const SignUp = () => {
         setConfirmEmailSent(true);
         return;
       }
+      trackEvent("account_created");
       navigate(successRedirect, { replace: true });
     } finally {
       setSubmitting(false);

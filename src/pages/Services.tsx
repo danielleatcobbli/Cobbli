@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 import Header from "@/components/cobbli/Header";
@@ -73,7 +74,7 @@ const Services = () => {
           ) : isError ? (
             <p className="text-muted-foreground py-10">
               We couldn't load services right now. Please refresh, or{" "}
-              <a href="mailto:support@cobbli.com" className="underline text-primary">
+              <a href="mailto:support@cobbli.com" className="underline text-primary" onClick={() => trackEvent("consultation_email_clicked")}>
                 support@cobbli.com
               </a>{" "}
               if it keeps happening.
@@ -87,6 +88,7 @@ const Services = () => {
               <a
                 href="mailto:support@cobbli.com"
                 className="underline text-primary"
+                onClick={() => trackEvent("consultation_email_clicked")}
               >
                 support@cobbli.com
               </a>

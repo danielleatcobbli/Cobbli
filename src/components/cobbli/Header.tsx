@@ -5,6 +5,7 @@ import logo from "@/assets/logo-cobbli.svg";
 import accountIcon from "@/assets/icons/account.svg";
 import bagIcon from "@/assets/icons/bag.svg";
 import { useBag } from "@/context/BagContext";
+import { trackEvent } from "@/lib/analytics";
 
 const navLinks = [
   { label: "Start a Repair", to: "/start-repair" },
@@ -40,7 +41,10 @@ const Header = () => {
             <Link
               key={l.label}
               to={l.to}
-              onClick={l.label === "How It Works" ? handleHowItWorksClick : undefined}
+              onClick={(e) => {
+                if (l.label === "How It Works") handleHowItWorksClick(e);
+                if (l.label === "Start a Repair") trackEvent("start_repair");
+              }}
               className="opacity-90 hover:opacity-100 transition-opacity"
             >
               {l.label}
@@ -77,6 +81,7 @@ const Header = () => {
                 to={l.to}
                 onClick={(e) => {
                   if (l.label === "How It Works") handleHowItWorksClick(e);
+                  if (l.label === "Start a Repair") trackEvent("start_repair");
                   setOpen(false);
                 }}
                 className="py-1 opacity-90"

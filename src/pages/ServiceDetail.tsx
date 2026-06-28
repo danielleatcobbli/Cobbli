@@ -17,6 +17,7 @@ import {
 import { useService } from "@/hooks/useServices";
 import { usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
+import { trackEvent } from "@/lib/analytics";
 
 type Mode = "flow" | "standalone";
 
@@ -57,6 +58,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
 
   const onAdd = () => {
     if (alreadyAdded) return;
+    trackEvent("service_added");
     addService(service.slug);
     navigate("/start-repair/services");
   };
