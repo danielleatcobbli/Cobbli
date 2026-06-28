@@ -28,6 +28,7 @@ import { isServiceableZip } from "@/data/serviceAreas";
 import { cn } from "@/lib/utils";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { StripeEmbeddedCheckoutPanel } from "@/components/StripeEmbeddedCheckout";
+import { trackEvent } from "@/lib/analytics";
 
 const FREE_COURIER_THRESHOLD = 10000;
 const COURIER_FEE = 1500;
@@ -117,14 +118,16 @@ const Checkout = () => {
     const finalize = async () => {
       // Poll the orders table for up to ~20s — the webhook may lag slightly.
       let dbOrderId: string | null = null;
+      let dbTotalCents: number | null = null;
       for (let i = 0; i < 20 && !cancelled; i++) {
         const { data } = await supabase
           .from("orders")
-          .select("id")
+          .select("id, total_cents")
           .eq("stripe_session_id", returningSessionId)
           .maybeSingle();
         if (data?.id) {
           dbOrderId = data.id;
+          dbTotalCents = data.total_cents ?? null;
           break;
         }
         await new Promise((r) => setTimeout(r, 1000));
@@ -141,8 +144,12 @@ const Checkout = () => {
         return;
       }
 
+      //Value of the order in dollars
+      const orderValue = dbTotalCents != null ? dbTotalCents / 100 : undefined;
+
       if (!addr || pairs.length === 0) {
         // No local cart to mirror (page was reloaded) — go straight to the DB-backed id.
+        trackEvent("order_placed", { transaction_id: dbOrderId, value: orderValue, currency: "USD" });
         navigate(`/order-confirmation/${dbOrderId}`, { replace: true });
         return;
       }
@@ -158,6 +165,7 @@ const Checkout = () => {
         subtotal: orderSubtotal,
       });
       clear();
+      trackEvent("order_placed", { transaction_id: dbOrderId, value: orderValue, currency: "USD" });
       navigate(`/order-confirmation/${order.id}`, { replace: true });
     };
 

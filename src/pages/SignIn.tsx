@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
+import { trackEvent } from "@/lib/analytics";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -99,6 +100,7 @@ const SignIn = () => {
         }
         return;
       }
+      trackEvent("sign_in");
       navigate(successRedirect, { replace: true });
     } finally {
       setSubmitting(false);

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useNavigate } from "react-router-dom";
+import { trackEvent } from "@/lib/analytics";
 import { Pencil, Trash2 } from "lucide-react";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import Header from "@/components/cobbli/Header";
@@ -45,6 +46,7 @@ const Bag = () => {
   const orderSubtotal = repairsTotal + courierFee;
 
   const handleCheckout = () => {
+    trackEvent("checkout_started");
     const signedIn = typeof window !== "undefined" && localStorage.getItem("cobbli:signed-in") === "1";
     navigate(signedIn ? "/checkout" : "/signin", {
       state: signedIn ? undefined : { from: "/checkout" },
@@ -196,7 +198,7 @@ const EmptyBag = () => (
       You haven't added any repairs yet. Start a repair to get your shoes looking their best.
     </p>
     <Button asChild variant="hero" size="lg">
-      <Link to="/start-repair">Start a repair</Link>
+      <Link to="/start-repair" onClick={() => trackEvent("start_repair")}>Start a repair</Link>
     </Button>
   </div>
 );
