@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
 import { apiFetch } from "@/integrations/api/client";
+import { extractEmailParam, resolveInitialEmail } from "@/lib/resetEmail";
 import {
   PASSWORD_HELPER_TEXT,
   validatePassword,
@@ -83,10 +84,23 @@ const meta: Record<Step, { title: string; description: string }> = {
 
 const ResetPassword = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [step, setStep] = useState<Step>("checking");
 
-  const [email, setEmail] = useState("");
+  // Pre-populate the email from the lockout / "Forgot password?" hand-off
+  // (router state) or from an expired-link bounce (?email=...). Falls back to
+  // empty so the field is never blocked. Stays editable.
+  const initialEmail = useMemo(() => {
+    const stateEmail = (location.state as { prefillEmail?: string } | null)?.prefillEmail ?? null;
+    const urlEmail =
+      typeof window === "undefined"
+        ? null
+        : extractEmailParam(window.location.search, window.location.hash);
+    return resolveInitialEmail({ stateEmail, urlEmail });
+  }, [location.state]);
+
+  const [email, setEmail] = useState(initialEmail);
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -111,7 +125,7 @@ const ResetPassword = () => {
 
       // Supabase redirects expired/invalid recovery links back with error params.
       if (errorCode === "otp_expired" || errorParam === "access_denied") {
-        navigate("/link-expired", { replace: true });
+        navigate("/link-expired", { replace: true, state: { prefillEmail: initialEmail } });
         return;
       }
 
@@ -120,7 +134,7 @@ const ResetPassword = () => {
         if (!mounted) return;
         if (error) {
           if (isExpiredAuthError(error.message)) {
-            navigate("/link-expired", { replace: true });
+            navigate("/link-expired", { replace: true, state: { prefillEmail: initialEmail } });
             return;
           }
           setPwdError(error.message);
@@ -135,7 +149,7 @@ const ResetPassword = () => {
         if (!mounted) return;
         if (error) {
           if (isExpiredAuthError(error.message)) {
-            navigate("/link-expired", { replace: true });
+            navigate("/link-expired", { replace: true, state: { prefillEmail: initialEmail } });
             return;
           }
           setPwdError(error.message);
@@ -198,9 +212,11 @@ const ResetPassword = () => {
   const emailValid = useMemo(() => emailRegex.test(email.trim()), [email]);
 
   const sendReset = async (target: string) => {
-    return supabase.auth.resetPasswordForEmail(target, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
+    // Carry the email on the redirect so that if the link later expires,
+    // Supabase bounces back to /reset-password?...&email=<target> and we can
+    // re-populate the field on the "request a new link" screen.
+    const redirectTo = `${window.location.origin}/reset-password?email=${encodeURIComponent(target)}`;
+    return supabase.auth.resetPasswordForEmail(target, { redirectTo });
   };
 
   const handleRequest = async (e: FormEvent) => {
