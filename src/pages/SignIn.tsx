@@ -144,7 +144,7 @@ const SignIn = () => {
                 password to regain access.
               </p>
               <Button asChild variant="hero" size="lg" className="w-full">
-                <Link to="/reset-password">Reset Password</Link>
+                <Link to="/reset-password" state={{ prefillEmail: email.trim() }}>Reset Password</Link>
               </Button>
             </section>
           ) : (
@@ -201,7 +201,7 @@ const SignIn = () => {
                   </div>
                   {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
                   <div className="flex justify-end">
-                    <Link to="/reset-password" className="text-sm text-primary hover:underline">
+                    <Link to="/reset-password" state={{ prefillEmail: email.trim() }} className="text-sm text-primary hover:underline">
                       Forgot password?
                     </Link>
                   </div>
