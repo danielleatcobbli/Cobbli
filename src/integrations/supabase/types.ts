@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       addresses: {
@@ -366,6 +391,30 @@ export type Database = {
         }
         Relationships: []
       }
+      service_areas: {
+        Row: {
+          created_at: string
+          is_active: boolean
+          label: string | null
+          updated_at: string
+          zip: string
+        }
+        Insert: {
+          created_at?: string
+          is_active?: boolean
+          label?: string | null
+          updated_at?: string
+          zip: string
+        }
+        Update: {
+          created_at?: string
+          is_active?: boolean
+          label?: string | null
+          updated_at?: string
+          zip?: string
+        }
+        Relationships: []
+      }
       service_pricing: {
         Row: {
           id: string
@@ -534,7 +583,7 @@ export type Database = {
       reset_failed_attempts: { Args: { _user_id: string }; Returns: undefined }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "owner"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -660,9 +709,12 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "owner"],
     },
   },
 } as const

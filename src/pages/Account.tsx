@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { US_STATES } from "@/context/AccountContext";
-import { isServiceableZip } from "@/data/serviceAreas";
+import { useServiceableZips } from "@/hooks/useServiceableZips";
 import { cn } from "@/lib/utils";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
@@ -564,13 +564,16 @@ const AddAddress = () => {
     makeDefault: false,
   });
   const [submitting, setSubmitting] = useState(false);
-  const zipInvalid = form.zip.length === 5 && !isServiceableZip(form.zip);
+  const { isServiceable } = useServiceableZips();
+  // Flag invalid only on a definitive false (never while loading), and require
+  // an explicit true for `valid` so submit waits for confirmed coverage.
+  const zipInvalid = form.zip.length === 5 && isServiceable(form.zip) === false;
   const valid =
     form.street.trim() &&
     form.city.trim() &&
     form.state &&
     /^\d{5}$/.test(form.zip) &&
-    isServiceableZip(form.zip);
+    isServiceable(form.zip) === true;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
