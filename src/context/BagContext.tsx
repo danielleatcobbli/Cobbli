@@ -1,4 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  decideBagAction,
+  readGuestEmail,
+  clearGuestEmail,
+  readLastUserId,
+  writeLastUserId,
+} from "@/lib/bagOwnership";
 
 export type BagService = {
   id: string;
@@ -64,6 +72,33 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
       /* ignore quota errors */
     }
   }, [pairs]);
+
+  // Protect against cross-user bag leakage on a shared device. When a user
+  // signs in, decide whether the current device-local bag belongs to them.
+  // Only SIGNED_IN is considered a real login — TOKEN_REFRESHED / INITIAL_SESSION
+  // fire on tab focus and reload for the SAME user and must not wipe their bag.
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event !== "SIGNED_IN" || !s?.user) return;
+
+      const newUserId = s.user.id;
+      const action = decideBagAction({
+        previousUserId: readLastUserId(),
+        newUserId,
+        newUserEmail: s.user.email,
+        guestEmail: readGuestEmail(),
+      });
+
+      if (action === "clear") setPairs([]);
+
+      // The guest email is single-use: once a sign-in has consumed it (whether
+      // it triggered a migration or not), drop it so it can't affect a later user.
+      clearGuestEmail();
+      writeLastUserId(newUserId);
+    });
+
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   const addPair: BagState["addPair"] = useCallback((services, pairId) => {
     setPairs((prev) => {
