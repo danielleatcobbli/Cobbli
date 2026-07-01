@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { apiFetchJson } from "@/integrations/api/client";
 import { toast } from "@/hooks/use-toast";
 import { useAssessment } from "@/context/AssessmentContext";
+import { createPreviewUrl } from "@/lib/heicPreview";
 
 const MAX_FILES = 10;
 const MAX_SIZE = 50 * 1024 * 1024;
@@ -85,6 +86,7 @@ const AssessmentUpload = () => {
   const { setUploads, setAiPrefill, reset, setAiLoading } = useAssessment();
   const [files, setFiles] = useState<Picked[]>([]);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadMapRef = useRef<Map<File, UploadEntry>>(new Map());
   const sessionTsRef = useRef<string>("");
@@ -92,14 +94,8 @@ const AssessmentUpload = () => {
   usePageMeta({
     title: "Show us your shoes — Cobbli",
     description:
-      "Upload photos or a short video of your shoes and Cobbli's cobblers will recommend the right repairs.",
+"Upload photos or a short video of your shoes and Cobbli's cobblers will recommend the right repairs.",
   });
-
-  useEffect(() => {
-    if (!loading && !user) {
-      navigate("/signin", { state: { from: "/start-repair/assessment" } });
-    }
-  }, [loading, user, navigate]);
 
   useEffect(() => {
     return () => files.forEach((f) => URL.revokeObjectURL(f.preview));
@@ -107,11 +103,11 @@ const AssessmentUpload = () => {
   }, []);
 
   const startUpload = (picked: Picked): Promise<string> => {
-    if (!user) return Promise.reject(new Error("not signed in"));
     if (!sessionTsRef.current) sessionTsRef.current = Date.now().toString();
     const ts = sessionTsRef.current;
     const ext = (picked.file.name.split(".").pop() || (picked.kind === "image" ? "jpg" : "mp4")).toLowerCase();
-    const path = `${user.id}/${ts}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const folder = user ? user.id : `guest/${ts}`;
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     return supabase.storage
       .from("assessment-uploads")
       .upload(path, picked.file, { contentType: picked.file.type || undefined, upsert: false })
@@ -136,7 +132,25 @@ const AssessmentUpload = () => {
         toast({ title: "File too large", description: `${f.name} exceeds 50MB.`, variant: "destructive" });
         continue;
       }
-      accepted.push({ file: f, preview: URL.createObjectURL(f), kind: image ? "image" : "video" });
+      const picked: Picked = { file: f, preview: URL.createObjectURL(f), kind: image ? "image" : "video" };
+      accepted.push(picked);
+      const name = f.name.toLowerCase();
+      const isHeic =
+        f.type === "image/heic" ||
+        f.type === "image/heif" ||
+        name.endsWith(".heic") ||
+        name.endsWith(".heif");
+      if (image && isHeic) {
+        createPreviewUrl(f).then((url) => {
+          setFiles((curr) =>
+            curr.map((p) => {
+              if (p.file !== f) return p;
+              URL.revokeObjectURL(p.preview);
+              return { ...p, preview: url };
+            }),
+          );
+        });
+      }
     }
     setFiles((prev) => {
       const remaining = MAX_FILES - prev.length;
@@ -182,7 +196,7 @@ const AssessmentUpload = () => {
     });
 
   const onNext = () => {
-    if (!user || files.length === 0 || busy) return;
+    if (files.length === 0 || busy) return;
     setBusy(true);
     reset();
     setAiLoading(true);
@@ -255,14 +269,34 @@ const AssessmentUpload = () => {
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="mt-8 w-full rounded-xl border-2 border-dashed border-border p-8 text-center hover:border-primary/60 hover:bg-secondary/40 transition-colors"
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOver(false);
+              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                onPick(e.dataTransfer.files);
+              }
+            }}
+            className={`mt-8 w-full rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
+              dragOver
+                ? "border-primary bg-secondary/60"
+                : "border-border hover:border-primary/60 hover:bg-secondary/40"
+            }`}
           >
             <Plus className="mx-auto mb-2" />
-            <p className="font-medium text-primary">Upload photos or a video</p>
+            <p className="font-medium text-primary">
+              {dragOver ? "Drop files to upload" : "Upload photos or a short video of your shoes"}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
               JPG, PNG, HEIC, MP4, MOV · up to {MAX_FILES} files · 50MB max each
             </p>
           </button>
+          <p className="mt-2 text-sm italic text-muted-foreground">
+            We'll use your photo or video to fill in as many shoe details as we can
+          </p>
 
           {files.length > 0 && (
             <div className="mt-5 grid grid-cols-3 sm:grid-cols-4 gap-3">

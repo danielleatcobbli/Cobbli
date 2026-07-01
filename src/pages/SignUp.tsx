@@ -10,13 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/context/AuthContext";
 import {
   PASSWORD_HELPER_TEXT,
   validatePassword,
   mapSupabasePasswordError,
 } from "@/lib/passwordValidation";
-import { trackEvent } from "@/lib/analytics";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -77,13 +77,13 @@ const SignUp = () => {
 
   const handleGoogle = async () => {
     setFormError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/signup` },
-    });
-    if (error) {
+    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+    if (result.error) {
       setFormError("Google sign-in failed. Please try again.");
+      return;
     }
+    if (result.redirected) return;
+    navigate(successRedirect, { replace: true });
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -158,7 +158,6 @@ const SignUp = () => {
         setConfirmEmailSent(true);
         return;
       }
-      trackEvent("account_created");
       navigate(successRedirect, { replace: true });
     } finally {
       setSubmitting(false);

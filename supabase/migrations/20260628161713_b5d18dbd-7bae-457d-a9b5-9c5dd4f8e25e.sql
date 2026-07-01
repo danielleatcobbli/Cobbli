@@ -1,0 +1,1 @@
+UPDATE services SET full_description = 'We repair any damage or stains, condition your shoes, and, with your approval, apply professional dye color-matched to your shoes to achieve a like-new appearance.' WHERE slug = 'color-restoration';

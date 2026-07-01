@@ -1,6 +1,5 @@
-import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -24,6 +23,9 @@ import AssessmentDeposit from "./pages/AssessmentDeposit";
 import AssessmentConfirmation from "./pages/AssessmentConfirmation";
 import AssessmentProposal from "./pages/AssessmentProposal";
 import Admin from "./pages/Admin";
+import AdminBlog from "./pages/AdminBlog";
+import Blog from "./pages/Blog";
+import BlogPost from "./pages/BlogPost";
 import SelectServices from "./pages/SelectServices";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
@@ -43,18 +45,6 @@ import AdminRoute from "./components/AdminRoute";
 
 const queryClient = new QueryClient();
 
-const PageTracker = () => {
-  const location = useLocation();
-  useEffect(() => {
-    if (typeof window.gtag !== "function") return;
-    window.gtag("event", "page_view", {
-      page_path: location.pathname + location.search,
-      page_title: document.title,
-    });
-  }, [location]);
-  return null;
-};
-
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
@@ -62,7 +52,6 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <PageTracker />
           <AuthProvider>
             <AccountProvider>
               <BagProvider>
@@ -80,39 +69,11 @@ const App = () => (
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/link-expired" element={<LinkExpired />} />
                         <Route path="/start-repair" element={<StartRepair />} />
-                        <Route path="/start-repair/pick" element={<ProtectedRoute><StartRepairPick /></ProtectedRoute>} />
-                        <Route
-                          path="/start-repair/assessment"
-                          element={
-                            <ProtectedRoute>
-                              <AssessmentUpload />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="/start-repair/assessment/details"
-                          element={
-                            <ProtectedRoute>
-                              <AssessmentDetails />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="/start-repair/assessment/deposit"
-                          element={
-                            <ProtectedRoute>
-                              <AssessmentDeposit />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="/start-repair/assessment/confirmation"
-                          element={
-                            <ProtectedRoute>
-                              <AssessmentConfirmation />
-                            </ProtectedRoute>
-                          }
-                        />
+                        <Route path="/start-repair/pick" element={<StartRepairPick />} />
+                        <Route path="/start-repair/assessment" element={<AssessmentUpload />} />
+                        <Route path="/start-repair/assessment/details" element={<AssessmentDetails />} />
+                        <Route path="/start-repair/assessment/deposit" element={<AssessmentDeposit />} />
+                        <Route path="/start-repair/assessment/confirmation" element={<AssessmentConfirmation />} />
                         <Route
                           path="/start-repair/assessment/proposal/:id"
                           element={
@@ -132,16 +93,28 @@ const App = () => (
                         <Route path="/start-repair/services" element={<SelectServices />} />
                         <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
                         <Route path="/services" element={<Services />} />
+                        <Route path="/services/zipper-reattachment" element={<Navigate to="/services#zipper" replace />} />
+                        <Route path="/start-repair/services/zipper-reattachment" element={<Navigate to="/start-repair/services" replace />} />
                         <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
                         <Route path="/bag" element={<Bag />} />
                         <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
                         <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
                         <Route path="/faqs" element={<Faqs />} />
+                        <Route path="/blog" element={<Blog />} />
+                        <Route path="/blog/:slug" element={<BlogPost />} />
                         <Route
                           path="/admin"
                           element={
                             <AdminRoute>
                               <Admin />
+                            </AdminRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin/blog"
+                          element={
+                            <AdminRoute>
+                              <AdminBlog />
                             </AdminRoute>
                           }
                         />

@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
+import { saveReturnTo } from "@/lib/authRedirect";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -14,9 +15,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
   if (!user) {
-    return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
+    const fullPath = `${location.pathname}${location.search}${location.hash}`;
+    saveReturnTo(fullPath);
+    return <Navigate to="/signin" replace state={{ from: fullPath }} />;
   }
   return <>{children}</>;
 };
 
 export default ProtectedRoute;
+

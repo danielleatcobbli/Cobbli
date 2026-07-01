@@ -26,7 +26,7 @@ const CookiePolicy = () => {
       <Header />
       <main
         className="flex-1 px-6 py-12 md:py-16"
-        style={{ fontFamily: "'DM Sans', sans-serif" }}
+        style={{ fontFamily: "'Albert Sans', sans-serif" }}
       >
         <article className="max-w-3xl mx-auto text-left">
           <h1 className="text-3xl md:text-4xl font-semibold" style={{ color: "#3d1700" }}>

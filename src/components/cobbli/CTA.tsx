@@ -5,7 +5,7 @@ const CTA = () => {
     <section className="py-16 md:py-20 bg-gradient-warm text-primary-foreground">
       <div className="container flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="max-w-xl">
-          <h2 className="text-3xl md:text-4xl font-display font-600 text-balance">
+          <h2 className="text-3xl md:text-4xl text-balance">
             Ready to give your shoes a second life?
           </h2>
           <p className="mt-3 text-primary-foreground/80">
