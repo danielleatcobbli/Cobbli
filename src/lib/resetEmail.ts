@@ -43,3 +43,15 @@ export const resolveInitialEmail = ({
   urlEmail,
 }: ResolveInitialEmailInput): string =>
   normalize(stateEmail) ?? normalize(urlEmail) ?? "";
+
+/**
+ * Builds the password-reset redirect URL, carrying the email as a query param
+ * so an expired-link bounce can re-populate the request form. Shared by the
+ * sign-in lockout flow and the reset-request form so both stay in sync.
+ * Omits the param entirely when no email is supplied.
+ */
+export const buildResetRedirect = (origin: string, email: string): string => {
+  const base = `${origin}/reset-password`;
+  const trimmed = email.trim();
+  return trimmed ? `${base}?email=${encodeURIComponent(trimmed)}` : base;
+};

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
 import { apiFetch } from "@/integrations/api/client";
-import { extractEmailParam, resolveInitialEmail } from "@/lib/resetEmail";
+import { extractEmailParam, resolveInitialEmail, buildResetRedirect } from "@/lib/resetEmail";
 import {
   PASSWORD_HELPER_TEXT,
   validatePassword,
@@ -215,8 +215,9 @@ const ResetPassword = () => {
     // Carry the email on the redirect so that if the link later expires,
     // Supabase bounces back to /reset-password?...&email=<target> and we can
     // re-populate the field on the "request a new link" screen.
-    const redirectTo = `${window.location.origin}/reset-password?email=${encodeURIComponent(target)}`;
-    return supabase.auth.resetPasswordForEmail(target, { redirectTo });
+    return supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: buildResetRedirect(window.location.origin, target),
+    });
   };
 
   const handleRequest = async (e: FormEvent) => {
