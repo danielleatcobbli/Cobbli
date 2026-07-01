@@ -25,13 +25,12 @@ import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useServiceableZips } from "@/hooks/useServiceableZips";
+import { usePricingConfig } from "@/hooks/usePricingConfig";
 import { cn } from "@/lib/utils";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { StripeEmbeddedCheckoutPanel } from "@/components/StripeEmbeddedCheckout";
 import { trackEvent } from "@/lib/analytics";
 
-const FREE_COURIER_THRESHOLD = 10000;
-const COURIER_FEE = 1500;
 type Step = "contact" | "address" | "payment";
 
 const Checkout = () => {
@@ -39,6 +38,7 @@ const Checkout = () => {
   const [searchParams] = useSearchParams();
   const { user: authUser } = useAuth();
   const { isServiceable } = useServiceableZips();
+  const pricing = usePricingConfig();
   const { pairs, subtotal, clear } = useBag();
   const {
     user,
@@ -54,7 +54,7 @@ const Checkout = () => {
       "Complete your Cobbli shoe repair order: confirm contact information, delivery address and payment for door-to-door pickup and return across NYC.",
   });
 
-  const courierFee = subtotal >= FREE_COURIER_THRESHOLD ? 0 : COURIER_FEE;
+  const courierFee = subtotal >= pricing.fee("free_courier_threshold_cents") ? 0 : pricing.fee("courier_fee_cents");
   const orderSubtotal = subtotal + courierFee;
 
   // Stripe returns user here with ?session_id=...&order_id=...
