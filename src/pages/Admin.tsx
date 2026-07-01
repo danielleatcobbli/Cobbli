@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
+import { displayBrand } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -267,7 +268,7 @@ const Admin = () => {
             <p className="text-destructive">{error}</p>
           ) : rows.length === 0 ? (
             <div className="rounded-lg border border-border p-10 text-center">
-              <p className="font-display text-xl text-primary mb-1">
+              <p className="text-xl text-primary mb-1">
                 No {STATUS_TABS.find((t) => t.id === tab)?.label.toLowerCase()} assessments
               </p>
               <p className="text-muted-foreground">
@@ -297,7 +298,7 @@ const Admin = () => {
                   {rows.map((r) => {
                     const name = [r.profile?.first_name, r.profile?.last_name].filter(Boolean).join(" ") || "—";
                     const first = r.pairs?.[0];
-                    const id = [first?.colors?.join(" / "), first?.brand, first?.shoeType].filter(Boolean).join(" · ") || "—";
+                    const id = [first?.colors?.join(" / "), displayBrand(first?.brand), first?.shoeType].filter(Boolean).join(" · ") || "—";
                     return (
                       <tr key={r.id} className="border-t border-border">
                         <td className="p-3">{name}</td>

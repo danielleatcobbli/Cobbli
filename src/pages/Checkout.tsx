@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { Check, ChevronDown, Pencil, Lock } from "lucide-react";
+import { Check, ChevronDown, Pencil, Lock, MessageSquare } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useBag, formatPrice } from "@/context/BagContext";
+import { useLivePricedBag } from "@/hooks/useLivePricedBag";
 import {
   useAccount,
   US_STATES,
@@ -28,7 +29,6 @@ import { isServiceableZip } from "@/data/serviceAreas";
 import { cn } from "@/lib/utils";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { StripeEmbeddedCheckoutPanel } from "@/components/StripeEmbeddedCheckout";
-import { trackEvent } from "@/lib/analytics";
 
 const FREE_COURIER_THRESHOLD = 10000;
 const COURIER_FEE = 1500;
@@ -38,14 +38,18 @@ const Checkout = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user: authUser } = useAuth();
-  const { pairs, subtotal, clear } = useBag();
+  const { pairs: rawPairs, clear } = useBag();
+  const { pairs, subtotal } = useLivePricedBag(rawPairs);
   const {
     user,
     updateContact,
     addresses,
     addAddress,
+    updateAddress,
+    paymentMethods,
     addOrder,
   } = useAccount();
+
 
   usePageMeta({
     title: "Checkout — Cobbli",
@@ -74,6 +78,7 @@ const Checkout = () => {
   );
   const [selectedAddrId, setSelectedAddrId] = useState<string | null>(defaultAddrId);
   const [addingAddr, setAddingAddr] = useState(addresses.length === 0);
+  const [editingAddrId, setEditingAddrId] = useState<string | null>(null);
   const [addrForm, setAddrForm] = useState({
     street: "",
     street2: "",
@@ -89,11 +94,25 @@ const Checkout = () => {
     addrForm.state &&
     /^\d{5}$/.test(addrForm.zip) &&
     isServiceableZip(addrForm.zip);
-  const addressDone = !addingAddr && !!selectedAddrId;
+  const showAddrForm = addingAddr || editingAddrId !== null;
+  const addressDone = !showAddrForm && !!selectedAddrId;
   const selectedAddress = addresses.find((a) => a.id === selectedAddrId);
 
-  // ---------- Payment (Stripe handles details) ----------
-  const paymentDone = addressDone; // Stripe collects card details
+  // ---------- Payment ----------
+  // If the user has a saved payment method, let them either keep it or
+  // switch to a new card (collected via Stripe on the next step).
+  const defaultPmId = useMemo(
+    () => paymentMethods.find((p) => p.isDefault)?.id ?? paymentMethods[0]?.id ?? null,
+    [paymentMethods],
+  );
+  const [selectedPmId, setSelectedPmId] = useState<string | null>(defaultPmId);
+  const [useNewCard, setUseNewCard] = useState(paymentMethods.length === 0);
+  useEffect(() => {
+    if (!selectedPmId && defaultPmId) setSelectedPmId(defaultPmId);
+    if (paymentMethods.length === 0) setUseNewCard(true);
+  }, [defaultPmId, selectedPmId, paymentMethods.length]);
+  const paymentDone = addressDone && (useNewCard || !!selectedPmId);
+
 
   // ---------- Step orchestration ----------
   const [openStep, setOpenStep] = useState<Step>("contact");
@@ -106,28 +125,33 @@ const Checkout = () => {
     if (!selectedAddrId && defaultAddrId) setSelectedAddrId(defaultAddrId);
   }, [defaultAddrId, selectedAddrId]);
 
-  // Handle return from Stripe — poll for the webhook-created order row, then
-  // mirror locally and navigate to the confirmation page.
+  // Handle return from Stripe — Stripe only sends the user back to return_url
+  // after payment is confirmed, so clear the bag immediately. Then poll the
+  // orders table (populated asynchronously by the webhook) and navigate to
+  // the confirmation page as soon as the row appears.
   useEffect(() => {
     if (!returningSessionId) return;
     let cancelled = false;
     setFinalizing(true);
 
+    // Payment is confirmed at this point — clear the bag right away so the
+    // user never sees a stale cart, even if the webhook lags behind.
+    clear();
+
     const addr = addresses.find((a) => a.id === selectedAddrId) ?? addresses[0];
 
     const finalize = async () => {
-      // Poll the orders table for up to ~20s — the webhook may lag slightly.
+      // Poll for up to ~60s. Keep the user on the Finalizing screen the
+      // whole time rather than bouncing them to an empty My Orders list.
       let dbOrderId: string | null = null;
-      let dbTotalCents: number | null = null;
-      for (let i = 0; i < 20 && !cancelled; i++) {
+      for (let i = 0; i < 60 && !cancelled; i++) {
         const { data } = await supabase
           .from("orders")
-          .select("id, total_cents")
+          .select("id")
           .eq("stripe_session_id", returningSessionId)
           .maybeSingle();
         if (data?.id) {
           dbOrderId = data.id;
-          dbTotalCents = data.total_cents ?? null;
           break;
         }
         await new Promise((r) => setTimeout(r, 1000));
@@ -136,20 +160,15 @@ const Checkout = () => {
 
       if (!dbOrderId) {
         toast({
-          title: "Still confirming your payment",
+          title: "Still finalizing your order",
           description:
-            "Your payment was received but we're still finalizing your order. Check your account in a moment.",
+            "Your payment was received. Your order will appear in My Orders shortly — refresh in a moment if you don't see it.",
         });
         navigate("/account/orders", { replace: true });
         return;
       }
 
-      //Value of the order in dollars
-      const orderValue = dbTotalCents != null ? dbTotalCents / 100 : undefined;
-
       if (!addr || pairs.length === 0) {
-        // No local cart to mirror (page was reloaded) — go straight to the DB-backed id.
-        trackEvent("order_placed", { transaction_id: dbOrderId, value: orderValue, currency: "USD" });
         navigate(`/order-confirmation/${dbOrderId}`, { replace: true });
         return;
       }
@@ -164,8 +183,6 @@ const Checkout = () => {
         courierFee,
         subtotal: orderSubtotal,
       });
-      clear();
-      trackEvent("order_placed", { transaction_id: dbOrderId, value: orderValue, currency: "USD" });
       navigate(`/order-confirmation/${order.id}`, { replace: true });
     };
 
@@ -187,20 +204,52 @@ const Checkout = () => {
     if (openStep === "contact") setOpenStep("address");
   };
 
+  const beginAddAddress = () => {
+    setAddrForm({ street: "", street2: "", city: "", state: "NY", zip: "", makeDefault: false });
+    setEditingAddrId(null);
+    setAddingAddr(true);
+  };
+
+  const beginEditAddress = (a: Address) => {
+    setAddrForm({
+      street: a.street,
+      street2: a.street2 ?? "",
+      city: a.city,
+      state: a.state,
+      zip: a.zip,
+      makeDefault: a.isDefault,
+    });
+    setAddingAddr(false);
+    setEditingAddrId(a.id);
+  };
+
+  const cancelAddressForm = () => {
+    setAddingAddr(false);
+    setEditingAddrId(null);
+  };
+
   const saveAddress = () => {
     if (!addrFormValid) return;
-    const addr = addAddress({
+    const payload = {
       street: addrForm.street.trim(),
       street2: addrForm.street2.trim() || undefined,
       city: addrForm.city.trim(),
       state: addrForm.state,
       zip: addrForm.zip,
       isDefault: addrForm.makeDefault || addresses.length === 0,
-    });
-    setSelectedAddrId(addr.id);
-    setAddingAddr(false);
+    };
+    if (editingAddrId) {
+      const updated = updateAddress(editingAddrId, payload);
+      if (updated) setSelectedAddrId(updated.id);
+      setEditingAddrId(null);
+    } else {
+      const addr = addAddress(payload);
+      setSelectedAddrId(addr.id);
+      setAddingAddr(false);
+    }
     setOpenStep("payment");
   };
+
 
   const continueAddress = () => {
     if (!selectedAddrId) return;
@@ -226,7 +275,11 @@ const Checkout = () => {
         items: pairs.flatMap((p) =>
           p.services.map((s) => ({
             pair_snapshot: p,
-            service_snapshot: { id: s.id, name: s.name },
+            service_snapshot: {
+              id: s.id,
+              name: s.name,
+              ...(s.paintConsent ? { paint_consent: s.paintConsent } : {}),
+            },
             price_cents: s.price,
           })),
         ),
@@ -295,7 +348,18 @@ const Checkout = () => {
       <PaymentTestModeBanner />
       <main className="flex-1">
         <div className="container py-10">
-          <h1 className="text-3xl md:text-4xl font-semibold mb-8">Checkout</h1>
+          <h1 className="text-3xl md:text-4xl font-semibold mb-6">Checkout</h1>
+
+          <div
+            className="rounded-lg p-4 mb-8 flex items-start gap-3"
+            style={{ backgroundColor: "#fff8e7", border: "1px solid #f0d870" }}
+          >
+            <MessageSquare size={18} className="mt-0.5 shrink-0" style={{ color: "#3d1700" }} />
+            <p className="text-sm" style={{ color: "#3d1700" }}>
+              <span className="font-bold" style={{ color: "#3d1700" }}>We'll text you</span>{" "}
+              to schedule your pickup and return windows once your order is placed.
+            </p>
+          </div>
 
           <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
             <div className="space-y-4">
@@ -318,6 +382,9 @@ const Checkout = () => {
                   <div className="space-y-3">
                     <Row label="Email" value={email} />
                     <Row label="Phone" value={phone} />
+                    <p className="text-xs -mt-1.5" style={{ color: "#7a5c40" }}>
+                      We'll text this number to coordinate your pickup and return
+                    </p>
                     <button
                       type="button"
                       onClick={() => setContactEditing(true)}
@@ -338,6 +405,9 @@ const Checkout = () => {
                     </Field>
                     <Field id="phone" label="Phone">
                       <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                      <p className="text-xs mt-1.5" style={{ color: "#7a5c40" }}>
+                        We'll text this number to coordinate your pickup and return
+                      </p>
                     </Field>
                     <Button variant="hero" disabled={!contactValid} onClick={saveContact}>
                       Save &amp; Continue
@@ -349,7 +419,7 @@ const Checkout = () => {
               {/* Step 2: Address */}
               <StepCard
                 index={2}
-                title="Address"
+                title="Where should we get your shoes?"
                 open={openStep === "address"}
                 done={addressDone && openStep !== "address"}
                 onOpen={() => setOpenStep("address")}
@@ -359,7 +429,7 @@ const Checkout = () => {
                   ) : null
                 }
               >
-                {addresses.length > 0 && !addingAddr && (
+                {addresses.length > 0 && !showAddrForm && (
                   <div className="space-y-3">
                     <ul className="space-y-2">
                       {addresses.map((a) => (
@@ -377,18 +447,28 @@ const Checkout = () => {
                               onChange={() => setSelectedAddrId(a.id)}
                               className="mt-1"
                             />
-                            <div className="text-sm">
+                            <div className="flex-1 text-sm">
                               <div className="font-medium">
                                 {formatAddr(a)} {a.isDefault && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
                               </div>
                             </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                beginEditAddress(a);
+                              }}
+                              className="text-sm text-primary underline underline-offset-4 shrink-0"
+                            >
+                              Edit
+                            </button>
                           </label>
                         </li>
                       ))}
                     </ul>
                     <button
                       type="button"
-                      onClick={() => setAddingAddr(true)}
+                      onClick={beginAddAddress}
                       className="text-sm text-primary underline underline-offset-4"
                     >
                       + Add a new address
@@ -401,8 +481,11 @@ const Checkout = () => {
                   </div>
                 )}
 
-                {(addresses.length === 0 || addingAddr) && (
+                {showAddrForm && (
                   <div className="space-y-4">
+                    {editingAddrId && (
+                      <p className="text-sm text-muted-foreground">Edit this address</p>
+                    )}
                     <Field id="street" label="Street Address">
                       <Input
                         id="street"
@@ -452,7 +535,7 @@ const Checkout = () => {
                         {zipInvalid && (
                           <p className="text-xs text-destructive mt-1">
                             We don't currently deliver to {addrForm.zip}.{" "}
-                            <Link to="/faqs" className="underline">See our full service area</Link>.
+                            <Link to="/faqs" className="underline">See our service areas and request a new service area</Link>.
                           </p>
                         )}
                       </Field>
@@ -468,10 +551,10 @@ const Checkout = () => {
                     )}
                     <div className="flex gap-3">
                       <Button variant="hero" disabled={!addrFormValid} onClick={saveAddress}>
-                        Save &amp; Continue
+                        {editingAddrId ? "Save changes" : "Save & Continue"}
                       </Button>
                       {addresses.length > 0 && (
-                        <Button variant="ghost" onClick={() => setAddingAddr(false)}>
+                        <Button variant="ghost" onClick={cancelAddressForm}>
                           Cancel
                         </Button>
                       )}
@@ -490,21 +573,103 @@ const Checkout = () => {
                 summary={
                   paymentDone && openStep !== "payment" ? (
                     <span className="text-sm text-foreground/80 inline-flex items-center gap-1.5">
-                      <Lock size={12} /> Securely collected by Stripe
+                      <Lock size={12} />
+                      {!useNewCard && selectedPmId
+                        ? (() => {
+                            const pm = paymentMethods.find((p) => p.id === selectedPmId);
+                            return pm ? `${pm.brand} ending in ${pm.last4}` : "Securely collected by Stripe";
+                          })()
+                        : "Securely collected by Stripe"}
                     </span>
                   ) : null
                 }
               >
                 <div className="space-y-4">
-                  <p className="text-sm text-foreground/80 inline-flex items-center gap-2">
-                    <Lock size={14} className="text-primary" />
-                    Your card details are entered securely on the next step, powered by Stripe.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    We accept all major credit and debit cards. You'll review your total before confirming the payment.
-                  </p>
+                  {paymentMethods.length > 0 && (
+                    <div className="space-y-3">
+                      <ul className="space-y-2">
+                        {paymentMethods.map((pm) => (
+                          <li key={pm.id}>
+                            <label
+                              className={cn(
+                                "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
+                                !useNewCard && selectedPmId === pm.id
+                                  ? "border-primary bg-accent/30"
+                                  : "border-border hover:bg-accent/20",
+                              )}
+                            >
+                              <input
+                                type="radio"
+                                name="payment"
+                                checked={!useNewCard && selectedPmId === pm.id}
+                                onChange={() => {
+                                  setSelectedPmId(pm.id);
+                                  setUseNewCard(false);
+                                }}
+                                className="mt-1"
+                              />
+                              <div className="flex-1 text-sm">
+                                <div className="font-medium">
+                                  {pm.brand} ending in {pm.last4}
+                                  {pm.isDefault && (
+                                    <span className="ml-2 text-xs text-muted-foreground">(Default)</span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Expires {String(pm.expMonth).padStart(2, "0")}/{String(pm.expYear).slice(-2)}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setUseNewCard(true);
+                                }}
+                                className="text-sm text-primary underline underline-offset-4 shrink-0"
+                              >
+                                Change
+                              </button>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                      <label
+                        className={cn(
+                          "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
+                          useNewCard ? "border-primary bg-accent/30" : "border-border hover:bg-accent/20",
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="payment"
+                          checked={useNewCard}
+                          onChange={() => setUseNewCard(true)}
+                          className="mt-1"
+                        />
+                        <div className="flex-1 text-sm">
+                          <div className="font-medium">Use a different card</div>
+                          <div className="text-xs text-muted-foreground">
+                            Enter new card details securely on the next step.
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  )}
+
+                  {(paymentMethods.length === 0 || useNewCard) && (
+                    <>
+                      <p className="text-sm text-foreground/80 inline-flex items-center gap-2">
+                        <Lock size={14} className="text-primary" />
+                        Your card details are entered securely on the next step, powered by Stripe.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        We accept all major credit and debit cards. You'll review your total before confirming the payment.
+                      </p>
+                    </>
+                  )}
                 </div>
               </StepCard>
+
             </div>
 
             {/* Order summary */}

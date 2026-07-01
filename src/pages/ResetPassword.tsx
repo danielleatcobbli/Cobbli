@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -27,6 +27,7 @@ const getRecoveryParams = () => {
       tokenHash: null as string | null,
       errorCode: null as string | null,
       errorParam: null as string | null,
+      email: null as string | null,
     };
   }
 
@@ -40,12 +41,14 @@ const getRecoveryParams = () => {
   const refreshToken = searchParams.get("refresh_token") ?? hashParams.get("refresh_token");
   const errorCode = searchParams.get("error_code") ?? hashParams.get("error_code");
   const errorParam = searchParams.get("error") ?? hashParams.get("error");
+  const email = searchParams.get("email") ?? hashParams.get("email");
 
   return {
     code,
     tokenHash,
     errorCode,
     errorParam,
+    email,
     hasRecoveryToken: type === "recovery" && (!!tokenHash || !!token || !!accessToken || !!refreshToken || !!code),
   };
 };
@@ -82,10 +85,19 @@ const meta: Record<Step, { title: string; description: string }> = {
 
 const ResetPassword = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const autoSendEmail = (location.state as { autoSendEmail?: string } | null)?.autoSendEmail;
 
   const [step, setStep] = useState<Step>("checking");
 
-  const [email, setEmail] = useState("");
+  // Pre-populate email from URL (?email=) so a user clicking "Request a new link"
+  // from the expired-link screen does not have to retype their address.
+  const initialEmail = (() => {
+    if (typeof window === "undefined") return "";
+    const qs = new URLSearchParams(window.location.search);
+    return (qs.get("email") ?? "").trim();
+  })();
+  const [email, setEmail] = useState(initialEmail);
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -106,11 +118,16 @@ const ResetPassword = () => {
     let mounted = true;
 
     const detectRecoveryState = async () => {
-      const { code, tokenHash, hasRecoveryToken, errorCode, errorParam } = getRecoveryParams();
+      const { code, tokenHash, hasRecoveryToken, errorCode, errorParam, email: linkEmail } = getRecoveryParams();
+
+      const expiredRedirect = () => {
+        const qs = linkEmail ? `?email=${encodeURIComponent(linkEmail)}` : "";
+        navigate(`/link-expired${qs}`, { replace: true });
+      };
 
       // Supabase redirects expired/invalid recovery links back with error params.
       if (errorCode === "otp_expired" || errorParam === "access_denied") {
-        navigate("/link-expired", { replace: true });
+        expiredRedirect();
         return;
       }
 
@@ -119,7 +136,7 @@ const ResetPassword = () => {
         if (!mounted) return;
         if (error) {
           if (isExpiredAuthError(error.message)) {
-            navigate("/link-expired", { replace: true });
+            expiredRedirect();
             return;
           }
           setPwdError(error.message);
@@ -134,7 +151,7 @@ const ResetPassword = () => {
         if (!mounted) return;
         if (error) {
           if (isExpiredAuthError(error.message)) {
-            navigate("/link-expired", { replace: true });
+            expiredRedirect();
             return;
           }
           setPwdError(error.message);
@@ -156,7 +173,14 @@ const ResetPassword = () => {
       if (!data.session) {
         window.sessionStorage.removeItem("cobbli-password-recovery");
       }
-      setStep(data.session || recoveryMarker ? "reset" : "request");
+      if (data.session || recoveryMarker) {
+        setStep("reset");
+        return;
+      }
+      // If we're about to auto-send from a pre-filled sign-in email, stay in
+      // "checking" so the spinner shows instead of flashing the request form.
+      if (autoSendEmail && emailRegex.test(autoSendEmail)) return;
+      setStep("request");
     };
 
     detectRecoveryState();
@@ -173,6 +197,35 @@ const ResetPassword = () => {
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Auto-send reset link if user came from sign-in with a valid email pre-filled
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    if (autoSentRef.current) return;
+    if (step !== "checking") return;
+    if (!autoSendEmail || !emailRegex.test(autoSendEmail)) return;
+    autoSentRef.current = true;
+    (async () => {
+      setSubmitting(true);
+      try {
+        const minDelay = new Promise((r) => setTimeout(r, 600));
+        await Promise.all([
+          supabase.auth.resetPasswordForEmail(autoSendEmail, {
+            redirectTo: `${window.location.origin}/reset-password`,
+          }),
+          minDelay,
+        ]);
+        setSubmittedEmail(autoSendEmail);
+        setCooldown(60);
+        setStep("sent");
+        // Clear router state so a refresh doesn't re-send
+        navigate(location.pathname, { replace: true });
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+  }, [step, autoSendEmail, navigate, location.pathname]);
+
 
   const intervalRef = useRef<number | null>(null);
   useEffect(() => {
@@ -305,9 +358,8 @@ const ResetPassword = () => {
           )}
 
           {step === "checking" && (
-            <section className="space-y-6" aria-busy="true">
-              <h1 className="text-2xl md:text-3xl font-semibold">Reset password</h1>
-              <BrandSpinner className="py-8" label="Checking reset link" size="lg" />
+            <section className="flex items-center justify-center py-16" aria-busy="true">
+              <BrandSpinner label={autoSendEmail ? "Sending reset link" : "Checking reset link"} size="lg" />
             </section>
           )}
 
@@ -315,8 +367,7 @@ const ResetPassword = () => {
             <section className="space-y-6">
               <h1 className="text-2xl md:text-3xl font-semibold">Check your inbox</h1>
               <p className="text-foreground/80">
-                If an account exists for {submittedEmail}, a reset link is on its way. Check your spam folder if it
-                doesn't arrive within a minute.
+                We've sent a password reset link to {submittedEmail}. If you don't see it, check your spam folder.
               </p>
               <Button
                 type="button"

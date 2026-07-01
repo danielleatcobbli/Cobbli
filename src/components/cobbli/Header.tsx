@@ -5,7 +5,7 @@ import logo from "@/assets/logo-cobbli.svg";
 import accountIcon from "@/assets/icons/account.svg";
 import bagIcon from "@/assets/icons/bag.svg";
 import { useBag } from "@/context/BagContext";
-import { trackEvent } from "@/lib/analytics";
+import { useAuth } from "@/context/AuthContext";
 
 const navLinks = [
   { label: "Start a Repair", to: "/start-repair" },
@@ -18,6 +18,7 @@ const Header = () => {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const { itemCount } = useBag();
+  const { user } = useAuth();
 
   const handleHowItWorksClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (location.pathname === "/") {
@@ -41,10 +42,7 @@ const Header = () => {
             <Link
               key={l.label}
               to={l.to}
-              onClick={(e) => {
-                if (l.label === "How It Works") handleHowItWorksClick(e);
-                if (l.label === "Start a Repair") trackEvent("start_repair");
-              }}
+              onClick={l.label === "How It Works" ? handleHowItWorksClick : undefined}
               className="opacity-90 hover:opacity-100 transition-opacity"
             >
               {l.label}
@@ -53,12 +51,23 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center gap-2 ml-auto">
-          <Link to="/signin" state={{ from: "/" }} aria-label="Account" className="p-2 rounded-md hover:bg-primary-glow transition-colors">
-            <img src={accountIcon} alt="" className="h-[22px] w-[22px]" />
-          </Link>
+          {user ? (
+            <Link to="/account" aria-label="My account" className="p-2 rounded-md hover:bg-primary-glow transition-colors">
+              <img src={accountIcon} alt="" className="h-[22px] w-[22px]" />
+            </Link>
+          ) : (
+            <Link
+              to="/signin"
+              state={{ from: `${location.pathname}${location.search}${location.hash}` }}
+              aria-label="Sign in"
+              className="p-2 rounded-md hover:bg-primary-glow transition-colors"
+            >
+              <img src={accountIcon} alt="" className="h-[22px] w-[22px]" />
+            </Link>
+          )}
           <Link to="/bag" aria-label={`Shopping bag, ${itemCount} item${itemCount === 1 ? "" : "s"}`} className="relative p-2 rounded-md hover:bg-primary-glow transition-colors">
             <img src={bagIcon} alt="" className="h-[22px] w-[22px]" />
-            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-status-orange text-[10px] font-bold text-primary flex items-center justify-center">
+            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-status-orange text-[10px] text-primary flex items-center justify-center">
               {itemCount}
             </span>
           </Link>
@@ -81,7 +90,6 @@ const Header = () => {
                 to={l.to}
                 onClick={(e) => {
                   if (l.label === "How It Works") handleHowItWorksClick(e);
-                  if (l.label === "Start a Repair") trackEvent("start_repair");
                   setOpen(false);
                 }}
                 className="py-1 opacity-90"

@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/context/AuthContext";
-import { trackEvent } from "@/lib/analytics";
+import { consumeReturnTo, peekReturnTo, saveReturnTo } from "@/lib/authRedirect";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -19,12 +20,11 @@ const SignIn = () => {
   const location = useLocation();
   const { user } = useAuth();
   const navState = location.state as { from?: string; resetSuccess?: string } | null;
-  const from = navState?.from;
+  const fromState = navState?.from;
   const resetSuccess = navState?.resetSuccess;
-  const successRedirect =
-    from && (from === "/checkout" || from.startsWith("/start-repair") || from.startsWith("/proposal"))
-      ? from
-      : "/account";
+  // Persist any router-provided "from" so it survives full-page OAuth redirects.
+  if (fromState) saveReturnTo(fromState);
+  const successRedirect = peekReturnTo() ?? "/account";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,21 +42,32 @@ const SignIn = () => {
 
   // Redirect already-signed-in users
   useEffect(() => {
-    if (user) navigate(successRedirect, { replace: true });
+    if (user) {
+      const target = consumeReturnTo() ?? successRedirect;
+      navigate(target, { replace: true });
+    }
   }, [user, navigate, successRedirect]);
+
+  // Reset the locked-screen state whenever the user re-navigates to /signin
+  // (e.g. clicking the header account icon from the locked screen).
+  useEffect(() => {
+    setLocked(false);
+    setEmailError(null);
+    setPasswordError(null);
+  }, [location.key]);
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !locked && !submitting;
 
   const handleGoogle = async () => {
     setEmailError(null);
     setPasswordError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/signin` },
-    });
-    if (error) {
+    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+    if (result.error) {
       setPasswordError("Google sign-in failed. Please try again.");
+      return;
     }
+    if (result.redirected) return;
+    navigate(successRedirect, { replace: true });
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -100,7 +111,6 @@ const SignIn = () => {
         }
         return;
       }
-      trackEvent("sign_in");
       navigate(successRedirect, { replace: true });
     } finally {
       setSubmitting(false);
@@ -126,7 +136,7 @@ const SignIn = () => {
             <button
               role="tab"
               aria-selected={false}
-              onClick={() => navigate("/signup", { state: { from } })}
+              onClick={() => navigate("/signup", { state: { from: fromState } })}
               className={cn(
                 "h-11 rounded-md text-sm font-semibold transition-colors",
                 "bg-muted text-muted-foreground hover:bg-muted/80",
@@ -203,9 +213,20 @@ const SignIn = () => {
                   </div>
                   {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
                   <div className="flex justify-end">
-                    <Link to="/reset-password" className="text-sm text-primary hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = email.trim();
+                        if (emailRegex.test(trimmed)) {
+                          navigate("/reset-password", { state: { autoSendEmail: trimmed } });
+                        } else {
+                          navigate("/reset-password");
+                        }
+                      }}
+                      className="text-sm text-primary hover:underline"
+                    >
                       Forgot password?
-                    </Link>
+                    </button>
                   </div>
                 </div>
 

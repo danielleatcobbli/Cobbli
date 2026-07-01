@@ -22,7 +22,7 @@ const CookieConsent = () => {
       aria-live="polite"
       aria-label="Cookie consent"
       className="fixed inset-x-0 bottom-0 z-50 px-4 pb-4 sm:px-6 sm:pb-6"
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
+      style={{ fontFamily: "'Albert Sans', sans-serif" }}
     >
       <div
         className="mx-auto max-w-3xl rounded-lg shadow-lg p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 text-white"

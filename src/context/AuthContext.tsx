@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { useLocation, useNavigate } from "react-router-dom";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { consumeReturnTo } from "@/lib/authRedirect";
 
 type AuthState = {
   session: Session | null;
@@ -48,7 +49,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION")
       ) {
         const path = locationRef.current.pathname;
-        if (AUTH_ENTRY_ROUTES.some((p) => path === p || path.startsWith(`${p}/`))) {
+        const returnTo = consumeReturnTo();
+        if (returnTo) {
+          navigate(returnTo, { replace: true });
+        } else if (AUTH_ENTRY_ROUTES.some((p) => path === p || path.startsWith(`${p}/`))) {
           navigate("/account?verified=1", { replace: true });
         }
       }

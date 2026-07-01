@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
+
 import StepIndicator from "@/components/cobbli/StepIndicator";
 import { ASSESSMENT_STEPS } from "@/components/cobbli/assessmentSteps";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -16,18 +19,25 @@ import {
 import { SHOE_TYPES, type ShoeType } from "@/types/service";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAssessment } from "@/context/AssessmentContext";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
 import BrandCombobox, { inferBrandMode, type BrandMode } from "@/components/cobbli/BrandCombobox";
 
-
 const COLORS = [
-  "Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
-  "Multi", "Navy", "Orange", "Pattern", "Pink", "Purple", "Red", "Silver",
-  "Tan", "White", "Yellow",
+"Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
+"Multi", "Navy", "Orange", "Pattern", "Pink", "Purple", "Red", "Silver",
+"Tan", "White", "Yellow",
 ];
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const AssessmentDetails = () => {
   const navigate = useNavigate();
-  const { draft, setDetails, aiLoading } = useAssessment();
+  const { draft, setDetails, aiLoading, reset } = useAssessment();
+  const { user } = useAuth();
+  const isGuest = !user;
 
   usePageMeta({
     title: "Confirm your shoe details — Cobbli",
@@ -38,7 +48,14 @@ const AssessmentDetails = () => {
   const [colors, setColors] = useState<string[]>(draft.colors);
   const [brand, setBrand] = useState<string>(draft.brand);
   const [brandMode, setBrandMode] = useState<BrandMode>(inferBrandMode(draft.brand));
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    if (user?.email) setEmail(user.email);
+  }, [user?.email]);
   const [minDelayElapsed, setMinDelayElapsed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setMinDelayElapsed(true), 500);
@@ -58,7 +75,6 @@ const AssessmentDetails = () => {
 
   const showSkeleton = aiLoading || !minDelayElapsed;
 
-
   const toggleColor = (c: string) =>
     setColors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
 
@@ -68,12 +84,49 @@ const AssessmentDetails = () => {
     : brandMode === "custom" ? brand.trim().length > 0
     : false;
 
-  const valid = shoeType !== "" && colors.length > 0 && brandValid;
+  const detailsValid = shoeType !== "" && colors.length > 0 && brandValid;
+  const emailValid = emailRegex.test(email.trim());
+  const valid = detailsValid && emailValid;
 
-  const onNext = () => {
-    if (!valid) return;
-    setDetails({ shoeType: shoeType as ShoeType, colors, brand: brand.trim() });
-    navigate("/start-repair/assessment/deposit");
+  const onNext = async () => {
+    if (!valid || submitting) return;
+    setSubmitting(true);
+    try {
+      setDetails({ shoeType: shoeType as ShoeType, colors, brand: brand.trim() });
+      const pair = {
+        photoPaths: draft.photoPaths,
+        videoPaths: draft.videoPaths,
+        aiPrefill: draft.aiPrefill,
+        shoeType,
+        colors,
+        brand: brand.trim(),
+      };
+      const insertRow: Record<string, unknown> = {
+        pairs: [pair],
+        status: "submitted",
+        guest_email: email.trim(),
+        description: description.trim() || null,
+      };
+      if (user) {
+        insertRow.user_id = user.id;
+      }
+      const { data, error } = await supabase
+        .from("assessments")
+        .insert(insertRow as never)
+        .select("id")
+        .single();
+      if (error) throw error;
+      reset();
+      navigate(`/start-repair/assessment/confirmation?id=${data.id}`, { replace: true });
+    } catch (e: any) {
+      console.error("submit assessment failed", e);
+      toast({
+        title: "Could not submit",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -85,6 +138,7 @@ const AssessmentDetails = () => {
         <div className="container max-w-2xl">
           <h1 className="font-display text-3xl md:text-4xl text-primary">Confirm your shoe details</h1>
           {showSkeleton ? (
+
             <p className="mt-2 text-primary/80">Analyzing your photos…</p>
           ) : (() => {
             const ai = draft.aiPrefill;
@@ -186,14 +240,54 @@ const AssessmentDetails = () => {
               )}
             </div>
 
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="assessment-description">
+                Anything else we should know? (optional)
+              </Label>
+              {showSkeleton ? (
+                <div className="h-24 w-full rounded-md bg-muted animate-pulse" />
+              ) : (
+                <Textarea
+                  id="assessment-description"
+                  placeholder="e.g. The heel has been wobbling for a few weeks, or there's a stain on the left toe"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value.slice(0, 1000))}
+                  maxLength={1000}
+                  rows={4}
+                />
+              )}
+            </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="proposal-email">
+                Where should we send your proposal? <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="proposal-email"
+                type="email"
+                placeholder="you@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              {isGuest && (
+                <p className="text-[13px] text-muted-foreground">
+                  Already have an account?{" "}
+                  <Link to="/signin" className="underline">
+                    Sign in instead
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
+
+          </div>
 
           <div className="mt-10 flex flex-wrap gap-3">
             <Button
               type="button"
               variant="outline"
               onClick={() => navigate("/start-repair/assessment")}
+              disabled={submitting}
             >
               Back
             </Button>
@@ -201,10 +295,10 @@ const AssessmentDetails = () => {
               type="button"
               size="lg"
               onClick={onNext}
-              disabled={!valid}
-              className={!valid ? "opacity-50 cursor-not-allowed" : ""}
+              disabled={!valid || submitting}
+              className={!valid || submitting ? "opacity-50 cursor-not-allowed" : ""}
             >
-              Next
+              {submitting ? "Submitting…" : "Submit"}
             </Button>
           </div>
         </div>

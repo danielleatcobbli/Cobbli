@@ -1,50 +1,64 @@
-## Goal
-Remove the Lovable-managed (seamless) Stripe integration and replace it with a bring-your-own-key (BYOK) setup using your own Stripe account.
+# Cobbli Blog
 
-Heads up: the seamless integration is generally smoother (no key rotation, no webhook setup, managed go-live). Going BYOK means you manage your Stripe account, keys, and webhook endpoint yourself. Confirming this is what you want before I touch anything.
+A public blog with an admin authoring tool, reusing the existing admin role system.
 
-## What gets deleted
+## 1. Database
 
-Files that exist purely to support the gateway-proxied seamless flow:
+New table `public.blog_posts` with:
+- `title`, `slug` (unique), `excerpt`, `body` (HTML from rich text editor)
+- `cover_image_url`
+- `seo_title`, `seo_description` (per-post SEO overrides)
+- `status` (`draft` | `published`)
+- `published_at` (editable date), `author_id`
+- Standard `id` / `created_at` / `updated_at`
 
-- `src/lib/stripe.ts` — reads `VITE_PAYMENTS_CLIENT_TOKEN` and derives sandbox/live from the token prefix
-- `src/components/PaymentTestModeBanner.tsx` — banner driven by the seamless token
-- `src/components/StripeEmbeddedCheckout.tsx` — current wrapper (will be rebuilt simpler)
-- `supabase/functions/_shared/stripe.ts` — connector-gateway proxy client
-- `supabase/functions/create-checkout/index.ts` — gateway-based session creator
-- `supabase/functions/payments-webhook/index.ts` — gateway webhook handler
-- Corresponding `[functions.create-checkout]` / `[functions.payments-webhook]` blocks in `supabase/config.toml`
-- The two deployed edge functions removed from the backend
+RLS:
+- Anyone (anon + authenticated) can read posts where `status = 'published'`.
+- Admins (via existing `has_role(auth.uid(), 'admin')`) can read all and insert/update/delete.
 
-I will also unwire any imports of the deleted modules in `src/pages/Checkout.tsx` and `src/pages/AssessmentDeposit.tsx` so the app keeps compiling. Those two pages currently call into the seamless checkout — see "Open question" below for how you want them rebuilt.
+Storage:
+- New public bucket `blog-images` for cover image uploads. Admin-only write, public read.
 
-## What gets added (BYOK)
+## 2. Public pages
 
-1. **Secrets** (via the secrets tool, not committed to `.env`):
-   - `STRIPE_SECRET_KEY` — your `sk_test_...` or `sk_live_...` key
-   - `STRIPE_WEBHOOK_SECRET` — `whsec_...` from the webhook endpoint you create in your Stripe dashboard
-2. **Publishable key in env** (safe to commit):
-   - `VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...` in `.env` / `.env.development`
-3. **New `src/lib/stripe.ts`** — `loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)`
-4. **New edge functions** using the Stripe SDK directly with `STRIPE_SECRET_KEY`:
-   - `create-checkout` — creates an Embedded Checkout session, returns `clientSecret`
-   - `stripe-webhook` — verifies signature with `STRIPE_WEBHOOK_SECRET` and handles `checkout.session.completed`, etc.
-5. **Rebuilt `StripeEmbeddedCheckout.tsx`** — same UX (embedded, inline), just pointed at the new function and using the publishable key directly.
-6. **Webhook URL** I'll give you after deploy — you paste it into Stripe Dashboard → Webhooks, then send me back the signing secret to store.
+**`/blog`** — index
+- Fetches published posts ordered by `published_at desc`.
+- Card grid (1 / 2 / 3 cols responsive) with cover image, title (Frank Ruhl Libre), formatted date ("Monday, April 6"), and 150-char excerpt (falls back to stripped body if `excerpt` blank).
+- Empty state if no posts.
+- Branded skeleton while loading.
 
-## Order of operations
+**`/blog/:slug`** — post detail
+- Fetches by slug; 404 view if not found or unpublished.
+- Cover image, title, date, then rendered HTML body inside a `prose`-style container using Cobbli typography tokens.
+- Per-post `<title>` and `<meta name="description">` via the existing `usePageMeta` hook, using `seo_title` / `seo_description` with sensible fallbacks (title, excerpt).
 
-1. You confirm the plan.
-2. I delete the seamless files + config blocks and call `supabase--delete_edge_functions` for the two old functions.
-3. I request `STRIPE_SECRET_KEY` via the secrets tool (you paste it in the secure form).
-4. I add `VITE_STRIPE_PUBLISHABLE_KEY` to `.env` (you tell me the `pk_...` value or paste it — publishable keys are safe in code).
-5. I write the new `src/lib/stripe.ts`, edge functions, and rebuilt embedded checkout component, and rewire `Checkout.tsx` / `AssessmentDeposit.tsx`.
-6. I give you the webhook URL; you create the endpoint in Stripe and send back `whsec_...`; I store it as `STRIPE_WEBHOOK_SECRET`.
+## 3. Admin
 
-## Open question
+**`/admin/blog`** — list + editor, gated by `ProtectedRoute` + admin role check (same pattern as existing `/admin`).
+- Table of all posts with status pill, title, date, and Edit / Delete actions.
+- "New post" button opens the editor.
 
-`Checkout.tsx` and `AssessmentDeposit.tsx` are real app flows (not just demo). Do you want me to:
-- **(a)** Port them 1:1 to the new BYOK setup (same UX, same prices, just different backend) — recommended, or
-- **(b)** Strip the Stripe wiring out of them entirely and leave them as placeholders for you to rebuild later?
+**Editor** (inline or `/admin/blog/:id`):
+- Title (auto-fills slug; slug remains editable, validated to `[a-z0-9-]+`, uniqueness checked on save)
+- Cover image upload to `blog-images` bucket (preview after upload)
+- Excerpt (textarea, optional — auto-derived if empty)
+- Body — rich text editor (TipTap with StarterKit + Link + Image)
+- Published date (date picker, defaults to today)
+- SEO title + SEO description fields
+- Status toggle: Save as draft / Publish
+- Validation: title, slug, body required before publish.
 
-Also: do you already have the Stripe account ready (test mode keys handy), or do you need a moment to grab them before I proceed?
+## 4. Footer + routing
+
+- Add "Blog" link to the existing footer component (text link, no header nav change).
+- Register `/blog`, `/blog/:slug`, `/admin/blog` in `App.tsx`. Admin route wrapped in `ProtectedRoute` and the page itself checks the `admin` role; non-admins see an access-denied message.
+
+## Technical notes
+
+- Dependencies to add: `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-link`, `@tiptap/extension-image`.
+- Slug generator: lowercase, strip diacritics, replace non-alphanum with `-`, collapse repeats, trim.
+- Excerpt helper: strip HTML tags from body, take first 150 chars, append `…`.
+- All headings use Frank Ruhl Libre per existing typography rules; body uses Albert Sans (project default).
+- Branded skeleton on `/blog` and `/blog/:slug` per project loading-state rule.
+
+After you approve, I'll run the migration first, then build the pages, editor, and footer link.

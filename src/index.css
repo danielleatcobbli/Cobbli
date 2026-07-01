@@ -105,15 +105,14 @@
   html { -webkit-font-smoothing: antialiased; }
   body {
     @apply bg-background text-foreground font-sans;
-    font-feature-settings: "ss01", "cv11";
+    font-weight: 500;
   }
-  h1, h2, h3, h4 { @apply font-display tracking-tight; }
+
+  h1 { @apply font-display tracking-tight; font-weight: 400; color: #3d1700; }
+  h2 { @apply font-display tracking-tight; font-weight: 400; color: #3d1700; }
+  h3, h4 { @apply font-sans tracking-tight; font-weight: 500; }
 }
 
 @layer utilities {
   .text-balance { text-wrap: balance; }
-  .highlight-mark {
-    background-image: linear-gradient(180deg, transparent 60%, hsl(var(--highlight) / 0.6) 60%);
-    padding: 0 0.1em;
-  }
 }
