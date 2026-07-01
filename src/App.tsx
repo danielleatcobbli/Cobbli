@@ -24,6 +24,7 @@ import AssessmentDeposit from "./pages/AssessmentDeposit";
 import AssessmentConfirmation from "./pages/AssessmentConfirmation";
 import AssessmentProposal from "./pages/AssessmentProposal";
 import Admin from "./pages/Admin";
+import OwnerSettings from "./pages/OwnerSettings";
 import SelectServices from "./pages/SelectServices";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
@@ -40,6 +41,7 @@ import { AssessmentProvider } from "./context/AssessmentContext";
 import { AccountProvider } from "./context/AccountContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
+import OwnerRoute from "./components/OwnerRoute";
 
 const queryClient = new QueryClient();
 
@@ -143,6 +145,14 @@ const App = () => (
                             <AdminRoute>
                               <Admin />
                             </AdminRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin/settings"
+                          element={
+                            <OwnerRoute>
+                              <OwnerSettings />
+                            </OwnerRoute>
                           }
                         />
                         <Route
