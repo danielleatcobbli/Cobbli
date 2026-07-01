@@ -31,7 +31,7 @@ const AssessmentConfirmation = () => {
           </p>
 
           <div className="mt-8 rounded-xl border border-border p-6 text-left">
-            <h2 className="font-display text-xl text-primary">What happens next</h2>
+            <h2 className="text-xl text-primary">What happens next</h2>
             <ol className="mt-4 space-y-3 text-sm text-primary/90 list-decimal pl-5">
               <li>
                 Our cobblers review your photos and/or videos and prepare a repair proposal.

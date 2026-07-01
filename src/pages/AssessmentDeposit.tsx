@@ -4,6 +4,7 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
 import { ASSESSMENT_STEPS } from "@/components/cobbli/assessmentSteps";
+import { displayBrand } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAssessment } from "@/context/AssessmentContext";
@@ -32,7 +33,7 @@ const AssessmentDeposit = () => {
   usePageMeta({
     title: "Confirm your deposit — Cobbli",
     description:
-      "Authorize a $20 deposit so our cobblers can prepare your repair proposal.",
+"Authorize a $20 deposit so our cobblers can prepare your repair proposal.",
   });
 
   const ready = useMemo(
@@ -134,7 +135,7 @@ const AssessmentDeposit = () => {
           {!showCheckout && (
             <>
               <div className="mt-8 rounded-xl border border-border p-5">
-                <h2 className="font-display text-xl text-primary">Your pair</h2>
+                <h2 className="text-xl text-primary">Your pair</h2>
                 {thumbs.length > 0 && (
                   <div className="mt-4 flex gap-2">
                     {thumbs.map((src, i) => (
@@ -153,13 +154,13 @@ const AssessmentDeposit = () => {
                   <dt className="text-muted-foreground">Color(s)</dt>
                   <dd className="col-span-2 text-primary">{draft.colors.join(", ")}</dd>
                   <dt className="text-muted-foreground">Brand</dt>
-                  <dd className="col-span-2 text-primary">{draft.brand || "—"}</dd>
+                  <dd className="col-span-2 text-primary">{displayBrand(draft.brand) || "—"}</dd>
                 </dl>
               </div>
 
               <div className="mt-6 flex items-baseline justify-between rounded-xl border border-border p-5">
                 <span className="text-primary font-medium">Deposit</span>
-                <span className="font-display text-2xl text-primary">$20.00</span>
+                <span className="text-2xl text-primary">$20.00</span>
               </div>
 
               <div className="mt-10 flex flex-wrap gap-3">

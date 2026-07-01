@@ -1,5 +1,4 @@
 import { ShieldCheck, Hammer, MessageCircleHeart } from "lucide-react";
-import { trackEvent } from "@/lib/analytics";
 
 const items = [
   {
@@ -18,11 +17,7 @@ const items = [
     desc: (
       <>
         Have a question? Reach us any day of the week at{" "}
-        <a
-          href="mailto:support@cobbli.com"
-          className="underline hover:text-primary"
-          onClick={() => trackEvent("consultation_email_clicked")}
-        >
+        <a href="mailto:support@cobbli.com" className="underline hover:text-primary">
           support@cobbli.com
         </a>
         .
@@ -39,8 +34,8 @@ const TrustSignals = () => {
           <p className="text-sm font-semibold tracking-widest uppercase text-status-orange">
             Why Cobbli
           </p>
-          <h2 className="mt-3 text-3xl md:text-5xl font-display font-600 text-balance">
-            Your satisfaction, <span className="highlight-mark">guaranteed</span>
+          <h2 className="mt-3 text-3xl md:text-5xl text-balance">
+            Your satisfaction, <span style={{ fontWeight: 900 }}>guaranteed</span>
           </h2>
         </div>
 
@@ -53,7 +48,7 @@ const TrustSignals = () => {
               <div className="h-14 w-14 rounded-full bg-gradient-warm text-primary-foreground flex items-center justify-center">
                 <it.icon size={26} strokeWidth={1.75} />
               </div>
-              <h3 className="mt-6 text-xl font-display font-600">{it.title}</h3>
+              <h3 className="mt-6 text-xl">{it.title}</h3>
               <p className="mt-2 text-muted-foreground leading-relaxed">{it.desc}</p>
             </div>
           ))}
