@@ -415,6 +415,27 @@ export type Database = {
         }
         Relationships: []
       }
+      pricing_config: {
+        Row: {
+          key: string
+          label: string | null
+          updated_at: string
+          value_cents: number
+        }
+        Insert: {
+          key: string
+          label?: string | null
+          updated_at?: string
+          value_cents: number
+        }
+        Update: {
+          key?: string
+          label?: string | null
+          updated_at?: string
+          value_cents?: number
+        }
+        Relationships: []
+      }
       service_pricing: {
         Row: {
           id: string
