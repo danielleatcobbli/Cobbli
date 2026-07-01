@@ -1,5 +1,25 @@
 import { describe, it, expect } from "vitest";
-import { extractEmailParam, resolveInitialEmail } from "@/lib/resetEmail";
+import { buildResetRedirect, extractEmailParam, resolveInitialEmail } from "@/lib/resetEmail";
+
+describe("buildResetRedirect", () => {
+  it("builds a /reset-password redirect carrying the email param", () => {
+    expect(buildResetRedirect("https://cobbli.com", "jane@example.com")).toBe(
+      "https://cobbli.com/reset-password?email=jane%40example.com",
+    );
+  });
+
+  it("URL-encodes emails with special characters", () => {
+    expect(buildResetRedirect("http://localhost:8080", "a+b@example.com")).toBe(
+      "http://localhost:8080/reset-password?email=a%2Bb%40example.com",
+    );
+  });
+
+  it("omits the email param when the email is empty", () => {
+    expect(buildResetRedirect("https://cobbli.com", "")).toBe(
+      "https://cobbli.com/reset-password",
+    );
+  });
+});
 
 describe("extractEmailParam", () => {
   it("returns a valid email from the query string", () => {
