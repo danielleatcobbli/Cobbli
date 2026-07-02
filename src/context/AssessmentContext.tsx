@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ShoeType } from "@/types/service";
+import { canonicalBrand } from "@/components/cobbli/BrandCombobox";
 
 export type AssessmentAiPrefill = {
   shoeType: ShoeType | null;
@@ -67,14 +68,17 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     [],
   );
   const setAiPrefill = useCallback(
-    (p: AssessmentAiPrefill) =>
+    (p: AssessmentAiPrefill) => {
+      const normalizedBrand = p.brand ? (canonicalBrand(p.brand) ?? p.brand) : null;
+      const normalized = { ...p, brand: normalizedBrand };
       setDraft((d) => ({
         ...d,
-        aiPrefill: p,
+        aiPrefill: normalized,
         shoeType: d.shoeType ?? p.shoeType,
         colors: d.colors.length ? d.colors : p.colors,
-        brand: d.brand || (p.brand ?? ""),
-      })),
+        brand: d.brand || (normalizedBrand ?? ""),
+      }));
+    },
     [],
   );
   const setDetails = useCallback(

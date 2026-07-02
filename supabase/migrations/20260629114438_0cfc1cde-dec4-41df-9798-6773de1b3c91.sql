@@ -1,0 +1,1 @@
+UPDATE public.services SET short_description = 'Over time, sun, wear, and moisture cause materials to lose their color unevenly. We clean and condition your shoes, then, with your approval, apply professional color-matched dye or paint to restore an even, like-new appearance.' WHERE slug = 'faded-or-patchy-color';

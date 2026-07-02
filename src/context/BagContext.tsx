@@ -1,26 +1,29 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { ShoeType } from "@/types/service";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  decideBagAction,
-  readGuestEmail,
-  clearGuestEmail,
-  readLastUserId,
-  writeLastUserId,
-} from "@/lib/bagOwnership";
 
 export type BagService = {
   id: string;
   name: string;
-  /** Price in cents */
+  /** Price in cents — snapshot at add time; treat as a fallback only. Always re-derive from the live price list when rendering. */
   price: number;
+  /** For services that require dye/paint consent (e.g. faded-or-patchy-color, color-restoration). */
+  paintConsent?: "yes" | "no";
+  /** For services that require sole material selection (e.g. full-resole). */
+  soleMaterial?: "Leather" | "Rubber";
+  /** Care tier snapshot — used by the live pricer to pick the correct variant column. */
+  premium?: boolean;
 };
+
 
 export type BagPair = {
   id: string;
   /** Optional reference to the SavedPair this bag entry corresponds to */
   pairId?: string;
-  /** Display label like "Pair 1" — derived for display, but stored for stability */
+  /** Display label, snapshotted at add time so it survives sign-out / saved-pair deletion */
   label?: string;
+  /** Shoe type snapshot — required to recompute live prices without depending on the saved pair */
+  shoeType?: ShoeType;
   /** ISO timestamp; used to display in reverse order of addition */
   addedAt: string;
   services: BagService[];
@@ -30,10 +33,10 @@ type BagState = {
   pairs: BagPair[];
   /** Total number of services across all pairs (used for header badge) */
   itemCount: number;
-  /** Sum of all service prices across all pairs, in cents */
+  /** Sum of snapshot service prices. Not authoritative — UIs should recompute from the live price list. */
   subtotal: number;
   /** Add a new bag entry, or update an existing one if pairId matches */
-  addPair: (services: BagService[], pairId?: string) => void;
+  addPair: (services: BagService[], pairId?: string, label?: string, shoeType?: ShoeType) => void;
   removePair: (pairId: string) => void;
   removeService: (pairId: string, serviceId: string) => void;
   /** Find an existing bag entry for a given saved pair id */
@@ -42,6 +45,8 @@ type BagState = {
 };
 
 const STORAGE_KEY = "cobbli.bag.v2";
+const OWNER_KEY = "cobbli.bag.owner";
+const GUEST_OWNER = "guest";
 
 const BagContext = createContext<BagState | undefined>(undefined);
 
@@ -57,6 +62,23 @@ const readStorage = (): BagPair[] => {
   }
 };
 
+const readOwner = (): string => {
+  if (typeof window === "undefined") return GUEST_OWNER;
+  try {
+    return window.localStorage.getItem(OWNER_KEY) || GUEST_OWNER;
+  } catch {
+    return GUEST_OWNER;
+  }
+};
+
+const writeOwner = (owner: string) => {
+  try {
+    window.localStorage.setItem(OWNER_KEY, owner);
+  } catch {
+    /* ignore */
+  }
+};
+
 const genId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -64,6 +86,7 @@ const genId = () =>
 
 export const BagProvider = ({ children }: { children: ReactNode }) => {
   const [pairs, setPairs] = useState<BagPair[]>(() => readStorage());
+  const ownerRef = useRef<string>(readOwner());
 
   useEffect(() => {
     try {
@@ -73,46 +96,91 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [pairs]);
 
-  // Protect against cross-user bag leakage on a shared device. When a user
-  // signs in, decide whether the current device-local bag belongs to them.
-  // Only SIGNED_IN is considered a real login — TOKEN_REFRESHED / INITIAL_SESSION
-  // fire on tab focus and reload for the SAME user and must not wipe their bag.
+  // Enforce bag ownership against the authenticated user.
+  // - guest items + sign-in => migrate (claim) by adopting the new user id
+  // - different previous user => clear local bag, then load from Supabase
+  // - same user => no-op
+  // - sign-out => keep bag, mark owner as guest (preserve state across sign-out)
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
-      if (event !== "SIGNED_IN" || !s?.user) return;
+    let cancelled = false;
 
-      const newUserId = s.user.id;
-      const action = decideBagAction({
-        previousUserId: readLastUserId(),
-        newUserId,
-        newUserEmail: s.user.email,
-        guestEmail: readGuestEmail(),
-      });
+    const loadRemoteBag = async (_userId: string) => {
+      // Best-effort: the app does not currently persist bag_items to Supabase.
+      // When persistence is wired up, hydrate from there here.
+      // const { data } = await supabase.from("bag_items").select("*").eq("user_id", userId);
+      // setPairs(mapRemoteToLocal(data ?? []));
+      return;
+    };
 
-      if (action === "clear") setPairs([]);
+    const reconcile = async (userId: string | null) => {
+      const prevOwner = ownerRef.current;
+      if (!userId) {
+        // Signed out: preserve items but mark as guest so a different user
+        // signing in next will see a mismatch and clear.
+        if (prevOwner !== GUEST_OWNER) {
+          ownerRef.current = GUEST_OWNER;
+          writeOwner(GUEST_OWNER);
+        }
+        return;
+      }
 
-      // The guest email is single-use: once a sign-in has consumed it (whether
-      // it triggered a migration or not), drop it so it can't affect a later user.
-      clearGuestEmail();
-      writeLastUserId(newUserId);
+      if (prevOwner === userId) {
+        // Same user — nothing to do.
+        return;
+      }
+
+      if (prevOwner === GUEST_OWNER) {
+        // Guest-to-account migration: claim the local bag for this user.
+        ownerRef.current = userId;
+        writeOwner(userId);
+        return;
+      }
+
+      // Different previous user: clear local, then hydrate from remote.
+      setPairs([]);
+      ownerRef.current = userId;
+      writeOwner(userId);
+      try {
+        await loadRemoteBag(userId);
+      } catch {
+        /* ignore */
+      }
+      if (cancelled) return;
+    };
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      reconcile(session?.user?.id ?? null);
     });
 
-    return () => sub.subscription.unsubscribe();
+    supabase.auth.getSession().then(({ data }) => {
+      reconcile(data.session?.user?.id ?? null);
+    });
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
-  const addPair: BagState["addPair"] = useCallback((services, pairId) => {
+  const addPair: BagState["addPair"] = useCallback((services, pairId, label, shoeType) => {
     setPairs((prev) => {
       if (pairId) {
         const idx = prev.findIndex((p) => p.pairId === pairId);
         if (idx !== -1) {
           const next = [...prev];
-          next[idx] = { ...next[idx], services, addedAt: new Date().toISOString() };
+          next[idx] = {
+            ...next[idx],
+            services,
+            label: label ?? next[idx].label,
+            shoeType: shoeType ?? next[idx].shoeType,
+            addedAt: new Date().toISOString(),
+          };
           return next;
         }
       }
       return [
         ...prev,
-        { id: genId(), pairId, addedAt: new Date().toISOString(), services },
+        { id: genId(), pairId, label, shoeType, addedAt: new Date().toISOString(), services },
       ];
     });
   }, []);

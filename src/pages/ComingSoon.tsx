@@ -73,7 +73,7 @@ const ComingSoon = () => {
   return (
     <main
       className="min-h-screen flex flex-col items-center justify-between px-6 py-10 text-white"
-      style={{ backgroundColor: "#3d1700", fontFamily: "'DM Sans', sans-serif" }}
+      style={{ backgroundColor: "#3d1700", fontFamily: "'Albert Sans', sans-serif" }}
     >
       <div className="w-full flex justify-center">
         <img src={logo} alt="Cobbli" className="h-32 md:h-40 w-auto" />

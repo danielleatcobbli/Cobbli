@@ -46,6 +46,7 @@ type AccountState = {
   updateContact: (email: string, phone: string) => void;
   addresses: Address[];
   addAddress: (a: Omit<Address, "id">) => Address;
+  updateAddress: (id: string, a: Omit<Address, "id">) => Address | null;
   paymentMethods: PaymentMethod[];
   addPaymentMethod: (p: Omit<PaymentMethod, "id">) => PaymentMethod;
   orders: Order[];
@@ -210,6 +211,23 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
     return addr;
   }, []);
 
+  const updateAddress: AccountState["updateAddress"] = useCallback((id, a) => {
+    let updated: Address | null = null;
+    setState((s) => {
+      const exists = s.addresses.some((x) => x.id === id);
+      if (!exists) return s;
+      updated = { ...a, id };
+      return {
+        ...s,
+        addresses: s.addresses.map((x) => {
+          if (x.id === id) return updated!;
+          return a.isDefault ? { ...x, isDefault: false } : x;
+        }),
+      };
+    });
+    return updated;
+  }, []);
+
   const addPaymentMethod: AccountState["addPaymentMethod"] = useCallback((p) => {
     const pm: PaymentMethod = { ...p, id: genId() };
     setState((s) => ({
@@ -233,8 +251,8 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const value = useMemo<AccountState>(
-    () => ({ ...state, updateContact, addAddress, addPaymentMethod, addOrder }),
-    [state, updateContact, addAddress, addPaymentMethod, addOrder],
+    () => ({ ...state, updateContact, addAddress, updateAddress, addPaymentMethod, addOrder }),
+    [state, updateContact, addAddress, updateAddress, addPaymentMethod, addOrder],
   );
 
   return (
