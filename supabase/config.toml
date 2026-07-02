@@ -1,4 +1,4 @@
-project_id = "vzyrzhfxdrtgyhpddvlj"
+project_id = "hqcdsjznvyywmoylmjur"
 
 [functions.send-order-confirmation]
 verify_jwt = false
@@ -13,6 +13,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.create-checkout]
+verify_jwt = false
+
+[functions.create-payment-intent]
 verify_jwt = false
 
 [functions.stripe-webhook]

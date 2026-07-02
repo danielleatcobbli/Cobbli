@@ -1,5 +1,5 @@
-// Shared service types & utilities. Service records themselves come from
-// Supabase via `useServices`; this module only holds the shape and helpers.
+// Shared service types & utilities. Service records come from Supabase via
+// `useServices`. This module only holds the shape and helpers used by the UI.
 
 export type ShoeType =
   | "Ankle boots"
@@ -20,71 +20,122 @@ export const SHOE_TYPES: ShoeType[] = [
   "Sneakers",
 ];
 
-/**
- * Simplified pricing tiers. Every service stores up to three prices — one per
- * tier. Services that cost the same across all shoe types store a single
- * price applied to all three tiers.
- */
-export type PriceTier = "Other" | "Ankle boots" | "Boots";
-
-/** Display order for the pricing table: Ankle boots / Boots / All other shoes. */
-export const PRICE_TIERS_ORDERED: PriceTier[] = ["Ankle boots", "Boots", "Other"];
-
-export const PRICE_TIER_LABELS: Record<PriceTier, string> = {
-  Other: "All other shoes",
-  "Ankle boots": "Ankle boots",
-  Boots: "Boots",
-};
-
-/** Map a specific shoe type to its pricing tier. */
-export const tierForShoeType = (t: ShoeType): PriceTier => {
-  if (t === "Boots") return "Boots";
-  if (t === "Ankle boots") return "Ankle boots";
-  return "Other";
-};
-
 export type ServiceCategory =
+  | "Bottom of shoe & heel"
   | "Cleaning"
+  | "Color, scuffs, & shine"
+  | "Inside of shoe"
   | "Preventative care"
-  | "Sole or heel repair"
-  | "Strap repair"
-  | "Zipper repair";
+  | "Straps, buckles, & hardware"
+  | "Tears & holes"
+  | "Zipper"
+  | "Fit";
 
 export const CATEGORIES_ORDERED: ServiceCategory[] = [
+  "Bottom of shoe & heel",
   "Cleaning",
+  "Color, scuffs, & shine",
+  "Inside of shoe",
   "Preventative care",
-  "Sole or heel repair",
-  "Strap repair",
-  "Zipper repair",
+  "Straps, buckles, & hardware",
+  "Tears & holes",
+  "Zipper",
 ];
 
-export type Service = {
-  slug: string;
-  name: string;
-  description: string;
-  /** Per-tier pricing in dollars. A missing tier means the service is not eligible for that tier. */
-  pricing: Partial<Record<PriceTier, number>>;
-  categories: ServiceCategory[];
-  /** Lower number = higher rank. */
+/** Premium brands shown in the "Which brands are premium?" expandable on detail pages. */
+export const PREMIUM_BRANDS = [
+  "Amina Muaddi",
+  "Aquazzura",
+  "Balenciaga",
+  "Bottega Veneta",
+  "Chanel",
+  "Christian Louboutin",
+  "Golden Goose",
+  "Gucci",
+  "Hermès",
+  "Jimmy Choo",
+  "Maison Margiela",
+  "Manolo Blahnik",
+  "Miu Miu",
+  "Prada",
+  "Saint Laurent",
+  "Valentino",
+] as const;
+
+export type ServiceVariant = {
+  key: string;
+  label: string;
+  standard: number;
+  premium?: number;
   rank: number;
 };
 
-/** True when the service has more than one distinct tier price. */
-export const isPriceRange = (s: Service) => {
-  const prices = Object.values(s.pricing);
-  if (prices.length <= 1) return false;
-  return new Set(prices).size > 1;
+export type QAOption = {
+  label: string;
+  hint?: string;
+  variantKey?: string;
+  priceLabel?: string;
+  note?: string;
 };
 
-/** Lowest price across eligible tiers, in dollars. */
-export const minPrice = (s: Service) => Math.min(...Object.values(s.pricing));
+export type QAConfig = {
+  question: string;
+  hint?: string;
+  options: QAOption[];
+};
 
-export const isEligibleForTier = (s: Service, tier: PriceTier) =>
-  s.pricing[tier] !== undefined;
+export type Service = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  cardName: string;
+  cardPriceLabel: string;
+  categories: ServiceCategory[];
+  rank: number;
+  isComingSoon: boolean;
+  variants: ServiceVariant[];
+  qa?: QAConfig;
+};
 
-export const isEligibleForShoeType = (s: Service, shoeType: ShoeType) =>
-  isEligibleForTier(s, tierForShoeType(shoeType));
+/** Lowest standard variant price (dollars), used by the repair flow back-compat. */
+export const minPrice = (s: Service) =>
+  s.variants.length === 0 ? 0 : Math.min(...s.variants.map((v) => v.standard));
 
-/** Price for a given shoe type, in dollars. Undefined when not eligible. */
-export const priceForShoeType = (s: Service, shoeType: ShoeType) =>
-  s.pricing[tierForShoeType(shoeType)];
+/** True when the service has any premium variant or multiple standard prices. */
+export const hasPremiumColumn = (s: Service) =>
+  s.variants.some((v) => v.premium !== undefined && v.premium !== v.standard);
+
+/**
+ * Back-compat helper used by the existing repair flow's `SelectServices` page.
+ * Picks the variant best matching the shoe type (for waterproofing-style
+ * shoe-type variants), otherwise returns the first variant's standard price.
+ */
+export const priceForShoeType = (s: Service, shoeType: ShoeType): number => {
+  if (s.variants.length === 0) return 0;
+  const lookup: Record<string, string> = {
+    Boots: "boots",
+    "Ankle boots": "ankle_boots",
+  };
+  const wanted = lookup[shoeType] ?? "other";
+  const byShoe = s.variants.find((v) => v.key === wanted);
+  if (byShoe) return byShoe.standard;
+  return s.variants[0].standard;
+};
+
+/** All services are now eligible for all shoe types — final eligibility is determined at assessment. */
+export const isEligibleForShoeType = (_s: Service, _shoeType: ShoeType) => true;
+
+/**
+ * Price (in dollars) for the full-resole service given a known sole material and
+ * care tier. Returns null when the material isn't recognised in the catalog.
+ */
+export const fullResolePrice = (
+  s: Service,
+  premium: boolean,
+  material: "Leather" | "Rubber",
+): number | null => {
+  const v = s.variants.find((x) => x.key === material.toLowerCase());
+  if (!v) return null;
+  return premium && v.premium !== undefined ? v.premium : v.standard;
+};

@@ -1,0 +1,1 @@
+UPDATE public.services SET card_name = 'Dull or dry material' WHERE slug = 'leather-or-suede-conditioning';

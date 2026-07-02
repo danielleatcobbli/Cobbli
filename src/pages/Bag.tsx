@@ -1,13 +1,21 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useNavigate } from "react-router-dom";
-import { trackEvent } from "@/lib/analytics";
 import { Pencil, Trash2 } from "lucide-react";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useBag, formatPrice } from "@/context/BagContext";
+import { useLivePricedBag } from "@/hooks/useLivePricedBag";
+import { useAuth } from "@/context/AuthContext";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import bagIcon from "@/assets/icons/bag.svg";
 
@@ -16,7 +24,8 @@ const COURIER_FEE = 1500; // $15 in cents
 
 const Bag = () => {
   const navigate = useNavigate();
-  const { pairs, subtotal, removePair, removeService } = useBag();
+  const { pairs: rawPairs, removePair, removeService } = useBag();
+  const { pairs, subtotal } = useLivePricedBag(rawPairs);
   const { getPair } = usePairs();
   const { setSelectedPairId, setSelectedServiceSlugs, setActiveCategory } = useRepairFlow();
 
@@ -32,7 +41,7 @@ const Bag = () => {
   usePageMeta({
     title: "Shopping bag — Cobbli",
     description:
-      "Review the shoe repairs in your Cobbli bag, see your order summary and check out for door-to-door pickup and return across NYC.",
+"Review the shoe repairs in your Cobbli bag, see your order summary and check out for door-to-door pickup and return across NYC.",
   });
 
   // Most-recently-added pair first
@@ -45,12 +54,15 @@ const Bag = () => {
   const courierFee = repairsTotal >= FREE_COURIER_THRESHOLD ? 0 : COURIER_FEE;
   const orderSubtotal = repairsTotal + courierFee;
 
+  const { user } = useAuth();
+  const [showAuthGate, setShowAuthGate] = useState(false);
+
   const handleCheckout = () => {
-    trackEvent("checkout_started");
-    const signedIn = typeof window !== "undefined" && localStorage.getItem("cobbli:signed-in") === "1";
-    navigate(signedIn ? "/checkout" : "/signin", {
-      state: signedIn ? undefined : { from: "/checkout" },
-    });
+    if (user) {
+      navigate("/checkout");
+    } else {
+      setShowAuthGate(true);
+    }
   };
 
   return (
@@ -70,7 +82,7 @@ const Bag = () => {
                 {orderedPairs.map((pair) => {
                   const pairTotal = pair.services.reduce((s, svc) => s + svc.price, 0);
                   const savedPair = pair.pairId ? getPair(pair.pairId) : undefined;
-                  const pairLabel = savedPair ? formatPairLabel(savedPair) : pair.label ?? "Unnamed pair";
+                  const pairLabel = pair.label ?? (savedPair ? formatPairLabel(savedPair) : "Unnamed pair");
                   return (
                     <li
                       key={pair.id}
@@ -174,6 +186,33 @@ const Bag = () => {
         </div>
       </main>
 
+      <Dialog open={showAuthGate} onOpenChange={setShowAuthGate}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Almost there</DialogTitle>
+            <DialogDescription>
+              Sign in or create an account to complete your repair.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 flex flex-col gap-2">
+            <Button
+              variant="hero"
+              size="lg"
+              onClick={() => navigate("/signin", { state: { from: "/checkout" } })}
+            >
+              Sign in
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => navigate("/signup", { state: { from: "/checkout" } })}
+            >
+              Create an account
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Footer />
     </div>
   );
@@ -198,7 +237,7 @@ const EmptyBag = () => (
       You haven't added any repairs yet. Start a repair to get your shoes looking their best.
     </p>
     <Button asChild variant="hero" size="lg">
-      <Link to="/start-repair" onClick={() => trackEvent("start_repair")}>Start a repair</Link>
+      <Link to="/start-repair">Start a repair</Link>
     </Button>
   </div>
 );

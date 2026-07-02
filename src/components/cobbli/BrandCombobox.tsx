@@ -21,13 +21,29 @@ export const BRANDS = [
 ];
 
 export const BRAND_UNKNOWN = "I don't know";
+export const BRAND_UNKNOWN_DISPLAY = "Unknown brand";
+
+/** Returns the user-facing brand string, mapping the "I don't know" sentinel to "Unknown brand". */
+export const displayBrand = (value?: string | null): string | null => {
+  const v = value?.trim();
+  if (!v) return null;
+  if (v === BRAND_UNKNOWN || v.toLowerCase() === "unknown") return BRAND_UNKNOWN_DISPLAY;
+  return v;
+};
 
 export type BrandMode = "" | "list" | "custom" | "unknown";
+
+/** Returns the canonical brand from BRANDS if `value` matches case-insensitively, else null. */
+export const canonicalBrand = (value: string): string | null => {
+  if (!value) return null;
+  const v = value.trim().toLowerCase();
+  return BRANDS.find((b) => b.toLowerCase() === v) ?? null;
+};
 
 export const inferBrandMode = (value: string): BrandMode => {
   if (!value) return "";
   if (value === BRAND_UNKNOWN) return "unknown";
-  if (BRANDS.includes(value)) return "list";
+  if (canonicalBrand(value)) return "list";
   return "custom";
 };
 
@@ -42,11 +58,14 @@ type Props = {
 const BrandCombobox = ({ id, mode, value, onChange, disabled }: Props) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) {
       setQuery("");
+      setActiveIndex(0);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [open]);
@@ -56,6 +75,15 @@ const BrandCombobox = ({ id, mode, value, onChange, disabled }: Props) => {
     if (!q) return BRANDS;
     return BRANDS.filter((b) => b.toLowerCase().includes(q));
   }, [query]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-brand-idx="${activeIndex}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
 
   const triggerLabel =
     mode === "list" && value ? value
@@ -94,12 +122,38 @@ const BrandCombobox = ({ id, mode, value, onChange, disabled }: Props) => {
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setActiveIndex((i) => Math.min(filtered.length - 1, i + 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setActiveIndex((i) => Math.max(0, i - 1));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  const choice = filtered[activeIndex];
+                  if (choice) selectList(choice);
+                }
+              }}
               placeholder="Search brands…"
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
 
-          <div className="max-h-72 overflow-y-auto py-1">
+          <div
+            ref={listRef}
+            className="max-h-72 overflow-y-auto py-1 overscroll-contain"
+            onWheel={(e) => {
+              const el = e.currentTarget;
+              const max = el.scrollHeight - el.clientHeight;
+              if (max <= 0) return;
+              const next = Math.min(max, Math.max(0, el.scrollTop + e.deltaY));
+              if (next !== el.scrollTop) {
+                el.scrollTop = next;
+                e.stopPropagation();
+              }
+            }}
+          >
             <button
               type="button"
               onClick={() => {
@@ -126,16 +180,19 @@ const BrandCombobox = ({ id, mode, value, onChange, disabled }: Props) => {
             {filtered.length === 0 ? (
               <p className="px-3 py-3 text-sm text-muted-foreground">No brands match "{query}".</p>
             ) : (
-              filtered.map((b) => {
+              filtered.map((b, i) => {
                 const selected = mode === "list" && value === b;
+                const active = i === activeIndex;
                 return (
                   <button
                     key={b}
                     type="button"
+                    data-brand-idx={i}
+                    onMouseEnter={() => setActiveIndex(i)}
                     onClick={() => selectList(b)}
-                    className={`flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted ${
-                      selected ? "text-primary font-medium" : "text-primary"
-                    }`}
+                    className={`flex w-full items-center justify-between px-3 py-2 text-sm ${
+                      active ? "bg-muted" : ""
+                    } ${selected ? "text-primary font-medium" : "text-primary"}`}
                   >
                     <span>{b}</span>
                     {selected && <Check size={14} />}
