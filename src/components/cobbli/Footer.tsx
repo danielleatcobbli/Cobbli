@@ -28,11 +28,11 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
     <footer
       id="footer"
       className="text-white"
-      style={{ backgroundColor: "#3d1700", fontFamily: "'DM Sans', sans-serif" }}
+      style={{ backgroundColor: "#3d1700", fontFamily: "'Albert Sans', sans-serif" }}
     >
       <div className="container py-10 flex flex-row items-center justify-between gap-6">
         <div className="flex flex-col gap-2 text-white" style={{ fontSize: "13px", fontWeight: 400 }}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <a href="/privacy-policy" className="underline" {...legalLinkProps}>
               Privacy Policy
             </a>
@@ -43,6 +43,10 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
             <span aria-hidden="true">·</span>
             <a href="/terms-conditions" className="underline" {...legalLinkProps}>
               Terms & Conditions
+            </a>
+            <span aria-hidden="true">·</span>
+            <a href="/blog" className="underline" {...legalLinkProps}>
+              Blog
             </a>
           </div>
           <p>© 2026 Cobbli. All Rights Reserved.</p>

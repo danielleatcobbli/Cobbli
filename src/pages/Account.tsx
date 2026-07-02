@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Camera, Eye, EyeOff } from "lucide-react";
+import { Camera, Eye, EyeOff, Pencil } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
+import { displayBrand } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -159,7 +160,7 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => {
 };
 
 const pairIdentifier = (p: { shoeType?: string; colors?: string[]; brand?: string } | null | undefined) =>
-  [p?.colors?.join(" / "), p?.brand, p?.shoeType].filter(Boolean).join(" · ") || "Your pair";
+  [p?.colors?.join(" / "), displayBrand(p?.brand), p?.shoeType].filter(Boolean).join(" · ") || "Your pair";
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
@@ -220,6 +221,39 @@ const PROPOSAL_STATUS: Record<
   },
 };
 
+const ClickableCard = ({
+  to,
+  children,
+  borderLeftColor,
+}: {
+  to: string;
+  children: React.ReactNode;
+  borderLeftColor?: string;
+}) => {
+  const navigate = useNavigate();
+  const go = () => navigate(to);
+  return (
+    <li
+      role="link"
+      tabIndex={0}
+      onClick={go}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          go();
+        }
+      }}
+      className={cn(
+        "rounded-lg border border-border bg-card p-5 shadow-soft cursor-pointer transition-shadow transition-colors hover:shadow-md hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40",
+        borderLeftColor && "border-l-[3px]",
+      )}
+      style={borderLeftColor ? { borderLeftColor } : undefined}
+    >
+      {children}
+    </li>
+  );
+};
+
 const OrderCard = ({ o }: { o: Order }) => {
   const firstPair = o.order_items[0]?.pair_snapshot ?? null;
   const services = Array.from(
@@ -227,7 +261,7 @@ const OrderCard = ({ o }: { o: Order }) => {
   );
   const pillCls = ORDER_STATUS_PILL[o.status] ?? "bg-gray-100 text-gray-800";
   return (
-    <li className="rounded-lg border border-border bg-card p-5 shadow-soft">
+    <ClickableCard to={`/order-confirmation/${o.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-semibold">Order #{o.order_number}</p>
@@ -242,15 +276,10 @@ const OrderCard = ({ o }: { o: Order }) => {
             {orderStatusLabel(o.status)}
           </span>
           <p className="font-semibold">{formatPrice(o.total_cents)}</p>
-          <Link
-            to={`/order-confirmation/${o.id}`}
-            className="text-sm text-primary underline underline-offset-4"
-          >
-            View order
-          </Link>
+          <span className="text-sm text-primary underline underline-offset-4">View order</span>
         </div>
       </div>
-    </li>
+    </ClickableCard>
   );
 };
 
@@ -258,15 +287,10 @@ const ProposalCard = ({ a }: { a: Assessment }) => {
   const meta = PROPOSAL_STATUS[a.status] ?? PROPOSAL_STATUS.pending;
   const ref = a.id.slice(0, 8).toUpperCase();
   const firstPair = a.pairs?.[0];
-  const numPairs = a.pairs?.length ?? 1;
-  const depositAmount = 20 * numPairs;
-  const depositLine = `$${depositAmount} deposit ${meta.depositReleased ? "released" : "held"}`;
-  const link =
-    a.status === "pending" ? `/proposal/${a.id}` : `/proposal/${a.id}`;
   return (
-    <li
-      className="rounded-lg border border-border bg-card p-5 shadow-soft border-l-[3px]"
-      style={{ borderLeftColor: meta.active ? "#fdb600" : "#9ca3af" }}
+    <ClickableCard
+      to={`/proposal/${a.id}`}
+      borderLeftColor={meta.active ? "#fdb600" : "#9ca3af"}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -286,16 +310,10 @@ const ProposalCard = ({ a }: { a: Assessment }) => {
           </span>
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
-        <div className="text-sm">
-          <p className="font-medium">{depositLine}</p>
-          <p className="text-xs text-muted-foreground">$20 per pair</p>
-        </div>
-        <Link to={link} className="text-sm text-primary underline underline-offset-4">
-          {meta.action}
-        </Link>
+      <div className="mt-4 flex justify-end">
+        <span className="text-sm text-primary underline underline-offset-4">{meta.action}</span>
       </div>
-    </li>
+    </ClickableCard>
   );
 };
 
@@ -369,7 +387,7 @@ const Orders = () => {
   return (
     <section>
       <h1 className="text-2xl md:text-3xl font-semibold">My orders</h1>
-      <p className="text-muted-foreground mt-1 mb-6">Your repairs and proposals.</p>
+      <p className="text-muted-foreground mt-1 mb-6">Your repairs and proposals</p>
 
       {loading ? (
         <BrandSpinner className="py-10" />
@@ -384,7 +402,7 @@ const Orders = () => {
           <TabsContent value="all">
             {combined.length === 0 ? (
               <EmptyState
-                message="No orders or proposals yet. Start a repair to get started."
+                message="No orders yet."
                 cta="Start a repair"
                 to="/start-repair"
               />
@@ -470,17 +488,30 @@ const Addresses = () => {
           </Button>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {items.map((a) => (
-            <li key={a.id} className="rounded-lg border border-border bg-card p-4 text-sm">
-              <p className="font-medium">
-                {a.street}
-                {a.street2 ? `, ${a.street2}` : ""}, {a.city}, {a.state} {a.zip}
-                {a.is_default && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="space-y-3">
+            {items.map((a) => (
+              <li key={a.id} className="rounded-lg border border-border bg-card p-4 text-sm flex items-start justify-between gap-3">
+                <p className="font-medium">
+                  {a.street}
+                  {a.street2 ? `, ${a.street2}` : ""}, {a.city}, {a.state} {a.zip}
+                  {a.is_default && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
+                </p>
+                <Link
+                  to={`/account/addresses/${a.id}/edit`}
+                  className="inline-flex items-center gap-1.5 text-sm text-primary underline underline-offset-4 shrink-0"
+                >
+                  <Pencil size={14} /> Edit
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4">
+            <Button asChild variant="outline">
+              <Link to="/account/addresses/new">+ Add a new address</Link>
+            </Button>
+          </div>
+        </>
       )}
     </section>
   );
@@ -517,32 +548,47 @@ const PaymentMethods = () => {
           </Button>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {items.map((p) => {
-            const expired = isExpired(p.exp_month, p.exp_year);
-            return (
-              <li
-                key={p.id}
-                className="rounded-lg border border-border bg-card p-4 text-sm flex items-center justify-between"
-              >
-                <div>
-                  <p className="font-medium">
-                    {p.card_brand} ending in {p.card_last4}
-                    {p.is_default && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Exp {String(p.exp_month).padStart(2, "0")}/{String(p.exp_year).slice(-2)}
-                  </p>
-                </div>
-                {expired && (
-                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-destructive/10 text-destructive">
-                    Expired
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <ul className="space-y-3">
+            {items.map((p) => {
+              const expired = isExpired(p.exp_month, p.exp_year);
+              return (
+                <li
+                  key={p.id}
+                  className="rounded-lg border border-border bg-card p-4 text-sm flex items-center justify-between gap-3"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {p.card_brand} ending in {p.card_last4}
+                      {p.is_default && <span className="ml-2 text-xs text-muted-foreground">(Default)</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Exp {String(p.exp_month).padStart(2, "0")}/{String(p.exp_year).slice(-2)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {expired && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-destructive/10 text-destructive">
+                        Expired
+                      </span>
+                    )}
+                    <Link
+                      to={`/account/payment-methods/${p.id}/edit`}
+                      className="inline-flex items-center gap-1.5 text-sm text-primary underline underline-offset-4"
+                    >
+                      <Pencil size={14} /> Edit
+                    </Link>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-4">
+            <Button asChild variant="outline">
+              <Link to="/account/payment-methods/new">+ Add a new payment method</Link>
+            </Button>
+          </div>
+        </>
       )}
     </section>
   );
@@ -563,8 +609,18 @@ const AddAddress = () => {
     zip: "",
     makeDefault: false,
   });
+  const [existingCount, setExistingCount] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { isServiceable } = useServiceableZips();
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("addresses")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .then(({ count }) => setExistingCount(count ?? 0));
+  }, [user]);
+  const isFirst = existingCount === 0;
   // Flag invalid only on a definitive false (never while loading), and require
   // an explicit true for `valid` so submit waits for confirmed coverage.
   const zipInvalid = form.zip.length === 5 && isServiceable(form.zip) === false;
@@ -579,6 +635,7 @@ const AddAddress = () => {
     e.preventDefault();
     if (!valid || !user || submitting) return;
     setSubmitting(true);
+    const shouldBeDefault = isFirst || form.makeDefault;
     const { error } = await supabase.from("addresses").insert({
       user_id: user.id,
       street: form.street.trim(),
@@ -586,7 +643,7 @@ const AddAddress = () => {
       city: form.city.trim(),
       state: form.state,
       zip: form.zip,
-      is_default: form.makeDefault,
+      is_default: shouldBeDefault,
     });
     setSubmitting(false);
     if (error) {
@@ -633,10 +690,12 @@ const AddAddress = () => {
             <p className="text-sm text-destructive">We don't currently service this ZIP code.</p>
           )}
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
-          Set as default address
-        </label>
+        {!isFirst && existingCount !== null && (
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
+            Set as default address
+          </label>
+        )}
         <div className="flex gap-3 pt-2">
           <Button type="submit" variant="hero" disabled={!valid || submitting}>
             {submitting ? "Saving…" : "Save address"}
@@ -659,6 +718,9 @@ const detectBrand = (num: string) => {
   return "Card";
 };
 
+const formatAddressOneLine = (a: Address) =>
+  [a.street, a.street2, `${a.city}, ${a.state} ${a.zip}`].filter(Boolean).join(", ");
+
 const AddPaymentMethod = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -666,11 +728,45 @@ const AddPaymentMethod = () => {
     title: "Add payment method — Cobbli",
     description: "Save a card to your Cobbli account for faster checkout.",
   });
-  const [form, setForm] = useState({ cardNumber: "", exp: "", cvv: "", makeDefault: false });
+  const [form, setForm] = useState({
+    cardholderName: "",
+    cardNumber: "",
+    exp: "",
+    cvv: "",
+    billingAddressId: "",
+    makeDefault: false,
+  });
+  const [existingCount, setExistingCount] = useState<number | null>(null);
+  const [addresses, setAddresses] = useState<Address[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("payment_methods")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .then(({ count }) => setExistingCount(count ?? 0));
+    supabase
+      .from("addresses")
+      .select("id,street,street2,city,state,zip,is_default")
+      .eq("user_id", user.id)
+      .order("is_default", { ascending: false })
+      .then(({ data }) => {
+        const list = (data ?? []) as Address[];
+        setAddresses(list);
+        const def = list.find((a) => a.is_default) ?? list[0];
+        if (def) setForm((f) => (f.billingAddressId ? f : { ...f, billingAddressId: def.id }));
+      });
+  }, [user]);
+  const isFirst = existingCount === 0;
   const digits = form.cardNumber.replace(/\D/g, "");
   const expMatch = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(form.exp);
-  const valid = digits.length >= 13 && !!expMatch && /^\d{3,4}$/.test(form.cvv);
+  const valid =
+    form.cardholderName.trim().length > 1 &&
+    digits.length >= 13 &&
+    !!expMatch &&
+    /^\d{3,4}$/.test(form.cvv) &&
+    !!form.billingAddressId;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -679,11 +775,13 @@ const AddPaymentMethod = () => {
     const { error } = await supabase.from("payment_methods").insert({
       user_id: user.id,
       stripe_payment_method_id: `manual_${Date.now()}`,
+      cardholder_name: form.cardholderName.trim(),
       card_brand: detectBrand(form.cardNumber),
       card_last4: digits.slice(-4),
       exp_month: Number(expMatch[1]),
       exp_year: 2000 + Number(expMatch[2]),
-      is_default: form.makeDefault,
+      billing_address_id: form.billingAddressId,
+      is_default: isFirst || form.makeDefault,
     });
     setSubmitting(false);
     if (error) {
@@ -698,6 +796,15 @@ const AddPaymentMethod = () => {
     <section className="max-w-lg">
       <h1 className="text-2xl md:text-3xl font-semibold mb-6">Add payment method</h1>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <div className="space-y-1.5">
+          <Label htmlFor="cardholder">Cardholder name</Label>
+          <Input
+            id="cardholder"
+            autoComplete="cc-name"
+            value={form.cardholderName}
+            onChange={(e) => setForm({ ...form, cardholderName: e.target.value })}
+          />
+        </div>
         <div className="space-y-1.5">
           <Label htmlFor="card">Card number</Label>
           <Input
@@ -736,13 +843,517 @@ const AddPaymentMethod = () => {
             />
           </div>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
-          Set as default payment method
-        </label>
+        <div className="space-y-1.5">
+          <Label htmlFor="billing-address">Billing address</Label>
+          {addresses.length === 0 ? (
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+              You don't have any saved addresses yet.{" "}
+              <Link to="/account/addresses/new" className="text-primary underline underline-offset-4">
+                Add one first
+              </Link>
+              .
+            </div>
+          ) : (
+            <Select
+              value={form.billingAddressId}
+              onValueChange={(v) => setForm({ ...form, billingAddressId: v })}
+            >
+              <SelectTrigger id="billing-address">
+                <SelectValue placeholder="Select a billing address" />
+              </SelectTrigger>
+              <SelectContent>
+                {addresses.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {formatAddressOneLine(a)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        {!isFirst && existingCount !== null && (
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
+            Set as default payment method
+          </label>
+        )}
         <div className="flex gap-3 pt-2">
           <Button type="submit" variant="hero" disabled={!valid || submitting}>
             {submitting ? "Saving…" : "Save payment method"}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => navigate("/account/payment-methods")}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </section>
+  );
+};
+
+const EditAddress = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const { isServiceable } = useServiceableZips();
+  usePageMeta({
+    title: "Edit address — Cobbli",
+    description: "Update a saved pickup and delivery address on your Cobbli account.",
+  });
+  const [form, setForm] = useState({
+    street: "",
+    street2: "",
+    city: "",
+    state: "NY",
+    zip: "",
+    makeDefault: false,
+  });
+  const [loaded, setLoaded] = useState(false);
+  const [wasDefault, setWasDefault] = useState(false);
+  const [otherCount, setOtherCount] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!user || !id) return;
+    (async () => {
+      const { data } = await supabase
+        .from("addresses")
+        .select("street,street2,city,state,zip,is_default")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data) {
+        setForm({
+          street: data.street ?? "",
+          street2: data.street2 ?? "",
+          city: data.city ?? "",
+          state: data.state ?? "NY",
+          zip: data.zip ?? "",
+          makeDefault: !!data.is_default,
+        });
+        setWasDefault(!!data.is_default);
+      }
+      const { count } = await supabase
+        .from("addresses")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .neq("id", id);
+      setOtherCount(count ?? 0);
+      setLoaded(true);
+    })();
+  }, [user, id]);
+
+  const isOnly = otherCount === 0;
+  const zipInvalid = form.zip.length === 5 && isServiceable(form.zip) === false;
+  const valid =
+    form.street.trim() &&
+    form.city.trim() &&
+    form.state &&
+    /^\d{5}$/.test(form.zip) &&
+    isServiceable(form.zip) === true;
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!valid || !user || !id || submitting) return;
+    setSubmitting(true);
+    // If this is the only address, keep it as default. Otherwise honor checkbox,
+    // but never demote the previously-default unless another becomes default.
+    const newDefault = isOnly ? true : wasDefault ? true : form.makeDefault;
+    const { error } = await supabase
+      .from("addresses")
+      .update({
+        street: form.street.trim(),
+        street2: form.street2.trim() || null,
+        city: form.city.trim(),
+        state: form.state,
+        zip: form.zip,
+        is_default: newDefault,
+      })
+      .eq("id", id)
+      .eq("user_id", user.id);
+    setSubmitting(false);
+    if (error) {
+      toast.error("Could not update address. Please try again.");
+      return;
+    }
+    toast.success("Address updated.");
+    navigate("/account/addresses");
+  };
+
+  if (!loaded) return <BrandSpinner className="py-10" />;
+
+  return (
+    <section className="max-w-lg">
+      <h1 className="text-2xl md:text-3xl font-semibold mb-6">Edit address</h1>
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <div className="space-y-1.5">
+          <Label htmlFor="street">Street address</Label>
+          <Input id="street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="street2">Apt, suite, etc. (optional)</Label>
+          <Input id="street2" value={form.street2} onChange={(e) => setForm({ ...form, street2: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="city">City</Label>
+            <Input id="city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="state">State</Label>
+            <Select value={form.state} onValueChange={(v) => setForm({ ...form, state: v })}>
+              <SelectTrigger id="state"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {US_STATES.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="zip">ZIP code</Label>
+          <Input id="zip" inputMode="numeric" maxLength={5} value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value.replace(/\D/g, "") })} />
+          {zipInvalid && (
+            <p className="text-sm text-destructive">We don't currently service this ZIP code.</p>
+          )}
+        </div>
+        {!isOnly && !wasDefault && (
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
+            Set as default address
+          </label>
+        )}
+        <div className="flex gap-3 pt-2">
+          <Button type="submit" variant="hero" disabled={!valid || submitting}>
+            {submitting ? "Saving…" : "Save changes"}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => navigate("/account/addresses")}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </section>
+  );
+};
+
+const EditPaymentMethod = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const { isServiceable } = useServiceableZips();
+  usePageMeta({
+    title: "Edit payment method — Cobbli",
+    description: "Update a saved card on your Cobbli account.",
+  });
+  const [existing, setExisting] = useState<{ brand: string; last4: string; isDefault: boolean } | null>(null);
+  const [form, setForm] = useState({
+    cardholderName: "",
+    cardNumber: "",
+    exp: "",
+    cvv: "",
+    replaceCard: false,
+    makeDefault: false,
+    billingAddressId: "",
+  });
+  const [newAddr, setNewAddr] = useState({
+    street: "",
+    street2: "",
+    city: "",
+    state: "NY",
+    zip: "",
+    makeDefault: false,
+  });
+  const isNewAddress = form.billingAddressId === "__new__";
+  const newAddrZipInvalid = newAddr.zip.length === 5 && isServiceable(newAddr.zip) === false;
+  const newAddrValid =
+    !!newAddr.street.trim() &&
+    !!newAddr.city.trim() &&
+    !!newAddr.state &&
+    /^\d{5}$/.test(newAddr.zip) &&
+    isServiceable(newAddr.zip) === true;
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [otherCount, setOtherCount] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!user || !id) return;
+    (async () => {
+      const { data } = await supabase
+        .from("payment_methods")
+        .select("card_brand,card_last4,exp_month,exp_year,is_default,cardholder_name,billing_address_id")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data) {
+        setExisting({
+          brand: data.card_brand,
+          last4: data.card_last4,
+          isDefault: !!data.is_default,
+        });
+        const mm = String(data.exp_month).padStart(2, "0");
+        const yy = String(data.exp_year).slice(-2);
+        setForm((f) => ({
+          ...f,
+          exp: `${mm}/${yy}`,
+          makeDefault: !!data.is_default,
+          cardholderName: (data as { cardholder_name?: string | null }).cardholder_name ?? "",
+          billingAddressId: (data as { billing_address_id?: string | null }).billing_address_id ?? "",
+        }));
+      }
+      const { count } = await supabase
+        .from("payment_methods")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .neq("id", id);
+      setOtherCount(count ?? 0);
+      const { data: addrs } = await supabase
+        .from("addresses")
+        .select("id,street,street2,city,state,zip,is_default")
+        .eq("user_id", user.id)
+        .order("is_default", { ascending: false });
+      setAddresses((addrs ?? []) as Address[]);
+    })();
+  }, [user, id]);
+
+  const isOnly = otherCount === 0;
+  const digits = form.cardNumber.replace(/\D/g, "");
+  const expMatch = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(form.exp);
+  const cardValid = !form.replaceCard || (digits.length >= 13 && /^\d{3,4}$/.test(form.cvv));
+  const valid =
+    !!existing &&
+    !!expMatch &&
+    cardValid &&
+    form.cardholderName.trim().length > 1 &&
+    !!form.billingAddressId &&
+    (!isNewAddress || newAddrValid);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!valid || !user || !id || submitting || !expMatch) return;
+    setSubmitting(true);
+    let billingAddressId = form.billingAddressId;
+    if (isNewAddress) {
+      const { data: inserted, error: addrErr } = await supabase
+        .from("addresses")
+        .insert({
+          user_id: user.id,
+          street: newAddr.street.trim(),
+          street2: newAddr.street2.trim() || null,
+          city: newAddr.city.trim(),
+          state: newAddr.state,
+          zip: newAddr.zip,
+          is_default: newAddr.makeDefault,
+        })
+        .select("id")
+        .single();
+      if (addrErr || !inserted) {
+        setSubmitting(false);
+        toast.error("Could not save new address. Please try again.");
+        return;
+      }
+      billingAddressId = inserted.id;
+    }
+    const newDefault = isOnly ? true : existing!.isDefault ? true : form.makeDefault;
+    const update: {
+      exp_month: number;
+      exp_year: number;
+      is_default: boolean;
+      cardholder_name: string;
+      billing_address_id: string;
+      stripe_payment_method_id?: string;
+      card_brand?: string;
+      card_last4?: string;
+    } = {
+      exp_month: Number(expMatch[1]),
+      exp_year: 2000 + Number(expMatch[2]),
+      is_default: newDefault,
+      cardholder_name: form.cardholderName.trim(),
+      billing_address_id: billingAddressId,
+    };
+    if (form.replaceCard) {
+      update.stripe_payment_method_id = `manual_${Date.now()}`;
+      update.card_brand = detectBrand(form.cardNumber);
+      update.card_last4 = digits.slice(-4);
+    }
+    const { error } = await supabase
+      .from("payment_methods")
+      .update(update)
+      .eq("id", id)
+      .eq("user_id", user.id);
+    setSubmitting(false);
+    if (error) {
+      toast.error("Could not update payment method. Please try again.");
+      return;
+    }
+    toast.success("Payment method updated.");
+    navigate("/account/payment-methods");
+  };
+
+  if (!existing) return <BrandSpinner className="py-10" />;
+
+  return (
+    <section className="max-w-lg">
+      <h1 className="text-2xl md:text-3xl font-semibold mb-6">Edit payment method</h1>
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <div className="rounded-lg border border-border bg-card p-4 text-sm">
+          <p className="font-medium">
+            {existing.brand} ending in {existing.last4}
+          </p>
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, replaceCard: !form.replaceCard, cardNumber: "", cvv: "" })}
+            className="mt-2 text-sm text-primary underline underline-offset-4"
+          >
+            {form.replaceCard ? "Keep this card" : "Replace card details"}
+          </button>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="cardholder">Cardholder name</Label>
+          <Input
+            id="cardholder"
+            autoComplete="cc-name"
+            value={form.cardholderName}
+            onChange={(e) => setForm({ ...form, cardholderName: e.target.value })}
+          />
+        </div>
+
+        {form.replaceCard && (
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="card">New card number</Label>
+              <Input
+                id="card"
+                inputMode="numeric"
+                autoComplete="cc-number"
+                value={form.cardNumber}
+                onChange={(e) => setForm({ ...form, cardNumber: e.target.value.replace(/[^\d ]/g, "").slice(0, 19) })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cvv">CVV</Label>
+              <Input
+                id="cvv"
+                inputMode="numeric"
+                autoComplete="cc-csc"
+                maxLength={4}
+                value={form.cvv}
+                onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, "") })}
+              />
+            </div>
+          </>
+        )}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="exp">Expiration (MM/YY)</Label>
+          <Input
+            id="exp"
+            inputMode="numeric"
+            autoComplete="cc-exp"
+            placeholder="MM/YY"
+            value={form.exp}
+            onChange={(e) => {
+              let v = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+              if (v.length >= 3) v = `${v.slice(0, 2)}/${v.slice(2)}`;
+              setForm({ ...form, exp: v });
+            }}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="billing-address">Billing address</Label>
+          <Select
+            value={form.billingAddressId}
+            onValueChange={(v) => setForm({ ...form, billingAddressId: v })}
+          >
+            <SelectTrigger id="billing-address">
+              <SelectValue placeholder="Select a billing address" />
+            </SelectTrigger>
+            <SelectContent>
+              {addresses.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {formatAddressOneLine(a)}
+                </SelectItem>
+              ))}
+              <SelectItem value="__new__">+ Add a new address</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {isNewAddress && (
+          <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-street">Street address</Label>
+              <Input
+                id="new-street"
+                value={newAddr.street}
+                onChange={(e) => setNewAddr({ ...newAddr, street: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-street2">Apt, suite, etc. (optional)</Label>
+              <Input
+                id="new-street2"
+                value={newAddr.street2}
+                onChange={(e) => setNewAddr({ ...newAddr, street2: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-city">City</Label>
+                <Input
+                  id="new-city"
+                  value={newAddr.city}
+                  onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-state">State</Label>
+                <Select value={newAddr.state} onValueChange={(v) => setNewAddr({ ...newAddr, state: v })}>
+                  <SelectTrigger id="new-state"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {US_STATES.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-zip">ZIP code</Label>
+              <Input
+                id="new-zip"
+                inputMode="numeric"
+                maxLength={5}
+                value={newAddr.zip}
+                onChange={(e) => setNewAddr({ ...newAddr, zip: e.target.value.replace(/\D/g, "") })}
+              />
+              {newAddrZipInvalid && (
+                <p className="text-sm text-destructive">We don't currently service this ZIP code.</p>
+              )}
+            </div>
+            {addresses.length > 0 && (
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={newAddr.makeDefault}
+                  onCheckedChange={(c) => setNewAddr({ ...newAddr, makeDefault: c === true })}
+                />
+                Make this my default address
+              </label>
+            )}
+          </div>
+        )}
+
+        {!isOnly && !existing.isDefault && (
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
+            Set as default payment method
+          </label>
+        )}
+
+        <div className="flex gap-3 pt-2">
+          <Button type="submit" variant="hero" disabled={!valid || submitting}>
+            {submitting ? "Saving…" : "Save changes"}
           </Button>
           <Button type="button" variant="outline" onClick={() => navigate("/account/payment-methods")}>
             Cancel
@@ -940,8 +1551,10 @@ const Account = () => {
                 <Route path="orders" element={<Orders />} />
                 <Route path="addresses" element={<Addresses />} />
                 <Route path="addresses/new" element={<AddAddress />} />
+                <Route path="addresses/:id/edit" element={<EditAddress />} />
                 <Route path="payment-methods" element={<PaymentMethods />} />
                 <Route path="payment-methods/new" element={<AddPaymentMethod />} />
+                <Route path="payment-methods/:id/edit" element={<EditPaymentMethod />} />
                 <Route path="password" element={<Password />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="*" element={<Navigate to="orders" replace />} />

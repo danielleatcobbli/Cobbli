@@ -15,9 +15,9 @@ const ConsultationBanner = () => (
         <Camera size={20} />
       </div>
       <div>
-        <h2 className="font-display text-xl text-primary">Not sure what your shoes need?</h2>
+        <h2 className="text-xl text-primary">Not sure what your shoes need?</h2>
         <p className="mt-1 text-sm md:text-base text-primary/80">
-          Get a personalised recommendation <span aria-hidden>→</span>
+          Get a personalized recommendation <span aria-hidden>→</span>
         </p>
       </div>
     </div>

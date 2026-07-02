@@ -1,28 +1,74 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import ServiceCard from "@/components/cobbli/ServiceCard";
+import ComingSoonVoteButton from "@/components/cobbli/ComingSoonVoteButton";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
-import { CATEGORIES_ORDERED, type Service } from "@/types/service";
+import CategoryFilterBar, {
+  ALL_CATEGORIES_LABEL,
+  type CategoryFilter,
+} from "@/components/cobbli/CategoryFilterBar";
+import { type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
 
-const ALL = "All services" as const;
-const categories = [ALL, ...CATEGORIES_ORDERED];
+const ALL = ALL_CATEGORIES_LABEL;
+
+/**
+ * Homepage-only coming-soon card. Matches the active ServiceCard tile size
+ * and shape, but with a muted image, "Coming soon" badge, no pricing, and
+ * an inline vote button instead of a link to the detail page.
+ */
+const HomepageComingSoonCard = ({ s, serviceId }: { s: Service; serviceId?: string }) => {
+  const title = s.cardName || s.name;
+  return (
+    <div className="group w-full rounded-xl overflow-hidden border border-border bg-card shadow-soft flex flex-col h-full">
+      <div
+        className="aspect-[4/3] flex items-center justify-center text-center px-4 relative"
+        style={{ backgroundColor: "#3d1700", color: "#fdb600", opacity: 0.55 }}
+      >
+        <span className="text-xl">{title}</span>
+        <span
+          className="absolute top-2 left-2 text-[10px] font-medium px-2 py-0.5 rounded-full"
+          style={{ backgroundColor: "#fdb600", color: "#3d1700", opacity: 1 }}
+        >
+          Coming soon
+        </span>
+      </div>
+      <div className="p-5 flex flex-col gap-3 flex-1">
+        <h3 className="text-[15px] leading-snug text-primary">{title}</h3>
+        <div className="mt-auto">
+          <ComingSoonVoteButton serviceId={serviceId} />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const Services = () => {
-  const [active, setActive] = useState<(typeof categories)[number]>(ALL);
+  const [active, setActive] = useState<CategoryFilter>(ALL);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
   const { data: services, isLoading } = useServices();
 
-  const visible = useMemo(() => {
-    const list = services ?? [];
+  const visibleActive = useMemo(() => {
+    const list = (services ?? []).filter((s) => !s.isComingSoon);
     const filtered =
       active === ALL
         ? list
         : list.filter((s) => s.categories.includes(active as Service["categories"][number]));
     return [...filtered].sort((a, b) => a.rank - b.rank);
   }, [services, active]);
+
+  const visibleComingSoon = useMemo(() => {
+    const list = (services ?? []).filter((s) => s.isComingSoon);
+    const filtered =
+      active === ALL
+        ? list
+        : list.filter((s) => s.categories.includes(active as Service["categories"][number]));
+    return [...filtered].sort((a, b) => a.rank - b.rank);
+  }, [services, active]);
+
+  const totalCount = visibleActive.length + visibleComingSoon.length;
 
   const updateArrows = () => {
     const el = scrollerRef.current;
@@ -43,7 +89,7 @@ const Services = () => {
       el.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", updateArrows);
     };
-  }, [active, visible.length]);
+  }, [active, totalCount]);
 
   const scrollByCard = (dir: 1 | -1) => {
     const el = scrollerRef.current;
@@ -60,41 +106,16 @@ const Services = () => {
           <p className="text-sm font-semibold tracking-widest uppercase text-status-orange">
             Services
           </p>
-          <h2 className="mt-3 text-3xl md:text-5xl font-display font-600 text-balance">
-            Book your <span className="highlight-mark">professional repair</span> today
+          <h2 className="mt-3 text-3xl md:text-5xl text-balance font-bold">
+            What can we help with?
           </h2>
         </div>
 
-        <div
-          role="tablist"
-          aria-label="Service categories"
-          className="flex flex-wrap gap-x-6 gap-y-2 border-b border-border mb-8"
-        >
-          {categories.map((c) => {
-            const isActive = c === active;
-            return (
-              <button
-                key={c}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => setActive(c)}
-                className={`relative -mb-px py-3 text-sm md:text-base font-medium transition-colors ${
-                  isActive ? "text-primary" : "text-muted-foreground hover:text-primary"
-                }`}
-              >
-                {c}
-                {isActive && (
-                  <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-status-orange rounded-full" />
-                )}
-              </button>
-            );
-          })}
-        </div>
+        <CategoryFilterBar active={active} onChange={setActive} className="mb-8" />
 
         {isLoading ? (
           <BrandSpinner className="py-16" size="lg" />
-        ) : visible.length === 0 ? (
+        ) : totalCount === 0 ? (
           <p className="text-muted-foreground py-10 text-center">
             No services in this category yet.
           </p>
@@ -125,13 +146,22 @@ const Services = () => {
               ref={scrollerRef}
               className="flex gap-5 md:gap-6 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
-              {visible.map((s) => (
+              {visibleActive.map((s) => (
                 <div
                   key={s.slug}
                   data-service-card
                   className="snap-start shrink-0 w-[calc(80%-0.5rem)] sm:w-[calc(50%-0.625rem)] md:w-[calc(33.333%-1rem)] lg:w-[calc(25%-1.125rem)]"
                 >
                   <ServiceCard s={s} />
+                </div>
+              ))}
+              {visibleComingSoon.map((s) => (
+                <div
+                  key={s.slug}
+                  data-service-card
+                  className="snap-start shrink-0 w-[calc(80%-0.5rem)] sm:w-[calc(50%-0.625rem)] md:w-[calc(33.333%-1rem)] lg:w-[calc(25%-1.125rem)]"
+                >
+                  <HomepageComingSoonCard s={s} serviceId={s.id} />
                 </div>
               ))}
             </div>

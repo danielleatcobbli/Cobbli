@@ -48,7 +48,7 @@ function reassembleCart(meta: Record<string, string>): CartPayload | null {
 
 async function createOrderFromCart(
   meta: Record<string, string>,
-  session: Stripe.Checkout.Session,
+  sessionId: string | null,
   paymentIntentId: string | null,
 ) {
   const userId = meta.userId;
@@ -57,15 +57,19 @@ async function createOrderFromCart(
     return;
   }
 
-  // Idempotency: if a row already exists for this Stripe session, skip.
-  const { data: existing } = await supabase
-    .from("orders")
-    .select("id")
-    .eq("stripe_session_id", session.id)
-    .maybeSingle();
-  if (existing) {
-    console.log("order already exists for session", session.id);
-    return;
+  // Idempotency: skip if a row already exists for this PI or session.
+  const lookupCol = paymentIntentId ? "stripe_payment_intent_id" : "stripe_session_id";
+  const lookupVal = paymentIntentId ?? sessionId;
+  if (lookupVal) {
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("id")
+      .eq(lookupCol, lookupVal)
+      .maybeSingle();
+    if (existing) {
+      console.log("order already exists for", lookupCol, lookupVal);
+      return;
+    }
   }
 
   const payload = reassembleCart(meta);
@@ -76,10 +80,11 @@ async function createOrderFromCart(
 
   const nowIso = new Date().toISOString();
 
-  // Insert as pending_payment first, then flip to 'placed' so the existing
-  // notify_order_confirmation trigger (fires on UPDATE OF status -> 'placed')
-  // sends the confirmation email.
-  const { data: orderRow, error: orderErr } = await supabase
+  // Plain INSERT — the partial unique indexes on stripe_payment_intent_id and
+  // stripe_session_id will reject duplicates from concurrent webhook deliveries
+  // (checkout.session.completed + payment_intent.succeeded). On unique
+  // violation (23505), the other delivery wins and this one bails out.
+  const { data: inserted, error: orderErr } = await supabase
     .from("orders")
     .insert({
       user_id: userId,
@@ -95,13 +100,23 @@ async function createOrderFromCart(
       total_cents: payload.total_cents,
       payment_status: "paid",
       paid_at: nowIso,
-      stripe_session_id: session.id,
+      stripe_session_id: sessionId,
       stripe_payment_intent_id: paymentIntentId,
     })
     .select("id")
-    .single();
-  if (orderErr || !orderRow) {
+    .maybeSingle();
+
+  if (orderErr) {
+    if ((orderErr as { code?: string }).code === "23505") {
+      console.log("order already exists (unique violation); skipping items");
+      return;
+    }
     console.error("failed to insert order from cart", orderErr);
+    return;
+  }
+  const orderRow = inserted;
+  if (!orderRow) {
+    console.error("insert returned no row; aborting");
     return;
   }
 
@@ -125,15 +140,11 @@ async function createOrderFromCart(
 
 async function markPaid(
   meta: Record<string, string>,
-  session: Stripe.Checkout.Session | null,
+  sessionId: string | null,
   paymentIntentId: string | null,
 ) {
   if (meta.kind === "cart") {
-    if (!session) {
-      console.error("cart webhook requires session context");
-      return;
-    }
-    await createOrderFromCart(meta, session, paymentIntentId);
+    await createOrderFromCart(meta, sessionId, paymentIntentId);
   } else if (meta.kind === "deposit" && meta.assessmentId) {
     await supabase
       .from("assessments")
@@ -197,18 +208,14 @@ Deno.serve(async (req) => {
             ? session.payment_intent
             : session.payment_intent?.id ?? null;
         if (session.payment_status === "paid") {
-          await markPaid(meta, session, paymentIntentId);
+          await markPaid(meta, session.id, paymentIntentId);
         }
         break;
       }
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
         const meta = (pi.metadata ?? {}) as Record<string, string>;
-        // Cart orders are created from the session event, which carries the
-        // chunked cart_* metadata. PI metadata may be truncated/missing it.
-        if (meta.kind !== "cart") {
-          await markPaid(meta, null, pi.id);
-        }
+        await markPaid(meta, null, pi.id);
         break;
       }
       case "payment_intent.payment_failed": {

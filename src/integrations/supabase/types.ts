@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       addresses: {
@@ -84,6 +59,8 @@ export type Database = {
           deposit_amount_cents: number | null
           deposit_paid_at: string | null
           deposit_status: string
+          description: string | null
+          guest_email: string | null
           id: string
           pairs: Json
           proposal_token: string
@@ -92,13 +69,15 @@ export type Database = {
           stripe_payment_intent_id: string | null
           stripe_session_id: string | null
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
           deposit_amount_cents?: number | null
           deposit_paid_at?: string | null
           deposit_status?: string
+          description?: string | null
+          guest_email?: string | null
           id?: string
           pairs?: Json
           proposal_token?: string
@@ -107,13 +86,15 @@ export type Database = {
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
           deposit_amount_cents?: number | null
           deposit_paid_at?: string | null
           deposit_status?: string
+          description?: string | null
+          guest_email?: string | null
           id?: string
           pairs?: Json
           proposal_token?: string
@@ -122,7 +103,7 @@ export type Database = {
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -173,6 +154,75 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      blog_posts: {
+        Row: {
+          author_id: string | null
+          body: string
+          cover_image_url: string | null
+          created_at: string
+          excerpt: string | null
+          id: string
+          published_at: string
+          seo_description: string | null
+          seo_title: string | null
+          slug: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          body?: string
+          cover_image_url?: string | null
+          created_at?: string
+          excerpt?: string | null
+          id?: string
+          published_at?: string
+          seo_description?: string | null
+          seo_title?: string | null
+          slug: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          cover_image_url?: string | null
+          created_at?: string
+          excerpt?: string | null
+          id?: string
+          published_at?: string
+          seo_description?: string | null
+          seo_title?: string | null
+          slug?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      coverage_requests: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          zip_code: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          zip_code: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          zip_code?: string
+        }
+        Relationships: []
       }
       order_items: {
         Row: {
@@ -313,6 +363,7 @@ export type Database = {
           billing_address_id: string | null
           card_brand: string
           card_last4: string
+          cardholder_name: string | null
           created_at: string
           exp_month: number
           exp_year: number
@@ -326,6 +377,7 @@ export type Database = {
           billing_address_id?: string | null
           card_brand: string
           card_last4: string
+          cardholder_name?: string | null
           created_at?: string
           exp_month: number
           exp_year: number
@@ -339,6 +391,7 @@ export type Database = {
           billing_address_id?: string | null
           card_brand?: string
           card_last4?: string
+          cardholder_name?: string | null
           created_at?: string
           exp_month?: number
           exp_year?: number
@@ -391,6 +444,47 @@ export type Database = {
         }
         Relationships: []
       }
+      reworks: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          order_id: string
+          services_in_scope: Json
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          order_id: string
+          services_in_scope?: Json
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          order_id?: string
+          services_in_scope?: Json
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reworks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_areas: {
         Row: {
           created_at: string
@@ -412,6 +506,27 @@ export type Database = {
           label?: string | null
           updated_at?: string
           zip?: string
+        }
+        Relationships: []
+      }
+      pricing_config: {
+        Row: {
+          key: string
+          label: string | null
+          updated_at: string
+          value_cents: number
+        }
+        Insert: {
+          key: string
+          label?: string | null
+          updated_at?: string
+          value_cents: number
+        }
+        Update: {
+          key?: string
+          label?: string | null
+          updated_at?: string
+          value_cents?: number
         }
         Relationships: []
       }
@@ -444,9 +559,81 @@ export type Database = {
           },
         ]
       }
+      service_variants: {
+        Row: {
+          created_at: string
+          id: string
+          premium_cents: number | null
+          rank: number
+          service_id: string
+          standard_cents: number
+          variant_key: string
+          variant_label: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          premium_cents?: number | null
+          rank?: number
+          service_id: string
+          standard_cents: number
+          variant_key: string
+          variant_label?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          premium_cents?: number | null
+          rank?: number
+          service_id?: string
+          standard_cents?: number
+          variant_key?: string
+          variant_label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_variants_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_votes: {
+        Row: {
+          created_at: string
+          id: string
+          service_id: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          service_id: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          service_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_votes_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           base_price_cents: number | null
+          card_name: string | null
+          card_price_label: string | null
           categories: string[]
           created_at: string
           eligible_shoe_types: string[]
@@ -454,8 +641,11 @@ export type Database = {
           id: string
           image_url: string | null
           is_active: boolean
+          is_coming_soon: boolean
           name: string
+          notes: string | null
           popularity_rank: number
+          qa_config: Json | null
           short_description: string | null
           slug: string
           turnaround_days: number | null
@@ -463,6 +653,8 @@ export type Database = {
         }
         Insert: {
           base_price_cents?: number | null
+          card_name?: string | null
+          card_price_label?: string | null
           categories?: string[]
           created_at?: string
           eligible_shoe_types?: string[]
@@ -470,8 +662,11 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_coming_soon?: boolean
           name: string
+          notes?: string | null
           popularity_rank?: number
+          qa_config?: Json | null
           short_description?: string | null
           slug: string
           turnaround_days?: number | null
@@ -479,6 +674,8 @@ export type Database = {
         }
         Update: {
           base_price_cents?: number | null
+          card_name?: string | null
+          card_price_label?: string | null
           categories?: string[]
           created_at?: string
           eligible_shoe_types?: string[]
@@ -486,8 +683,11 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_coming_soon?: boolean
           name?: string
+          notes?: string | null
           popularity_rank?: number
+          qa_config?: Json | null
           short_description?: string | null
           slug?: string
           turnaround_days?: number | null
@@ -709,9 +909,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["admin", "user", "owner"],

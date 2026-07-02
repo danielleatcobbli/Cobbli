@@ -8,7 +8,7 @@ const steps = [
       <>
         Browse services and add what you need to your bag. Not sure what you need?{" "}
         <Link to="/start-repair/assessment" className="underline hover:text-primary">
-          Get a personalised recommendation →
+          Get a personalized recommendation →
         </Link>
       </>
     ),
@@ -26,9 +26,9 @@ const HowItWorks = () => {
           <p className="text-sm font-semibold tracking-widest uppercase text-status-orange">
             How it works
           </p>
-          <h2 className="mt-3 text-3xl md:text-5xl font-display font-600 text-balance">
+          <h2 className="mt-3 text-3xl md:text-5xl text-balance">
             Getting your shoes repaired{" "}
-            <span className="highlight-mark">has never been easier</span>
+            <span style={{ fontWeight: 900 }}>has never been easier</span>
           </h2>
         </div>
 
@@ -38,10 +38,10 @@ const HowItWorks = () => {
               key={s.n}
               className="relative rounded-xl bg-card p-7 shadow-soft border border-border"
             >
-              <span className="text-status-orange font-display text-sm font-700 tracking-wider">
+              <span className="text-status-orange text-sm tracking-wider">
                 {s.n}
               </span>
-              <h3 className="mt-3 text-xl font-display font-600">{s.title}</h3>
+              <h3 className="mt-3 text-xl">{s.title}</h3>
               <p className="mt-2 text-muted-foreground text-sm leading-relaxed">{s.desc}</p>
               {i < steps.length - 1 && (
                 <span className="hidden lg:block absolute top-1/2 -right-3 h-px w-6 bg-border" />

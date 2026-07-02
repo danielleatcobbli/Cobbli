@@ -1,11 +1,11 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
 import ConsultationBanner from "@/components/cobbli/ConsultationBanner";
-import BrandCombobox, { BRANDS, BRAND_UNKNOWN, type BrandMode } from "@/components/cobbli/BrandCombobox";
+import BrandCombobox, { BRANDS, BRAND_UNKNOWN, canonicalBrand, type BrandMode } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,32 +23,51 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, X, Loader2 } from "lucide-react";
+import { Plus, X, Loader2, Pencil, Trash2, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { apiFetchJson } from "@/integrations/api/client";
 import { toast } from "@/hooks/use-toast";
 import { SHOE_TYPES, type ShoeType } from "@/types/service";
-import { formatPairLabel, usePairs } from "@/context/PairsContext";
+import { formatPairLabel, usePairs, type SavedPair } from "@/context/PairsContext";
+import { createPreviewUrl } from "@/lib/heicPreview";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import { useBag } from "@/context/BagContext";
-import { trackEvent } from "@/lib/analytics";
+import { useAuth } from "@/context/AuthContext";
+import SignInCallout from "@/components/cobbli/SignInCallout";
 
 const COLORS = [
-  "Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
-  "Multi", "Navy", "Orange", "Pattern", "Pink", "Purple", "Red", "Silver",
-  "Tan", "White", "Yellow",
+"Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
+"Multi", "Navy", "Orange", "Pattern", "Pink", "Purple", "Red", "Silver",
+"Tan", "White", "Yellow",
 ];
 
 const AddPairModal = ({
   open,
   onOpenChange,
   onSaved,
+  isGuest,
+  editingPair,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onSaved: (id: string) => void;
+  isGuest: boolean;
+  editingPair?: SavedPair | null;
 }) => {
-  const { addPair } = usePairs();
+  const { addPair, updatePair } = usePairs();
+  const isEditing = !!editingPair;
   const [shoeType, setShoeType] = useState<ShoeType | "">("");
   const [colors, setColors] = useState<string[]>([]);
   const [brandMode, setBrandMode] = useState<BrandMode>("");
@@ -61,33 +80,70 @@ const AddPairModal = ({
   const [analyzing, setAnalyzing] = useState(false);
   const [userEdited, setUserEdited] = useState({ shoeType: false, colors: false, brand: false });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setShoeType("");
-      setColors([]);
-      setBrandMode("");
-      setBrandValue("");
-      setDescription("");
-      setPhotos([]);
-      setPhotoPreviews([]);
-      setUploadedPaths([]);
+      if (editingPair) {
+        setShoeType(editingPair.shoeType);
+        setColors(editingPair.colors ?? []);
+        const b = editingPair.brand;
+        if (!b) {
+          setBrandMode("");
+          setBrandValue("");
+        } else if (b === BRAND_UNKNOWN) {
+          setBrandMode("unknown");
+          setBrandValue("");
+        } else if (BRANDS.includes(b)) {
+          setBrandMode("list");
+          setBrandValue(b);
+        } else {
+          setBrandMode("custom");
+          setBrandValue(b);
+        }
+        setDescription(editingPair.description ?? "");
+        setPhotos([]);
+        setPhotoPreviews([]);
+        setUploadedPaths(editingPair.photoUrls ?? []);
+        setUserEdited({ shoeType: true, colors: true, brand: true });
+      } else {
+        setShoeType("");
+        setColors([]);
+        setBrandMode("");
+        setBrandValue("");
+        setDescription("");
+        setPhotos([]);
+        setPhotoPreviews([]);
+        setUploadedPaths([]);
+        setUserEdited({ shoeType: false, colors: false, brand: false });
+      }
       setAnalyzing(false);
-      setUserEdited({ shoeType: false, colors: false, brand: false });
     }
-  }, [open]);
+  }, [open, editingPair]);
 
   useEffect(() => {
-    const urls = photos.map((f) => URL.createObjectURL(f));
-    setPhotoPreviews(urls);
-    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+    let cancelled = false;
+    const urls: string[] = [];
+    (async () => {
+      const resolved = await Promise.all(photos.map((f) => createPreviewUrl(f)));
+      if (cancelled) {
+        resolved.forEach((u) => URL.revokeObjectURL(u));
+        return;
+      }
+      urls.push(...resolved);
+      setPhotoPreviews(resolved);
+    })();
+    return () => {
+      cancelled = true;
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
   }, [photos]);
 
   const MAX_PHOTOS = 3;
   const MAX_SIZE = 10 * 1024 * 1024;
   const ACCEPTED = ["image/jpeg", "image/jpg", "image/png", "image/heic", "image/heif"];
 
-  const analyzePhotos = async (paths: string[]) => {
+  const analyzePhotos = async (paths: string[], bucket: string = "pair-photos") => {
     if (paths.length === 0) return;
     setAnalyzing(true);
     try {
@@ -107,11 +163,12 @@ const AddPairModal = ({
         return valid.length > 0 ? valid : prev;
       });
       if (!userEdited.brand && !brandMode && result?.brand) {
-        const detected = result.brand;
-        if (BRANDS.includes(detected)) {
+        const detected = result.brand.trim();
+        const matched = canonicalBrand(detected);
+        if (matched) {
           setBrandMode("list");
-          setBrandValue(detected);
-        } else {
+          setBrandValue(matched);
+        } else if (detected) {
           setBrandMode("custom");
           setBrandValue(detected);
         }
@@ -155,9 +212,8 @@ const AddPairModal = ({
 
     const { data: userData } = await supabase.auth.getUser();
     const uid = userData.user?.id;
-    if (!uid) return;
-
-
+    const bucket = uid ? "pair-photos" : "assessment-uploads";
+    const folder = uid ? uid : `guest/${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     setPhotos((prev) => [...prev, ...toAdd]);
     setUploading(true);
@@ -165,8 +221,8 @@ const AddPairModal = ({
     try {
       for (const file of toAdd) {
         const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-        const path = `${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error } = await supabase.storage.from("pair-photos").upload(path, file, {
+        const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await supabase.storage.from(bucket).upload(path, file, {
           contentType: file.type || undefined,
           upsert: false,
         });
@@ -175,7 +231,7 @@ const AddPairModal = ({
       }
       const allPaths = [...uploadedPaths, ...newPaths];
       setUploadedPaths(allPaths);
-      void analyzePhotos(allPaths);
+      void analyzePhotos(allPaths, bucket);
     } catch (e: any) {
       toast({ title: "Upload failed", description: e?.message || "Could not upload photos.", variant: "destructive" });
       setPhotos((prev) => prev.slice(0, prev.length - toAdd.length));
@@ -198,7 +254,7 @@ const AddPairModal = ({
 
   const onSave = async () => {
     if (!valid || uploading) return;
-    const pair = addPair({
+    const payload = {
       shoeType: shoeType as ShoeType,
       colors,
       brand: brandMode === "list" ? brandValue
@@ -207,8 +263,14 @@ const AddPairModal = ({
         : undefined,
       description: description.trim() || undefined,
       photoUrls: uploadedPaths.length ? uploadedPaths : undefined,
-    });
-    onSaved(pair.id);
+    };
+    if (isEditing && editingPair) {
+      await updatePair(editingPair.id, payload);
+      onSaved(editingPair.id);
+    } else {
+      const pair = addPair(payload);
+      onSaved(pair.id);
+    }
     onOpenChange(false);
   };
 
@@ -217,59 +279,77 @@ const AddPairModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl">Add a new pair</DialogTitle>
+          <DialogTitle className="text-2xl">{isEditing ? "Edit pair" : "Add a new pair"}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5">
-          <div className="space-y-2">
-            <Label>Photos (optional)</Label>
-            <p className="text-[13px] text-muted-foreground -mt-1">
-              Upload a photo and we'll fill in the details for you.
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
-              multiple
-              className="hidden"
-              onChange={(e) => handleFiles(e.target.files)}
-            />
-            <div className="flex flex-wrap gap-2">
-              {photoPreviews.map((src, idx) => (
-                <div key={idx} className="relative h-20 w-20 rounded-md overflow-hidden border border-border">
-                  <img src={src} alt={`Photo ${idx + 1}`} className="h-full w-full object-cover" />
+          {(
+            <div className="space-y-2">
+              <Label>Photos (optional)</Label>
+              <p className="text-[13px] text-muted-foreground -mt-1">
+                Upload or drag and drop a photo and we'll fill in the details for you.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
+                multiple
+                className="hidden"
+                onChange={(e) => handleFiles(e.target.files)}
+              />
+              <div
+                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (!uploading && photos.length < MAX_PHOTOS) setDragOver(true); }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; if (!uploading && photos.length < MAX_PHOTOS) setDragOver(true); }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragOver(false);
+                  if (uploading || photos.length >= MAX_PHOTOS) return;
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    handleFiles(e.dataTransfer.files);
+                  }
+                }}
+                className={`flex flex-wrap gap-2 rounded-md p-2 -m-2 transition-colors ${
+                  dragOver ? "bg-secondary/60 ring-2 ring-primary/60" : ""
+                }`}
+              >
+                {photoPreviews.map((src, idx) => (
+                  <div key={idx} className="relative h-20 w-20 rounded-md overflow-hidden border border-border">
+                    <img src={src} alt={`Photo ${idx + 1}`} className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(idx)}
+                      aria-label={`Remove photo ${idx + 1}`}
+                      className="absolute top-0.5 right-0.5 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {photos.length < MAX_PHOTOS && (
                   <button
                     type="button"
-                    onClick={() => removePhoto(idx)}
-                    aria-label={`Remove photo ${idx + 1}`}
-                    className="absolute top-0.5 right-0.5 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="h-20 w-20 rounded-md border border-dashed border-border flex flex-col items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors disabled:opacity-50"
                   >
-                    <X size={12} />
+                    {uploading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                    <span className="text-[11px] mt-1">{uploading ? "Uploading" : (dragOver ? "Drop" : "Add")}</span>
                   </button>
-                </div>
-              ))}
-              {photos.length < MAX_PHOTOS && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="h-20 w-20 rounded-md border border-dashed border-border flex flex-col items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors disabled:opacity-50"
-                >
-                  {uploading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                  <span className="text-[11px] mt-1">{uploading ? "Uploading" : "Add"}</span>
-                </button>
+                )}
+              </div>
+              <p className="text-[12px] text-muted-foreground">
+                Up to {MAX_PHOTOS} photos · JPG, PNG, HEIC · max 10MB each
+              </p>
+              {analyzing && (
+                <p className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                  <Loader2 size={12} className="animate-spin" />
+                  Analyzing photos…
+                </p>
               )}
             </div>
-            <p className="text-[12px] text-muted-foreground">
-              Up to {MAX_PHOTOS} photos · JPG, PNG, HEIC · max 10MB each
-            </p>
-            {analyzing && (
-              <p className="text-[12px] text-muted-foreground flex items-center gap-1.5">
-                <Loader2 size={12} className="animate-spin" />
-                Analyzing photos…
-              </p>
-            )}
-          </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="shoe-type">
@@ -352,13 +432,13 @@ const AddPairModal = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Description (optional)</Label>
             <Textarea
               id="description"
               maxLength={500}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional"
+              placeholder="e.g. Loose stitching on the left toe"
               rows={3}
             />
           </div>
@@ -371,7 +451,7 @@ const AddPairModal = ({
             disabled={!valid || uploading}
             className={!valid || uploading ? "opacity-50 cursor-not-allowed" : ""}
           >
-            {uploading ? "Saving…" : "Save pair"}
+            {uploading ? "Saving…" : isEditing ? "Save changes" : "Save pair"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -381,15 +461,27 @@ const AddPairModal = ({
 
 const StartRepair = () => {
   const navigate = useNavigate();
-  const { pairs } = usePairs();
+  const [searchParams] = useSearchParams();
+  const preselectedService = searchParams.get("service");
+  const { pairs, deletePair } = usePairs();
   const { selectedPairId, setSelectedPairId, setSelectedServiceSlugs } = useRepairFlow();
   const { findByPairId } = useBag();
+  const { user } = useAuth();
+  const isGuest = !user;
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingPair, setEditingPair] = useState<SavedPair | null>(null);
+  const [pairToDelete, setPairToDelete] = useState<SavedPair | null>(null);
+  const [query, setQuery] = useState("");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   usePageMeta({
     title: "Start a repair — Cobbli",
     description:
-      "Start a Cobbli repair: pick the pair of shoes you want fixed, choose your services and book door-to-door pickup and return across NYC.",
+"Start a Cobbli repair: pick the pair of shoes you want fixed, choose your services and book door-to-door pickup and return across NYC.",
   });
 
   const sortedPairs = useMemo(
@@ -397,11 +489,79 @@ const StartRepair = () => {
     [pairs],
   );
 
+  const visiblePairs = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sortedPairs;
+    return sortedPairs.filter((p) => formatPairLabel(p).toLowerCase().includes(q));
+  }, [sortedPairs, query]);
+
+  // Reset bulk selection when leaving select mode or when underlying pairs change.
+  useEffect(() => {
+    if (!selectMode) setSelectedIds(new Set());
+  }, [selectMode]);
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = new Set<string>();
+      pairs.forEach((p) => { if (prev.has(p.id)) next.add(p.id); });
+      return next;
+    });
+  }, [pairs]);
+
+  const allVisibleSelected = visiblePairs.length > 0 && visiblePairs.every((p) => selectedIds.has(p.id));
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visiblePairs.forEach((p) => next.delete(p.id));
+      } else {
+        visiblePairs.forEach((p) => next.add(p.id));
+      }
+      return next;
+    });
+  };
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const onConfirmBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    setBulkConfirmOpen(false);
+    setBulkError(null);
+    setBulkDeleting(true);
+    const startedAt = Date.now();
+    const settleMinDelay = async () => {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < 600) await new Promise((r) => setTimeout(r, 600 - elapsed));
+    };
+    try {
+      if (selectedPairId && ids.includes(selectedPairId)) setSelectedPairId(null);
+      for (const id of ids) {
+        await deletePair(id);
+      }
+      await settleMinDelay();
+      setBulkDeleting(false);
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    } catch (e) {
+      await settleMinDelay();
+      setBulkDeleting(false);
+      setBulkError("Something went wrong. Your shoes weren't deleted — please try again.");
+    }
+  };
+
   const onConfirm = () => {
     if (!selectedPairId) return;
-    trackEvent("pair_confirmed");
     const existing = findByPairId(selectedPairId);
-    setSelectedServiceSlugs(existing ? existing.services.map((s) => s.id) : []);
+    const existingSlugs = existing ? existing.services.map((s) => s.id) : [];
+    const merged = preselectedService && !existingSlugs.includes(preselectedService)
+      ? [...existingSlugs, preselectedService]
+      : existingSlugs;
+    setSelectedServiceSlugs(merged);
     navigate("/start-repair/services");
   };
 
@@ -414,48 +574,174 @@ const StartRepair = () => {
 
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">
-          <h1 className="font-display text-3xl md:text-4xl text-primary mb-8">
+          {isGuest && (
+            <div className="mb-6">
+              <SignInCallout />
+            </div>
+          )}
+          <h1 className="font-display text-3xl md:text-4xl text-primary mb-6">
             Which pair of shoes are you repairing?
           </h1>
 
+          {pairs.length > 0 && (
+            <div className="relative mb-4">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by brand, color, or style"
+                className="pl-9"
+                aria-label="Search saved pairs"
+              />
+            </div>
+          )}
+
+          {pairs.length > 0 && !bulkDeleting && (
+            <div className="flex items-center justify-between mb-3 min-h-[36px]">
+              {selectMode ? (
+                <>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-primary cursor-pointer">
+                      <Checkbox
+                        checked={allVisibleSelected}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all"
+                      />
+                      Select all
+                    </label>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={selectedIds.size === 0}
+                      onClick={() => setBulkConfirmOpen(true)}
+                      className={selectedIds.size === 0 ? "opacity-50 cursor-not-allowed" : ""}
+                    >
+                      Delete selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+                    </Button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectMode(false)}
+                    className="text-sm text-muted-foreground hover:text-primary"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span />
+                  <button
+                    type="button"
+                    onClick={() => setSelectMode(true)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Select
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {bulkError && !bulkDeleting && (
+            <div
+              role="alert"
+              className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            >
+              Something went wrong. Your shoes weren't deleted — please try again.
+            </div>
+          )}
+
+          {bulkDeleting ? (
+            <div className="flex flex-col items-center justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#3d1700" }} aria-hidden="true" />
+              <p className="mt-3 text-sm" style={{ color: "#3d1700" }}>Deleting your shoes…</p>
+            </div>
+          ) : (
           <div className="space-y-3">
-            {sortedPairs.length > 0 && (
+            {visiblePairs.length > 0 ? (
               <ul className="space-y-2">
-                {sortedPairs.map((p) => {
+                {visiblePairs.map((p) => {
                   const id = `pair-${p.id}`;
                   const checked = selectedPairId === p.id;
                   const inBag = !!findByPairId(p.id);
+                  const isBulkChecked = selectedIds.has(p.id);
                   return (
                     <li key={p.id}>
-                      <label
-                        htmlFor={id}
-                        className={`flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors ${
-                          checked ? "border-primary bg-secondary" : "border-border hover:border-primary/40"
+                      <div
+                        className={`flex items-center gap-3 rounded-lg border p-4 transition-colors ${
+                          (!selectMode && checked) || (selectMode && isBulkChecked)
+                            ? "border-primary bg-secondary"
+                            : "border-border hover:border-primary/40"
                         }`}
                       >
-                        <input
-                          id={id}
-                          type="radio"
-                          name="pair"
-                          checked={checked}
-                          onChange={() => setSelectedPairId(p.id)}
-                          className="h-4 w-4 accent-[hsl(var(--primary))]"
-                        />
-                        <span className="text-primary font-medium">{formatPairLabel(p)}</span>
-                        {inBag && (
-                          <span
-                            className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                            style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
-                          >
-                            In bag
-                          </span>
+                        {selectMode ? (
+                          <label htmlFor={id} className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                            <Checkbox
+                              id={id}
+                              checked={isBulkChecked}
+                              onCheckedChange={() => toggleOne(p.id)}
+                              aria-label={`Select ${formatPairLabel(p)}`}
+                            />
+                            <span className="text-primary font-medium truncate">{formatPairLabel(p)}</span>
+                            {inBag && (
+                              <span
+                                className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium shrink-0"
+                                style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
+                              >
+                                In bag
+                              </span>
+                            )}
+                          </label>
+                        ) : (
+                          <>
+                            <label htmlFor={id} className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                              <input
+                                id={id}
+                                type="radio"
+                                name="pair"
+                                checked={checked}
+                                onChange={() => setSelectedPairId(p.id)}
+                                className="h-4 w-4 accent-[hsl(var(--primary))]"
+                              />
+                              <span className="text-primary font-medium truncate">{formatPairLabel(p)}</span>
+                              {inBag && (
+                                <span
+                                  className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium shrink-0"
+                                  style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
+                                >
+                                  In bag
+                                </span>
+                              )}
+                            </label>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => { setEditingPair(p); setModalOpen(true); }}
+                                aria-label={`Edit ${formatPairLabel(p)}`}
+                                className="p-2 rounded-md text-muted-foreground hover:text-primary hover:bg-secondary/60 transition-colors"
+                              >
+                                <Pencil size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPairToDelete(p)}
+                                aria-label={`Remove ${formatPairLabel(p)}`}
+                                className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </>
                         )}
-                      </label>
+                      </div>
                     </li>
                   );
                 })}
               </ul>
-            )}
+            ) : pairs.length > 0 && query.trim() ? (
+              <p className="text-sm text-muted-foreground py-4">No shoes match your search</p>
+            ) : null}
 
             <button
               type="button"
@@ -467,15 +753,24 @@ const StartRepair = () => {
               </span>
               <span className="font-medium">Add a new pair</span>
             </button>
+            {pairs.length === 0 && (
+              <p className="text-sm text-muted-foreground">No shoes saved yet. Add a pair to get started.</p>
+            )}
+            {isGuest && (
+              <p className="text-[13px] text-muted-foreground">
+                Your pair will be saved to your account when you check out.
+              </p>
+            )}
           </div>
+          )}
 
           <div className="mt-8">
             <Button
               type="button"
               size="lg"
-              disabled={!canConfirm}
+              disabled={!canConfirm || selectMode}
               onClick={onConfirm}
-              className={!canConfirm ? "opacity-50 cursor-not-allowed" : ""}
+              className={!canConfirm || selectMode ? "opacity-50 cursor-not-allowed" : ""}
             >
               Confirm pair
             </Button>
@@ -491,10 +786,61 @@ const StartRepair = () => {
 
       <AddPairModal
         open={modalOpen}
-        onOpenChange={setModalOpen}
+        onOpenChange={(v) => { setModalOpen(v); if (!v) setEditingPair(null); }}
         onSaved={(id) => setSelectedPairId(id)}
+        isGuest={isGuest}
+        editingPair={editingPair}
       />
+
+      <AlertDialog open={!!pairToDelete} onOpenChange={(v) => { if (!v) setPairToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this pair?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pairToDelete ? formatPairLabel(pairToDelete) : ""}
+              <br />
+              This action can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!pairToDelete) return;
+                const id = pairToDelete.id;
+                setPairToDelete(null);
+                if (selectedPairId === id) setSelectedPairId(null);
+                await deletePair(id);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size} {selectedIds.size === 1 ? "pair" : "pairs"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>This can't be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onConfirmBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
+
   );
 };
 
