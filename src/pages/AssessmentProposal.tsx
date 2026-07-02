@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
+import { displayBrand } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { usePageMeta } from "@/hooks/usePageMeta";
@@ -270,7 +271,7 @@ const AssessmentProposal = () => {
             </div>
           ) : !proposalReady ? (
             <div className="rounded-xl border border-border p-10 text-center">
-              <p className="font-display text-2xl text-primary mb-2">
+              <p className="text-2xl text-primary mb-2">
                 Your proposal isn't ready yet
               </p>
               <p className="text-muted-foreground">
@@ -315,8 +316,8 @@ const AssessmentProposal = () => {
               <div className="mt-8 space-y-4">
                 {pairs.map((p, i) => {
                   const identifier =
-                    [p.colors?.join(" / "), p.brand, p.shoeType].filter(Boolean).join(" · ") ||
-                    "Your pair";
+                    [p.colors?.join(" / "), displayBrand(p.brand), p.shoeType].filter(Boolean).join(" · ") ||
+"Your pair";
                   return (
                     <div
                       key={i}
@@ -326,7 +327,7 @@ const AssessmentProposal = () => {
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">
                           Pair {i + 1}
                         </p>
-                        <p className="mt-1 font-display text-lg text-primary">{identifier}</p>
+                        <p className="mt-1 text-lg text-primary">{identifier}</p>
                       </div>
                       {thumbsByPair[i]?.length ? (
                         <div className="flex gap-2">
@@ -348,7 +349,7 @@ const AssessmentProposal = () => {
               {/* Essential services */}
               <section className="mt-8">
                 <div className="flex items-baseline justify-between">
-                  <h2 className="font-display text-xl text-primary">Essential</h2>
+                  <h2 className="text-xl text-primary">Essential</h2>
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">
                     Included
                   </span>
@@ -378,7 +379,7 @@ const AssessmentProposal = () => {
               {/* Recommended services */}
               <section className="mt-8">
                 <div className="flex items-baseline justify-between">
-                  <h2 className="font-display text-xl text-primary">Recommended</h2>
+                  <h2 className="text-xl text-primary">Recommended</h2>
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">
                     Optional
                   </span>
@@ -432,7 +433,7 @@ const AssessmentProposal = () => {
 
               {/* Order summary */}
               <section className="mt-6 rounded-xl border border-border p-5">
-                <h2 className="font-display text-xl text-primary">Order summary</h2>
+                <h2 className="text-xl text-primary">Order summary</h2>
                 <dl className="mt-4 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Essential repairs</dt>

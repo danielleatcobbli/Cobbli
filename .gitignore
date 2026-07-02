@@ -22,28 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+backend/.env
 
-# Local tool state
-.claude/
-supabase/.temp/
-
-# Per-developer secrets — never commit
-.env.local
-.envrc
-.envrc.local
-
-# Python (backend/)
-backend/.venv/
-backend/__pycache__/
-backend/**/__pycache__/
-backend/.pytest_cache/
-backend/.ruff_cache/
-backend/.coverage
-backend/htmlcov/
-
-# Vercel local link state (per-account, never commit)
-backend/.vercel/
-
-# Migration runbook stays local — contains user PII
+# Contains real user PII (auth rows, data import) — never commit
 migration/
 
+# Python
+__pycache__/
+*.pyc
+backend/.venv/

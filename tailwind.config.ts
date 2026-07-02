@@ -12,8 +12,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['"Public Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['"Public Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['"Albert Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['"Frank Ruhl Libre"', 'ui-serif', 'Georgia', 'serif'],
+
       },
       colors: {
         border: "hsl(var(--border))",

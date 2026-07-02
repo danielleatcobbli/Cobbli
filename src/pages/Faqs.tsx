@@ -4,17 +4,108 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { Plus, Minus } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
-import { trackEvent } from "@/lib/analytics";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useServiceableZips } from "@/hooks/useServiceableZips";
 
 const Email = () => (
-  <a
-    href="mailto:support@cobbli.com"
-    className="underline underline-offset-4"
-    onClick={() => trackEvent("consultation_email_clicked")}
-  >
+  <a href="mailto:support@cobbli.com" className="underline underline-offset-4">
     support@cobbli.com
   </a>
 );
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const CoverageRequestForm = () => {
+  const [zip, setZip] = useState("");
+  const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const { isServiceable } = useServiceableZips();
+
+  const zipValid = /^[0-9]{5}$/.test(zip);
+  const zipAlreadyServiced = zipValid && isServiceable(zip) === true;
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!zipValid || zipAlreadyServiced) return;
+    const trimmedEmail = email.trim();
+    if (trimmedEmail && !EMAIL_RE.test(trimmedEmail)) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
+    setEmailError(null);
+    setSubmitting(true);
+    const { error } = await supabase
+      .from("coverage_requests")
+      .insert({ zip_code: zip, email: trimmedEmail || null });
+    setSubmitting(false);
+    if (error) {
+      setEmailError("Something went wrong. Please try again.");
+      return;
+    }
+    setSubmitted(true);
+  };
+
+  if (submitted) {
+    return (
+      <p className="rounded-md border border-border bg-muted/40 p-4 text-foreground">
+        Got it, thank you! We've noted your zip code and will reach out if you provided your email when we
+        expand to your area.
+      </p>
+    );
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-4 rounded-md border border-border p-4" noValidate>
+      <div className="space-y-1.5">
+        <Label htmlFor="cr-zip">Zip code</Label>
+        <Input
+          id="cr-zip"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={5}
+          value={zip}
+          onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+          placeholder="10001"
+          required
+        />
+        {zipAlreadyServiced && (
+          <p className="text-sm font-medium text-green-700">
+            Great news — we already service your area!{" "}
+            <Link to="/start-repair" className="underline underline-offset-4">
+              Start a repair
+            </Link>
+            .
+          </p>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="cr-email">Email (optional)</Label>
+        <Input
+          id="cr-email"
+          type="email"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            if (emailError) setEmailError(null);
+          }}
+          placeholder="you@example.com"
+        />
+        <p className="text-sm text-muted-foreground">
+          We will notify you when we add service in your area
+        </p>
+        {emailError && <p className="text-sm text-destructive">{emailError}</p>}
+      </div>
+      <Button type="submit" disabled={!zipValid || zipAlreadyServiced || submitting}>
+        {submitting ? "Submitting…" : "Submit"}
+      </Button>
+    </form>
+  );
+};
 
 const faqs: { q: string; a: ReactNode }[] = [
   {
@@ -39,9 +130,10 @@ const faqs: { q: string; a: ReactNode }[] = [
           Little Italy, Lower East Side, NoHo, SoHo, Tribeca, Union Square, West Village
         </p>
         <p>
-          Don't see your neighborhood? Email us at <Email /> and let us know where you are. We use your
-          feedback to prioritize new coverage areas.
+          Don't see your neighborhood? Let us know your zip code below — we use submissions to prioritize
+          where we expand next.
         </p>
+        <CoverageRequestForm />
       </div>
     ),
   },
@@ -76,7 +168,7 @@ const faqs: { q: string; a: ReactNode }[] = [
       <p>
         Not sure what your shoes need? Upload photos or a short video and we'll recommend the right repairs.{" "}
         <Link to="/start-repair/assessment" className="underline underline-offset-4 hover:text-primary">
-          Get a personalised recommendation →
+          Get a personalized recommendation →
         </Link>
       </p>
     ),
@@ -119,7 +211,7 @@ const faqs: { q: string; a: ReactNode }[] = [
         <p>
         If you're unsure whether your shoes are worth repairing,{" "}
         <Link to="/start-repair/assessment" className="underline underline-offset-4 hover:text-primary">
-          get a personalised recommendation
+          get a personalized recommendation
         </Link>{" "}
         before booking and we'll give you an honest assessment. We'd rather save you the money.
       </p>
@@ -151,7 +243,7 @@ const Faqs = () => {
   usePageMeta({
     title: "FAQs — Cobbli",
     description:
-      "Answers to common questions about Cobbli's NYC shoe repair service: pickup and return, pricing, turnaround times, service area and order guarantees.",
+"Answers to common questions about Cobbli's NYC shoe repair service: pickup and return, pricing, turnaround times, service area and order guarantees.",
   });
 
   return (
@@ -159,7 +251,7 @@ const Faqs = () => {
       <Header />
       <section className="flex-1 py-16 md:py-24">
         <div className="container max-w-3xl">
-          <h1 className="font-display text-4xl md:text-5xl font-600 text-balance">
+          <h1 className="font-display text-4xl md:text-5xl text-balance">
             Frequently asked questions
           </h1>
 
@@ -174,7 +266,7 @@ const Faqs = () => {
                     aria-expanded={isOpen}
                     className="w-full flex items-start justify-between gap-6 py-5 text-left"
                   >
-                    <span className="font-display text-lg md:text-xl font-600 text-primary">{f.q}</span>
+                    <span className="text-lg md:text-xl text-primary">{f.q}</span>
                     <span
                       aria-hidden="true"
                       className="shrink-0 mt-1 h-6 w-6 flex items-center justify-center text-primary"

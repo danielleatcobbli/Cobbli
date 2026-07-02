@@ -23,7 +23,7 @@ const PrivacyPolicy = () => {
           <p
             className="mt-2"
             style={{
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: "'Albert Sans', sans-serif",
               fontWeight: 400,
               fontSize: "13px",
               color: "#6b7280",

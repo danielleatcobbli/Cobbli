@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { trackEvent } from "@/lib/analytics";
 
 // Served from /public so the preload link in index.html resolves to the same URL.
 const hero = "/assets/hero-cobbler.webp";
@@ -21,7 +20,7 @@ const Hero = () => {
         <div className="absolute inset-0 bg-gradient-hero" />
         <div className="container relative z-10 py-20 md:py-28">
           <div className="max-w-2xl text-primary-foreground animate-fade-up">
-            <h1 className="font-display text-4xl md:text-6xl font-600 leading-[1.05] text-balance">
+            <h1 className="font-display text-4xl md:text-6xl leading-[1.05] text-balance text-primary-foreground">
               Expert Shoe Repair{" "}
               <span className="text-primary-foreground">Delivered</span> to Your Doorstep
             </h1>
@@ -29,7 +28,7 @@ const Hero = () => {
               Old-world craftsmanship, modern convenience. We pick up, repair, and return your shoes — without you leaving home.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/start-repair" onClick={() => trackEvent("start_repair")}>
+              <Link to="/start-repair">
                 <Button size="lg" variant="hero">
                   Start a repair
                 </Button>
@@ -46,7 +45,7 @@ const Hero = () => {
                 to="/start-repair/assessment"
                 className="underline underline-offset-4 decoration-primary-foreground/40 hover:decoration-primary-foreground hover:text-primary-foreground transition-colors"
               >
-                Get a personalised recommendation <span aria-hidden>→</span>
+                Get a personalized recommendation <span aria-hidden>→</span>
               </Link>
             </p>
           </div>

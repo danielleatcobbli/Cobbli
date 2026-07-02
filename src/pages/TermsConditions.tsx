@@ -6,7 +6,7 @@ const TermsConditions = () => {
   usePageMeta({
     title: "Terms & conditions — Cobbli",
     description:
-      "The terms and conditions that govern your use of Cobbli's NYC shoe repair service, including pickup, return, payment and order guarantees.",
+"The terms and conditions that govern your use of Cobbli's NYC shoe repair service, including pickup, return, payment and order guarantees.",
   });
 
   return (
@@ -23,7 +23,7 @@ const TermsConditions = () => {
           <p
             className="mt-2"
             style={{
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: "'Albert Sans', sans-serif",
               fontWeight: 400,
               fontSize: "13px",
               color: "#6b7280",
@@ -511,7 +511,7 @@ const TermsConditions = () => {
             >
               11.1 Mandatory Arbitration
             </h3>
-            <p className="mt-4 font-bold">
+            <p className="mt-4">
               PLEASE READ THIS SECTION CAREFULLY. IT AFFECTS YOUR LEGAL RIGHTS, INCLUDING YOUR RIGHT TO FILE A LAWSUIT IN COURT.
             </p>
             <p className="mt-4">
