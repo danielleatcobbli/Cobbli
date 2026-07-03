@@ -9,12 +9,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/context/AuthContext";
 import { useAccount } from "@/context/AccountContext";
+import { usePricingConfig } from "@/hooks/usePricingConfig";
 import { formatPrice } from "@/context/BagContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { ShieldCheck, Sparkles } from "lucide-react";
 
-const DEPOSIT_CENTS = 2000;
 const COURIER_FEE_CENTS = 0;
 
 type Pair = {
@@ -45,6 +45,8 @@ const AssessmentProposal = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { user: accountUser, addresses, paymentMethods, addOrder } = useAccount();
+  const pricing = usePricingConfig();
+  const depositCents = pricing.fee("assessment_deposit_cents");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +124,7 @@ const AssessmentProposal = () => {
     .filter((l) => selectedRecommended.has(l.service_id))
     .reduce((a, l) => a + l.price_cents, 0);
   const repairsSubtotal = essentialSubtotal + recommendedSubtotal;
-  const depositHeld = pairs.length * DEPOSIT_CENTS;
+  const depositHeld = pairs.length * depositCents;
   const totalDueToday = Math.max(0, repairsSubtotal + COURIER_FEE_CENTS - depositHeld);
 
   const proposalReady = status === "proposal_sent" || status === "booked";
@@ -150,7 +152,7 @@ const AssessmentProposal = () => {
       const updatedPairs = pairs.map((p, i) => ({
         ...p,
         deposit: {
-          amount_cents: p.deposit?.amount_cents ?? DEPOSIT_CENTS,
+          amount_cents: p.deposit?.amount_cents ?? depositCents,
           currency: p.deposit?.currency ?? "usd",
           status: "captured" as const,
           payment_intent_id:

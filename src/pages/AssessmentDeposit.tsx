@@ -9,17 +9,18 @@ import { Button } from "@/components/ui/button";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAssessment } from "@/context/AssessmentContext";
 import { useAuth } from "@/context/AuthContext";
+import { usePricingConfig } from "@/hooks/usePricingConfig";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { StripeEmbeddedCheckoutPanel } from "@/components/StripeEmbeddedCheckout";
 
-const DEPOSIT_CENTS = 2000;
-
 const AssessmentDeposit = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const pricing = usePricingConfig();
+  const depositCents = pricing.fee("assessment_deposit_cents");
   const { draft, reset } = useAssessment();
   const [submitting, setSubmitting] = useState(false);
   const [thumbs, setThumbs] = useState<string[]>([]);
@@ -86,7 +87,7 @@ const AssessmentDeposit = () => {
         colors: draft.colors,
         brand: draft.brand,
         deposit: {
-          amount_cents: DEPOSIT_CENTS,
+          amount_cents: depositCents,
           currency: "usd",
           status: "pending" as const,
         },
@@ -97,7 +98,7 @@ const AssessmentDeposit = () => {
           user_id: user.id,
           pairs: [pair] as never,
           status: "submitted",
-          deposit_amount_cents: DEPOSIT_CENTS,
+          deposit_amount_cents: depositCents,
         })
         .select("id")
         .single();

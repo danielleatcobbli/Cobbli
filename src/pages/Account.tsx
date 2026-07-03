@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { US_STATES } from "@/context/AccountContext";
 import { useServiceableZips } from "@/hooks/useServiceableZips";
+import { usePricingConfig } from "@/hooks/usePricingConfig";
 import { cn } from "@/lib/utils";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
@@ -284,9 +285,15 @@ const OrderCard = ({ o }: { o: Order }) => {
 };
 
 const ProposalCard = ({ a }: { a: Assessment }) => {
+  const pricing = usePricingConfig();
   const meta = PROPOSAL_STATUS[a.status] ?? PROPOSAL_STATUS.pending;
   const ref = a.id.slice(0, 8).toUpperCase();
   const firstPair = a.pairs?.[0];
+  const numPairs = a.pairs?.length ?? 1;
+  const depositAmount = Math.round(pricing.fee("assessment_deposit_cents") / 100) * numPairs;
+  const depositLine = `$${depositAmount} deposit ${meta.depositReleased ? "released" : "held"}`;
+  const link =
+    a.status === "pending" ? `/proposal/${a.id}` : `/proposal/${a.id}`;
   return (
     <ClickableCard
       to={`/proposal/${a.id}`}
