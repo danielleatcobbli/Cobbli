@@ -485,6 +485,51 @@ export type Database = {
           },
         ]
       }
+      service_areas: {
+        Row: {
+          created_at: string
+          is_active: boolean
+          label: string | null
+          updated_at: string
+          zip: string
+        }
+        Insert: {
+          created_at?: string
+          is_active?: boolean
+          label?: string | null
+          updated_at?: string
+          zip: string
+        }
+        Update: {
+          created_at?: string
+          is_active?: boolean
+          label?: string | null
+          updated_at?: string
+          zip?: string
+        }
+        Relationships: []
+      }
+      pricing_config: {
+        Row: {
+          key: string
+          label: string | null
+          updated_at: string
+          value_cents: number
+        }
+        Insert: {
+          key: string
+          label?: string | null
+          updated_at?: string
+          value_cents: number
+        }
+        Update: {
+          key?: string
+          label?: string | null
+          updated_at?: string
+          value_cents?: number
+        }
+        Relationships: []
+      }
       service_pricing: {
         Row: {
           id: string
@@ -738,7 +783,7 @@ export type Database = {
       reset_failed_attempts: { Args: { _user_id: string }; Returns: undefined }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "owner"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -866,7 +911,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "owner"],
     },
   },
 } as const

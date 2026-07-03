@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { isServiceableZip } from "@/data/serviceAreas";
+import { useServiceableZips } from "@/hooks/useServiceableZips";
 
 const Email = () => (
   <a href="mailto:support@cobbli.com" className="underline underline-offset-4">
@@ -24,9 +24,10 @@ const CoverageRequestForm = () => {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const { isServiceable } = useServiceableZips();
 
   const zipValid = /^[0-9]{5}$/.test(zip);
-  const zipAlreadyServiced = zipValid && isServiceableZip(zip);
+  const zipAlreadyServiced = zipValid && isServiceable(zip) === true;
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

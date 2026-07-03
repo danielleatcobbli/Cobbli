@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { US_STATES } from "@/context/AccountContext";
-import { isServiceableZip } from "@/data/serviceAreas";
+import { useServiceableZips } from "@/hooks/useServiceableZips";
 import { cn } from "@/lib/utils";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
@@ -611,6 +611,7 @@ const AddAddress = () => {
   });
   const [existingCount, setExistingCount] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { isServiceable } = useServiceableZips();
   useEffect(() => {
     if (!user) return;
     supabase
@@ -620,13 +621,15 @@ const AddAddress = () => {
       .then(({ count }) => setExistingCount(count ?? 0));
   }, [user]);
   const isFirst = existingCount === 0;
-  const zipInvalid = form.zip.length === 5 && !isServiceableZip(form.zip);
+  // Flag invalid only on a definitive false (never while loading), and require
+  // an explicit true for `valid` so submit waits for confirmed coverage.
+  const zipInvalid = form.zip.length === 5 && isServiceable(form.zip) === false;
   const valid =
     form.street.trim() &&
     form.city.trim() &&
     form.state &&
     /^\d{5}$/.test(form.zip) &&
-    isServiceableZip(form.zip);
+    isServiceable(form.zip) === true;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -891,6 +894,7 @@ const EditAddress = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { isServiceable } = useServiceableZips();
   usePageMeta({
     title: "Edit address — Cobbli",
     description: "Update a saved pickup and delivery address on your Cobbli account.",
@@ -939,13 +943,13 @@ const EditAddress = () => {
   }, [user, id]);
 
   const isOnly = otherCount === 0;
-  const zipInvalid = form.zip.length === 5 && !isServiceableZip(form.zip);
+  const zipInvalid = form.zip.length === 5 && isServiceable(form.zip) === false;
   const valid =
     form.street.trim() &&
     form.city.trim() &&
     form.state &&
     /^\d{5}$/.test(form.zip) &&
-    isServiceableZip(form.zip);
+    isServiceable(form.zip) === true;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -1036,6 +1040,7 @@ const EditPaymentMethod = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { isServiceable } = useServiceableZips();
   usePageMeta({
     title: "Edit payment method — Cobbli",
     description: "Update a saved card on your Cobbli account.",
@@ -1059,13 +1064,13 @@ const EditPaymentMethod = () => {
     makeDefault: false,
   });
   const isNewAddress = form.billingAddressId === "__new__";
-  const newAddrZipInvalid = newAddr.zip.length === 5 && !isServiceableZip(newAddr.zip);
+  const newAddrZipInvalid = newAddr.zip.length === 5 && isServiceable(newAddr.zip) === false;
   const newAddrValid =
     !!newAddr.street.trim() &&
     !!newAddr.city.trim() &&
     !!newAddr.state &&
     /^\d{5}$/.test(newAddr.zip) &&
-    isServiceableZip(newAddr.zip);
+    isServiceable(newAddr.zip) === true;
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [otherCount, setOtherCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);

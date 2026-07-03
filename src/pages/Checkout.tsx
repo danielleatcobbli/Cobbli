@@ -25,7 +25,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { isServiceableZip } from "@/data/serviceAreas";
+import { useServiceableZips } from "@/hooks/useServiceableZips";
 import { cn } from "@/lib/utils";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { StripeEmbeddedCheckoutPanel } from "@/components/StripeEmbeddedCheckout";
@@ -38,6 +38,7 @@ const Checkout = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user: authUser } = useAuth();
+  const { isServiceable } = useServiceableZips();
   const { pairs: rawPairs, clear } = useBag();
   const { pairs, subtotal } = useLivePricedBag(rawPairs);
   const {
@@ -87,13 +88,17 @@ const Checkout = () => {
     zip: "",
     makeDefault: false,
   });
-  const zipInvalid = addrForm.zip.length === 5 && !isServiceableZip(addrForm.zip);
+  // Only flag as invalid on a definitive "not serviceable" (false) — never
+  // while the zip list is still loading (null), to avoid false-failing a valid
+  // address. `valid` requires an explicit true, so submit stays disabled until
+  // the list confirms coverage.
+  const zipInvalid = addrForm.zip.length === 5 && isServiceable(addrForm.zip) === false;
   const addrFormValid =
     addrForm.street.trim() &&
     addrForm.city.trim() &&
     addrForm.state &&
     /^\d{5}$/.test(addrForm.zip) &&
-    isServiceableZip(addrForm.zip);
+    isServiceable(addrForm.zip) === true;
   const showAddrForm = addingAddr || editingAddrId !== null;
   const addressDone = !showAddrForm && !!selectedAddrId;
   const selectedAddress = addresses.find((a) => a.id === selectedAddrId);
