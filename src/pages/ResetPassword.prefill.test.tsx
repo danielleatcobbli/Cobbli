@@ -10,6 +10,7 @@ vi.mock("@/hooks/usePageMeta", () => ({ usePageMeta: () => {} }));
 vi.mock("@/integrations/api/client", () => ({ apiFetch: vi.fn() }));
 
 const getSession = vi.fn();
+const resetPasswordForEmail = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     auth: {
@@ -17,6 +18,7 @@ vi.mock("@/integrations/supabase/client", () => ({
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
       verifyOtp: vi.fn(),
       exchangeCodeForSession: vi.fn(),
+      resetPasswordForEmail: (...a: unknown[]) => resetPasswordForEmail(...a),
     },
   },
 }));
@@ -30,6 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // No active session and no recovery marker -> request screen renders.
   getSession.mockResolvedValue({ data: { session: null } });
+  resetPasswordForEmail.mockResolvedValue({ error: null });
   window.sessionStorage.clear();
   window.history.replaceState({}, "", "/reset-password");
 });
@@ -45,24 +48,32 @@ const renderAt = (entry: string | { pathname: string; search?: string; state?: u
   );
 
 describe("ResetPassword email pre-population", () => {
-  it("pre-fills from router state (lockout / forgot-password hand-off)", async () => {
+  // Router-state hand-off (lockout / "Forgot password?") now auto-sends the
+  // reset link to the known address and lands on the check-inbox screen.
+  it("auto-sends and shows check-inbox when handed a router-state email", async () => {
     renderAt({ pathname: "/reset-password", state: { prefillEmail: "locked@example.com" } });
-    const input = await emailInput();
-    await waitFor(() => expect(input.value).toBe("locked@example.com"));
+    await waitFor(
+      () => expect(resetPasswordForEmail).toHaveBeenCalledWith("locked@example.com", expect.anything()),
+      { timeout: 3000 },
+    );
+    await screen.findByText(/sent a password reset link to locked@example\.com/i, undefined, { timeout: 3000 });
   });
 
-  it("pre-fills from the ?email= URL param (expired-link bounce)", async () => {
+  it("auto-sends the router-state email even when a URL param is also present", async () => {
+    window.history.replaceState({}, "", "/reset-password?email=url%40example.com");
+    renderAt({ pathname: "/reset-password", search: "?email=url%40example.com", state: { prefillEmail: "state@example.com" } });
+    await waitFor(
+      () => expect(resetPasswordForEmail).toHaveBeenCalledWith("state@example.com", expect.anything()),
+      { timeout: 3000 },
+    );
+  });
+
+  it("pre-fills from the ?email= URL param without auto-sending (expired-link bounce)", async () => {
     window.history.replaceState({}, "", "/reset-password?email=urluser%40example.com");
     renderAt({ pathname: "/reset-password", search: "?email=urluser%40example.com" });
     const input = await emailInput();
     await waitFor(() => expect(input.value).toBe("urluser@example.com"));
-  });
-
-  it("prefers router state over the URL param", async () => {
-    window.history.replaceState({}, "", "/reset-password?email=url%40example.com");
-    renderAt({ pathname: "/reset-password", search: "?email=url%40example.com", state: { prefillEmail: "state@example.com" } });
-    const input = await emailInput();
-    await waitFor(() => expect(input.value).toBe("state@example.com"));
+    expect(resetPasswordForEmail).not.toHaveBeenCalled();
   });
 
   it("leaves the field empty (never blocks) when no email is available", async () => {
@@ -71,29 +82,33 @@ describe("ResetPassword email pre-population", () => {
     await waitFor(() => expect(input.value).toBe(""));
   });
 
-  it("leaves the field empty when the provided email is malformed", async () => {
+  it("does not auto-send and leaves the field empty when the router-state email is malformed", async () => {
     renderAt({ pathname: "/reset-password", state: { prefillEmail: "not-an-email" } });
     const input = await emailInput();
     await waitFor(() => expect(input.value).toBe(""));
+    expect(resetPasswordForEmail).not.toHaveBeenCalled();
   });
 
-  it("keeps the pre-filled field editable", async () => {
-    renderAt({ pathname: "/reset-password", state: { prefillEmail: "locked@example.com" } });
+  it("keeps the URL-param pre-filled field editable", async () => {
+    window.history.replaceState({}, "", "/reset-password?email=urluser%40example.com");
+    renderAt({ pathname: "/reset-password", search: "?email=urluser%40example.com" });
     const input = await emailInput();
-    await waitFor(() => expect(input.value).toBe("locked@example.com"));
+    await waitFor(() => expect(input.value).toBe("urluser@example.com"));
     expect(input).not.toBeDisabled();
     expect(input).not.toHaveAttribute("readonly");
   });
 });
 
 describe("LinkExpired → ResetPassword passthrough", () => {
-  it("hands the email from the expired-link screen to the request screen", async () => {
+  it("hands the email from the expired-link screen and auto-sends a new link", async () => {
     renderAt({ pathname: "/link-expired", state: { prefillEmail: "expired@example.com" } });
 
     const requestNew = await screen.findByRole("link", { name: /request a new link/i });
     fireEvent.click(requestNew);
 
-    const input = await emailInput();
-    await waitFor(() => expect(input.value).toBe("expired@example.com"));
+    await waitFor(
+      () => expect(resetPasswordForEmail).toHaveBeenCalledWith("expired@example.com", expect.anything()),
+      { timeout: 3000 },
+    );
   });
 });

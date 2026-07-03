@@ -103,6 +103,13 @@ const ResetPassword = () => {
     return resolveInitialEmail({ stateEmail, urlEmail });
   }, [location.state]);
   const [email, setEmail] = useState(initialEmail);
+  // Auto-send the reset link only when the user was explicitly handed off from
+  // the sign-in / lockout flow with a prefilled email in router state — never
+  // from a bare ?email= URL param, so an arbitrary link can't trigger a send.
+  const autoSendEmail = useMemo(() => {
+    const stateEmail = (location.state as { prefillEmail?: string } | null)?.prefillEmail ?? null;
+    return stateEmail && emailRegex.test(stateEmail.trim()) ? stateEmail.trim() : "";
+  }, [location.state]);
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [submitting, setSubmitting] = useState(false);
