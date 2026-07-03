@@ -3,6 +3,7 @@ import Footer from "@/components/cobbli/Footer";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import ZipManager from "@/components/settings/ZipManager";
 import PricingManager from "@/components/settings/PricingManager";
+import FeesManager from "@/components/settings/FeesManager";
 
 /**
  * Owner-only Settings: strategic, infrequently-changed config (serviced ZIP
@@ -29,6 +30,7 @@ const OwnerSettings = () => {
           </div>
           <ZipManager />
           <PricingManager />
+          <FeesManager />
         </div>
       </main>
       <Footer />
