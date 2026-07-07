@@ -25,6 +25,9 @@ import AssessmentProposal from "./pages/AssessmentProposal";
 import Admin from "./pages/Admin";
 import OwnerSettings from "./pages/OwnerSettings";
 import AdminBlog from "./pages/AdminBlog";
+import AdminOrders from "./pages/admin/AdminOrders";
+import AdminReworks from "./pages/admin/AdminReworks";
+import AdminReports from "./pages/admin/AdminReports";
 import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import SelectServices from "./pages/SelectServices";
@@ -42,8 +45,7 @@ import { RepairFlowProvider } from "./context/RepairFlowContext";
 import { AssessmentProvider } from "./context/AssessmentContext";
 import { AccountProvider } from "./context/AccountContext";
 import ProtectedRoute from "./components/ProtectedRoute";
-import AdminRoute from "./components/AdminRoute";
-import OwnerRoute from "./components/OwnerRoute";
+import RoleRoute from "./components/RoleRoute";
 
 const queryClient = new QueryClient();
 
@@ -107,25 +109,49 @@ const App = () => (
                         <Route
                           path="/admin"
                           element={
-                            <AdminRoute>
+                            <RoleRoute allow={["admin"]}>
                               <Admin />
-                            </AdminRoute>
+                            </RoleRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin/orders"
+                          element={
+                            <RoleRoute allow={["admin", "staff"]}>
+                              <AdminOrders />
+                            </RoleRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin/reworks"
+                          element={
+                            <RoleRoute allow={["admin", "staff"]}>
+                              <AdminReworks />
+                            </RoleRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin/reports"
+                          element={
+                            <RoleRoute allow={["admin"]}>
+                              <AdminReports />
+                            </RoleRoute>
                           }
                         />
                         <Route
                           path="/admin/settings"
                           element={
-                            <OwnerRoute>
+                            <RoleRoute allow={["admin"]}>
                               <OwnerSettings />
-                            </OwnerRoute>
+                            </RoleRoute>
                           }
                         />
                         <Route
                           path="/admin/blog"
                           element={
-                            <AdminRoute>
+                            <RoleRoute allow={["admin"]}>
                               <AdminBlog />
-                            </AdminRoute>
+                            </RoleRoute>
                           }
                         />
                         <Route

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useIsOwner } from "@/hooks/useIsOwner";
+import { useRole } from "@/hooks/useRole";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
@@ -71,7 +71,7 @@ const STATUS_TABS: { id: "pending" | "proposal_sent" | "booked" | "service_unava
 
 const Admin = () => {
   usePageMeta({ title: "Admin — Cobbli", description: "Cobbli internal admin." });
-  const { isOwner } = useIsOwner();
+  const { isAdmin } = useRole();
   const [rows, setRows] = useState<AssessmentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [services, setServices] = useState<Service[]>([]);
@@ -251,7 +251,7 @@ const Admin = () => {
           <h1 className="font-display text-3xl md:text-4xl text-primary mb-2">Admin</h1>
           <p className="text-muted-foreground mb-6">Photo assessments</p>
 
-          {isOwner && (
+          {isAdmin && (
             <div className="mb-6">
               <Link
                 to="/admin/settings"
