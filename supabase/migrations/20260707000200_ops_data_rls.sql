@@ -6,6 +6,21 @@
 --
 -- A SECURITY DEFINER helper keeps the policies readable and consistent.
 
+-- The `reworks` table is referenced by the generated types but did not exist in
+-- the live DB, so create it here (matches the typed shape). Rework requests link
+-- an order to a set of in-scope services with a status.
+CREATE TABLE IF NOT EXISTS public.reworks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  services_in_scope JSONB NOT NULL DEFAULT '[]'::jsonb,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE public.reworks ENABLE ROW LEVEL SECURITY;
+
 CREATE OR REPLACE FUNCTION public.is_staff_or_admin(_user_id uuid)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT EXISTS (
