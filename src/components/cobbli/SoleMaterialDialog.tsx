@@ -9,8 +9,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-/** Slugs that require a sole-material selection before being added to a repair. */
-export const SOLE_MATERIAL_SLUGS = new Set(["full-resole"]);
+/** Slugs that require a sole-material selection before being added to a repair.
+ *  Full Resole is now a flat price regardless of sole material — the set is intentionally empty. */
+export const SOLE_MATERIAL_SLUGS = new Set<string>();
 
 export type SoleMaterial = "Leather" | "Rubber";
 

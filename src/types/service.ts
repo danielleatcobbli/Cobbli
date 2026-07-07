@@ -88,7 +88,11 @@ export type Service = {
   id: string;
   slug: string;
   name: string;
+  /** Short text shown on service cards. */
   description: string;
+  /** Longer richly-worded description shown on the service detail page.
+   *  Falls back to `description` when not set. */
+  fullDescription?: string;
   cardName: string;
   cardPriceLabel: string;
   categories: ServiceCategory[];

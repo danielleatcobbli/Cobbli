@@ -10,36 +10,88 @@ import { Button } from "@/components/ui/button";
 import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
 import SoleMaterialDialog, { SOLE_MATERIAL_SLUGS } from "@/components/cobbli/SoleMaterialDialog";
 import ComingSoonVoteButton from "@/components/cobbli/ComingSoonVoteButton";
-import { PREMIUM_BRANDS, type QAOption } from "@/types/service";
 import { useService } from "@/hooks/useServices";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 
 type Mode = "flow" | "standalone";
 
-const formatPrice = (n: number | undefined) => (n === undefined ? "—" : `$${n}`);
+// ---------------------------------------------------------------------------
+// Popular services
+// ---------------------------------------------------------------------------
 
-/**
- * Per-item service config. `unitLabel` becomes the first pricing-table column header
- * (e.g. "Per buckle"). When `quantityNoun` is set, a quantity stepper + live total appears.
- */
-const PER_ITEM_CONFIG: Record<string, { unitLabel: string; quantityNoun?: string }> = {
-"buckle-repair": { unitLabel: "Per buckle", quantityNoun: "buckles" },
-"buckle-replacement": { unitLabel: "Per pair" },
-"strap-repair": { unitLabel: "Per strap", quantityNoun: "straps" },
-"strap-replacement": { unitLabel: "Per strap", quantityNoun: "straps" },
-"hardware-repair": { unitLabel: "Per piece", quantityNoun: "pieces" },
-"hardware-replacement": { unitLabel: "Per piece", quantityNoun: "pieces" },
-"zipper-reattachment": { unitLabel: "Per shoe" },
-"zipper-replacement": { unitLabel: "Per shoe" },
-"zipper-slider-replacement": { unitLabel: "Per shoe" },
-"full-resole": { unitLabel: "Sole material" },
+const POPULAR_SERVICE_SLUGS = new Set([
+  "full-resole",
+  "color-restoration",
+  "leather-or-suede-conditioning",
+  "insole-replacement",
+  "lining-repair",
+  "shoe-shine",
+]);
+
+// ---------------------------------------------------------------------------
+// Flat pricing — price string + unit label + optional note
+// ---------------------------------------------------------------------------
+
+type PricingConfig = {
+  price: string;
+  unit: string;
+  /** Extra explanatory line shown beneath the price (e.g. hardware-repair). */
+  note?: string;
+  /** When true, a quantity stepper is shown and a running total is displayed. */
+  hasQuantity?: boolean;
 };
+
+const SERVICE_PRICING: Record<string, PricingConfig> = {
+  "full-resole":                   { price: "$85",  unit: "per pair" },
+  "high-heel-tip-replacement":     { price: "$35",  unit: "per pair" },
+  "heel-reattachment":             { price: "$100", unit: "per shoe" },
+  "color-restoration":             { price: "$80",  unit: "per pair" },
+  "leather-or-suede-conditioning": { price: "$65",  unit: "per pair" },
+  "deodorizing-treatment":         { price: "$50",  unit: "per pair" },
+  "shoe-shine":                    { price: "$20",  unit: "per pair" },
+  "insole-replacement":            { price: "$50",  unit: "per pair" },
+  "lining-repair":                 { price: "$75",  unit: "per pair" },
+  "seam-repair":                   { price: "$50",  unit: "per pair" },
+  "waterproofing":                 { price: "$30",  unit: "per pair" },
+  "protective-full-sole":          { price: "$50",  unit: "per pair" },
+  "hardware-repair":               {
+    price: "$45",
+    unit: "per buckle or piece of hardware",
+    note: "Only pay for what needs fixing — if two buckles need repair, we'll charge for two",
+    hasQuantity: true,
+  },
+  "buckle-repair":                 { price: "$45",  unit: "per buckle", hasQuantity: true },
+  "strap-repair":                  { price: "$45",  unit: "per strap",  hasQuantity: true },
+  "zipper-reattachment":           { price: "$75",  unit: "per shoe" },
+  "zipper-slider-replacement":     { price: "$45",  unit: "per shoe" },
+  // Coming soon
+  "full-dye":                      { price: "$125", unit: "per pair" },
+  "shoe-stretching":               { price: "$40",  unit: "per pair" },
+  "buckle-replacement":            { price: "$80",  unit: "per pair" },
+  "heel-replacement":              { price: "$150", unit: "per pair" },
+};
+
+// ---------------------------------------------------------------------------
+// Brands not currently supported — per service
+// ---------------------------------------------------------------------------
+
+const UNSUPPORTED_BRANDS: Record<string, string[]> = {
+  "full-resole":         ["Christian Louboutin", "Golden Goose", "Maison Margiela"],
+  "color-restoration":   ["Golden Goose"],
+  "insole-replacement":  ["Maison Margiela"],
+  "protective-full-sole":["Christian Louboutin", "Golden Goose", "Maison Margiela"],
+  "zipper-reattachment": ["Golden Goose"],
+  "heel-replacement":    ["Christian Louboutin"],
+};
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 const ServiceDetail = ({ mode }: { mode: Mode }) => {
   const { slug = "" } = useParams();
   const navigate = useNavigate();
   const { service, isLoading } = useService(slug);
-  const [qaIndex, setQaIndex] = useState<number | null>(null);
   const [brandsOpen, setBrandsOpen] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [consentOpen, setConsentOpen] = useState(false);
@@ -48,9 +100,9 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
   const [detailSearchParams] = useSearchParams();
 
   usePageMeta({
-    title: service ? `${service.cardName} — Cobbli` : "Service — Cobbli",
+    title: service ? `${service.name} — Cobbli` : "Service — Cobbli",
     description: service
-      ? `${service.description} Book ${service.cardName.toLowerCase()} with Cobbli's NYC door-to-door shoe repair service. Transparent pricing and fast turnaround.`
+      ? `${service.description} Book ${service.name.toLowerCase()} with Cobbli's NYC door-to-door shoe repair service. Transparent pricing and fast turnaround.`
       : "Cobbli's professional shoe repair services with transparent pricing and door-to-door pickup and return across NYC.",
   });
 
@@ -69,16 +121,12 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
 
   if (!service) return <Navigate to={mode === "flow" ? "/start-repair/services" : "/services"} replace />;
 
-  // For zipper-slider-replacement (and any future service with variantKey-driven QA),
-  // selecting a QA option filters the pricing display to that single variant.
-  const isVariantKeyQA = service.slug === "zipper-slider-replacement";
-  const selectedOption = qaIndex !== null ? service.qa?.options[qaIndex] : undefined;
-  const visibleVariants =
-    isVariantKeyQA && selectedOption?.variantKey
-      ? service.variants.filter((v) => v.key === selectedOption.variantKey)
-      : service.variants;
+  const pricing = SERVICE_PRICING[service.slug];
+  const unsupportedBrands = UNSUPPORTED_BRANDS[service.slug];
+  const isPopular = POPULAR_SERVICE_SLUGS.has(service.slug);
+  const unitPrice = pricing ? parseInt(pricing.price.replace("$", ""), 10) : 0;
+  const runningTotal = pricing?.hasQuantity ? `$${unitPrice * quantity}` : null;
 
-  const showPremium = visibleVariants.some((v) => v.premium !== undefined && v.premium !== v.standard);
   const onBack = () => {
     const from = detailSearchParams.get("from");
     if (mode !== "flow" && from) {
@@ -87,7 +135,9 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
       navigate(mode === "flow" ? "/start-repair/services" : "/services");
     }
   };
+
   const goToPick = () => navigate(`/start-repair/pick?service=${encodeURIComponent(service.slug)}`);
+
   const onStart = () => {
     if (PAINT_CONSENT_SLUGS.has(service.slug)) {
       setConsentOpen(true);
@@ -99,7 +149,6 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
     }
     goToPick();
   };
-
 
   return (
     <main className="min-h-screen bg-white flex flex-col">
@@ -117,15 +166,14 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
           </button>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10">
+
+            {/* ── Image ── */}
             <div
-              className="aspect-square rounded-xl flex items-center justify-center text-center px-6 relative"
+              className="aspect-[4/5] rounded-xl relative overflow-hidden"
               style={{
-                backgroundColor: "#3d1700",
-                color: "#fdb600",
-                opacity: service.isComingSoon ? 0.55 : 1,
+                backgroundColor: service.isComingSoon ? "#9a8870" : "#3d1700",
               }}
             >
-              <span className="text-3xl">{service.cardName}</span>
               {service.isComingSoon && (
                 <span
                   className="absolute top-3 left-3 text-[11px] font-medium px-2.5 py-1 rounded-full"
@@ -136,213 +184,103 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
               )}
             </div>
 
+            {/* ── Content ── */}
             <div>
-              <h1 className="font-display text-3xl text-primary">{service.cardName}</h1>
-              <p className="mt-3 text-muted-foreground leading-relaxed">{service.description}</p>
 
-              {service.isComingSoon ? (
-                <div
-                  className="mt-6 rounded-xl border border-border bg-card p-5 shadow-soft"
+              {/* Popular tag */}
+              {isPopular && !service.isComingSoon && (
+                <span
+                  className="inline-block mb-3 text-[11px] font-medium px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
                 >
-                  <h2 className="text-base font-medium text-primary">Want to see this added?</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    We're considering this service next. Cast a vote to help us prioritize it.
-                  </p>
-                  <div className="mt-4">
+                  Popular
+                </span>
+              )}
+
+              <h1 className="font-display text-3xl text-primary">{service.name}</h1>
+              <p className="mt-3 text-muted-foreground leading-relaxed">
+                {service.fullDescription || service.description}
+              </p>
+
+              {/* ── Coming soon ── */}
+              {service.isComingSoon ? (
+                <>
+                  <div className="mt-8">
                     <ComingSoonVoteButton serviceId={service.id} />
                   </div>
-                </div>
-              ) : null}
 
-              {!service.isComingSoon && service.slug !== "zipper-slider-replacement" && (
+                  {unsupportedBrands && unsupportedBrands.length > 0 && (
+                    <div className="mt-4">
+                      <UnsupportedBrandsAccordion
+                        brands={unsupportedBrands}
+                        open={brandsOpen}
+                        onToggle={() => setBrandsOpen((o) => !o)}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
                 <>
                   <div className="my-6 border-t border-border" />
 
-              {(() => {
-                const perItem = PER_ITEM_CONFIG[service.slug];
-                const showQuantity = !!perItem?.quantityNoun;
-                const firstColLabel = perItem?.unitLabel ?? (visibleVariants.length > 1 ? "Type" : "");
-                const singleVariant = visibleVariants[0];
-                const totalStandard = singleVariant ? singleVariant.standard * quantity : 0;
-                const totalPremium = singleVariant?.premium !== undefined ? singleVariant.premium * quantity : undefined;
-                const showFirstCol = service.variants.length > 1;
-
-                return (
-                  <>
-                    {showQuantity && (
-                      <>
-                        <div>
-                          <p className="text-sm font-medium text-primary">
-                            How many {perItem!.quantityNoun} need repair?
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Priced per {perItem!.quantityNoun!.replace(/s$/, "")} — only pay for what needs fixing
-                          </p>
-                          <div className="mt-3 inline-flex items-center rounded-lg border border-border">
-                            <button
-                              type="button"
-                              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                              disabled={quantity <= 1}
-                              aria-label="Decrease quantity"
-                              className="p-2 text-primary disabled:opacity-40"
-                            >
-                              <Minus size={16} />
-                            </button>
-                            <span className="w-10 text-center text-sm font-medium text-primary tabular-nums">
-                              {quantity}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setQuantity((q) => Math.min(10, q + 1))}
-                              disabled={quantity >= 10}
-                              aria-label="Increase quantity"
-                              className="p-2 text-primary disabled:opacity-40"
-                            >
-                              <Plus size={16} />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="my-6 border-t border-border" />
-                      </>
-                    )}
-
-                    {/* Pricing */}
-                    <div>
-                      {!showPremium && !perItem && visibleVariants.length === 1 && singleVariant ? (
-                        <div>
-                          <span className="text-primary" style={{ fontSize: "22px" }}>
-                            {formatPrice(singleVariant.standard)}
-                          </span>
-                          <span className="ml-2 text-xs text-muted-foreground">per pair</span>
-                        </div>
-                      ) : (
-                        <div className="rounded-lg border border-border overflow-hidden">
-                          <div
-                            className="grid items-center gap-4 px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/40"
-                            style={{ gridTemplateColumns: showPremium ? (showFirstCol ? "1fr 1fr 1fr" : "1fr 1fr") : (showFirstCol ? "1fr 1fr" : "1fr") }}
-                          >
-                            {showFirstCol && <span className="text-left">{firstColLabel}</span>}
-                            <span className="text-left">Standard shoes</span>
-                            {showPremium && <span className="text-left">Shoes that need extra care</span>}
-                          </div>
-                          <ul className="divide-y divide-border">
-                            {visibleVariants.map((v) => (
-                              <li
-                                key={v.key}
-                                className="grid items-center gap-4 px-4 py-3 text-sm"
-                                style={{ gridTemplateColumns: showPremium ? (showFirstCol ? "1fr 1fr 1fr" : "1fr 1fr") : (showFirstCol ? "1fr 1fr" : "1fr") }}
-                              >
-                                {showFirstCol && (
-                                  <span className="text-left text-primary">
-                                    {v.label || (perItem ? "Price" : service.name)}
-                                  </span>
-                                )}
-                                <span className="text-left text-primary">{formatPrice(v.standard)}</span>
-                                {showPremium && (
-                                  <span className="text-left text-primary">
-                                    {v.premium !== undefined ? formatPrice(v.premium) : "—"}
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {showQuantity && singleVariant && (
-                        <div className="mt-4">
-                          <div className="flex items-baseline justify-between rounded-lg bg-muted/40 px-4 py-3">
-                            <span className="text-sm font-medium text-primary">Total</span>
-                            <span className="text-sm font-medium text-primary tabular-nums">
-                              ${totalStandard} standard
-                              {totalPremium !== undefined && <> / ${totalPremium} luxury</>}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-
-                      {showPremium && (
-                        <div className="mt-3">
-                          <button
-                            type="button"
-                            onClick={() => setBrandsOpen((o) => !o)}
-                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-                          >
-                            Which shoes need extra care?
-                            {brandsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                          </button>
-                          {brandsOpen && (
-                            <>
-                              <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-                                {PREMIUM_BRANDS.join(", ")}.
-                              </p>
-                              <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-                                These brands use signature materials, finishes, and techniques, like Louboutin's lacquered red sole, that require specialist handling and sourcing to repair correctly.
-                              </p>
-                            </>
-                          )}
-                        </div>
+                  {/* ── Pricing ── */}
+                  {pricing && (
+                    <div className="mb-6">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[28px] font-bold leading-none" style={{ color: "#3d1700" }}>
+                          {pricing.price}
+                        </span>
+                        <span className="text-sm text-muted-foreground">{pricing.unit}</span>
+                      </div>
+                      {pricing.note && (
+                        <p className="mt-1.5 text-xs text-muted-foreground">{pricing.note}</p>
                       )}
                     </div>
-                  </>
-                );
-              })()}
-                </>
-              )}
+                  )}
 
-              {!service.isComingSoon && service.qa && (
-                <>
-                  <div className="my-6 border-t border-border" />
-                  <div>
-                    <p className="text-sm font-medium text-primary">{service.qa.question}</p>
-                    {service.qa.hint && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {service.qa.hint.includes("photo assessment") ? (
-                          <>
-                            {service.qa.hint.split("photo assessment")[0]}
-                            <Link to="/start-repair/assessment" className="underline">photo assessment</Link>
-                            {service.qa.hint.split("photo assessment")[1]}
-                          </>
-                        ) : (
-                          service.qa.hint
+                  {/* ── Quantity stepper (hardware-repair etc.) ── */}
+                  {pricing?.hasQuantity && (
+                    <>
+                      <div className="mb-6">
+                        <p className="text-sm font-medium text-primary mb-2">
+                          Quantity needing repair
+                        </p>
+                        <div className="inline-flex items-center rounded-lg border border-border">
+                          <button
+                            type="button"
+                            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                            disabled={quantity <= 1}
+                            aria-label="Decrease quantity"
+                            className="p-2 text-primary disabled:opacity-40"
+                          >
+                            <Minus size={16} />
+                          </button>
+                          <span className="w-10 text-center text-sm font-medium text-primary tabular-nums">
+                            {quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setQuantity((q) => Math.min(10, q + 1))}
+                            disabled={quantity >= 10}
+                            aria-label="Increase quantity"
+                            className="p-2 text-primary disabled:opacity-40"
+                          >
+                            <Plus size={16} />
+                          </button>
+                        </div>
+                        {runningTotal && (
+                          <div className="mt-3 flex items-baseline justify-between rounded-lg bg-muted/40 px-4 py-3">
+                            <span className="text-sm font-medium text-primary">Total</span>
+                            <span className="text-sm font-medium text-primary tabular-nums">
+                              {runningTotal}
+                            </span>
+                          </div>
                         )}
-                      </p>
-                    )}
-                    <ul className="mt-3 space-y-2">
-                      {service.qa.options.map((opt: QAOption, i) => {
-                        const selected = qaIndex === i;
-                        return (
-                          <li key={i}>
-                            <button
-                              type="button"
-                              onClick={() => setQaIndex(i)}
-                              aria-pressed={selected}
-                              className={`w-full flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
-                                selected
-                                  ? "border-transparent text-white"
-                                  : "border-border text-primary hover:border-primary/60"
-                              }`}
-                              style={selected ? { backgroundColor: "#3d1700" } : undefined}
-                            >
-                              <span className="flex-1 text-left">{opt.label}</span>
-                              {opt.priceLabel && (
-                                <span className="text-sm font-medium">{opt.priceLabel}</span>
-                              )}
-                            </button>
-                            {selected && opt.note && (
-                              <p className="mt-1 text-xs text-muted-foreground px-1">{opt.note}</p>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                </>
-              )}
+                      </div>
+                    </>
+                  )}
 
-              {!service.isComingSoon && (
-                <div className="mt-8">
+                  {/* ── CTA ── */}
                   <Button
                     type="button"
                     size="lg"
@@ -352,7 +290,18 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                   >
                     Start a repair
                   </Button>
-                </div>
+
+                  {/* ── Brands not currently supported ── */}
+                  {unsupportedBrands && unsupportedBrands.length > 0 && (
+                    <div className="mt-4">
+                      <UnsupportedBrandsAccordion
+                        brands={unsupportedBrands}
+                        open={brandsOpen}
+                        onToggle={() => setBrandsOpen((o) => !o)}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -380,9 +329,48 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
           goToPick();
         }}
       />
-
     </main>
   );
 };
+
+// ---------------------------------------------------------------------------
+// Unsupported brands accordion
+// ---------------------------------------------------------------------------
+
+type AccordionProps = {
+  brands: string[];
+  open: boolean;
+  onToggle: () => void;
+};
+
+const UnsupportedBrandsAccordion = ({ brands, open, onToggle }: AccordionProps) => (
+  <div>
+    <button
+      type="button"
+      onClick={onToggle}
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+    >
+      Brands not currently supported
+      {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+    </button>
+    {open && (
+      <div className="mt-2 space-y-2">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {brands.join(", ")}.
+        </p>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          These brands use signature materials, finishes, and techniques that require specialist
+          handling and sourcing to repair correctly. We're working toward supporting them.
+        </p>
+        <button
+          type="button"
+          className="text-xs text-muted-foreground underline hover:text-primary"
+        >
+          👍 Vote to add support for these brands
+        </button>
+      </div>
+    )}
+  </div>
+);
 
 export default ServiceDetail;
