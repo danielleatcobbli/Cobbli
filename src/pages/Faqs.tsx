@@ -9,9 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useServiceableZips } from "@/hooks/useServiceableZips";
+import { trackEvent } from "@/lib/analytics";
 
 const Email = () => (
-  <a href="mailto:support@cobbli.com" className="underline underline-offset-4">
+  <a
+    href="mailto:support@cobbli.com"
+    className="underline underline-offset-4"
+    onClick={() => trackEvent("consultation_email_clicked", { source: "faqs" })}
+  >
     support@cobbli.com
   </a>
 );
@@ -76,7 +81,11 @@ const CoverageRequestForm = () => {
         {zipAlreadyServiced && (
           <p className="text-sm font-medium text-green-700">
             Great news — we already service your area!{" "}
-            <Link to="/services" className="underline underline-offset-4">
+            <Link
+              to="/services"
+              className="underline underline-offset-4"
+              onClick={() => trackEvent("start_repair", { source: "faqs" })}
+            >
               Start a repair
             </Link>
             .

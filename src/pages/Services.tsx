@@ -18,6 +18,7 @@ import { type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import ServiceCard from "@/components/cobbli/ServiceCard";
+import { trackEvent } from "@/lib/analytics";
 
 const ALL = ALL_CATEGORIES_LABEL;
 const categories = FILTER_BAR_CATEGORIES;
@@ -196,6 +197,7 @@ const Services = () => {
     navigate(`/start-repair/pick?service=${encodeURIComponent(slug)}`);
 
   const handleAddToRepair = (slug: string) => {
+    trackEvent("service_added", { service_slug: slug, source: "services_page" });
     if (PAINT_CONSENT_SLUGS.has(slug)) {
       setPendingSlug(slug);
       setConsentOpen(true);
@@ -301,11 +303,12 @@ const Services = () => {
               <BundleCard
                 key={bundle.name}
                 bundle={bundle}
-                onAddToRepair={() =>
+                onAddToRepair={() => {
+                  trackEvent("service_added", { bundle: bundle.name, source: "services_page_bundle" });
                   navigate(
                     `/start-repair/pick?bundle=${encodeURIComponent(bundle.name)}&bundlePrice=${bundlePriceToCents(bundle.price)}`,
-                  )
-                }
+                  );
+                }}
               />
             ))}
           </div>
@@ -326,7 +329,11 @@ const Services = () => {
             ) : isError ? (
               <p className="text-muted-foreground py-10">
                 We couldn't load services right now. Please refresh, or{" "}
-                <a href="mailto:support@cobbli.com" className="underline text-primary">
+                <a
+                  href="mailto:support@cobbli.com"
+                  className="underline text-primary"
+                  onClick={() => trackEvent("consultation_email_clicked", { source: "services_error" })}
+                >
                   support@cobbli.com
                 </a>{" "}
                 if it keeps happening.
@@ -337,7 +344,11 @@ const Services = () => {
                 <p className="text-muted-foreground mb-6">
                   Try another category, or get in touch and we'll recommend the right repair.
                 </p>
-                <a href="mailto:support@cobbli.com" className="underline text-primary">
+                <a
+                  href="mailto:support@cobbli.com"
+                  className="underline text-primary"
+                  onClick={() => trackEvent("consultation_email_clicked", { source: "services_no_category" })}
+                >
                   support@cobbli.com
                 </a>
               </div>

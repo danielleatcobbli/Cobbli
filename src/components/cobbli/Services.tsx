@@ -11,6 +11,7 @@ import SoleMaterialDialog, { SOLE_MATERIAL_SLUGS } from "@/components/cobbli/Sol
 import { type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
 import { useRepairFlow } from "@/context/RepairFlowContext";
+import { trackEvent } from "@/lib/analytics";
 
 // ---------------------------------------------------------------------------
 // Bundle data — homepage display order (popular first)
@@ -185,6 +186,7 @@ const Services = () => {
     navigate(`/start-repair/pick?service=${encodeURIComponent(slug)}`);
 
   const handleAddToRepair = (slug: string) => {
+    trackEvent("service_added", { service_slug: slug, source: "home_services" });
     if (PAINT_CONSENT_SLUGS.has(slug)) {
       setPendingSlug(slug);
       setConsentOpen(true);
@@ -245,7 +247,10 @@ const Services = () => {
             <HomepageBundleCard
               key={bundle.name}
               bundle={bundle}
-              onAddToRepair={() => navigate("/start-repair/pick")}
+              onAddToRepair={() => {
+                trackEvent("service_added", { bundle: bundle.name, source: "home_bundle" });
+                navigate("/start-repair/pick");
+              }}
             />
           ))}
         </div>

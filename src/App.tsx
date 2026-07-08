@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -51,6 +52,21 @@ import RoleRoute from "./components/RoleRoute";
 
 const queryClient = new QueryClient();
 
+// Fires a GA4 page_view on every client-side route change. gtag is only defined
+// after cookie consent is accepted (see src/lib/consent.ts), so this no-ops
+// until the visitor opts in.
+const PageTracker = () => {
+  const location = useLocation();
+  useEffect(() => {
+    if (typeof window.gtag !== "function") return;
+    window.gtag("event", "page_view", {
+      page_path: location.pathname + location.search,
+      page_title: document.title,
+    });
+  }, [location]);
+  return null;
+};
+
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
@@ -58,6 +74,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <PageTracker />
           <AuthProvider>
             <AccountProvider>
               <BagProvider>

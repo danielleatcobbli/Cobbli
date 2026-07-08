@@ -1,4 +1,5 @@
 import { ShieldCheck, Hammer, MessageCircleHeart } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 const items = [
   {
@@ -17,7 +18,11 @@ const items = [
     desc: (
       <>
         Have a question? Reach us any day of the week at{" "}
-        <a href="mailto:support@cobbli.com" className="underline hover:text-primary">
+        <a
+          href="mailto:support@cobbli.com"
+          className="underline hover:text-primary"
+          onClick={() => trackEvent("consultation_email_clicked", { source: "trust_signals" })}
+        >
           support@cobbli.com
         </a>
         .

@@ -1,4 +1,6 @@
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { trackEvent } from "@/lib/analytics";
 
 const CTA = () => {
   return (
@@ -12,9 +14,11 @@ const CTA = () => {
             Book your professional repair today — free pick up across Manhattan.
           </p>
         </div>
-        <Button size="lg" variant="hero" className="shrink-0">
-          Start a repair
-        </Button>
+        <Link to="/services" onClick={() => trackEvent("start_repair", { source: "cta_section" })}>
+          <Button size="lg" variant="hero" className="shrink-0">
+            Start a repair
+          </Button>
+        </Link>
       </div>
     </section>
   );

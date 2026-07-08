@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { useRole } from "@/hooks/useRole";
+import { trackEvent } from "@/lib/analytics";
 import { consumeReturnTo, peekReturnTo, saveReturnTo } from "@/lib/authRedirect";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -124,6 +125,7 @@ const SignIn = () => {
         }
         return;
       }
+      trackEvent("sign_in", { method: "password" });
       // Redirect is handled by the role-aware effect once `user` is set.
     } finally {
       setSubmitting(false);

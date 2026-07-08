@@ -43,6 +43,7 @@ import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import { useBag, type BagService } from "@/context/BagContext";
+import { trackEvent } from "@/lib/analytics";
 
 const ALL = "All services" as const;
 const sidebarCategories = [ALL, ...CATEGORIES_ORDERED];
@@ -167,6 +168,7 @@ const SelectServices = () => {
       return;
     }
     addService(slug);
+    trackEvent("service_added", { service_slug: slug, source: "select_services" });
   };
 
   const onAddRepairToBag = () => {
@@ -185,6 +187,11 @@ const SelectServices = () => {
       };
     });
     addPairToBag(bagServices, pair.id, formatPairLabel(pair), pair.shoeType);
+    trackEvent("repair_added_to_bag", {
+      value: bagServices.reduce((sum, s) => sum + s.price, 0) / 100,
+      currency: "USD",
+      service_count: bagServices.length,
+    });
     setConfirmOpen(true);
   };
 
@@ -338,6 +345,7 @@ const SelectServices = () => {
           if (!consentSlug) return;
           setPaintConsent(consentSlug, consent);
           addService(consentSlug);
+          trackEvent("service_added", { service_slug: consentSlug, source: "select_services" });
           setConsentSlug(null);
         }}
       />

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { trackEvent } from "@/lib/analytics";
 
 // Served from /public so the preload link in index.html resolves to the same URL.
 const hero = "/assets/hero-cobbler.webp";
@@ -28,7 +29,7 @@ const Hero = () => {
               Old-world craftsmanship, modern convenience. We pick up, repair, and return your shoes — without you leaving home.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/services">
+              <Link to="/services" onClick={() => trackEvent("start_repair", { source: "hero" })}>
                 <Button size="lg" variant="hero">
                   Start a repair
                 </Button>

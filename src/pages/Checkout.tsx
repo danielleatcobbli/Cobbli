@@ -28,6 +28,7 @@ import { toast } from "@/hooks/use-toast";
 import { useServiceableZips } from "@/hooks/useServiceableZips";
 import { usePricingConfig } from "@/hooks/usePricingConfig";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { StripeEmbeddedCheckoutPanel } from "@/components/StripeEmbeddedCheckout";
 import {
@@ -166,14 +167,16 @@ const Checkout = () => {
       // Poll for up to ~60s. Keep the user on the Finalizing screen the
       // whole time rather than bouncing them to an empty My Orders list.
       let dbOrderId: string | null = null;
+      let dbTotalCents: number | null = null;
       for (let i = 0; i < 60 && !cancelled; i++) {
         const { data } = await supabase
           .from("orders")
-          .select("id")
+          .select("id, total_cents")
           .eq("stripe_session_id", returningSessionId)
           .maybeSingle();
         if (data?.id) {
           dbOrderId = data.id;
+          dbTotalCents = (data as { total_cents?: number | null }).total_cents ?? null;
           break;
         }
         await new Promise((r) => setTimeout(r, 1000));
@@ -189,6 +192,15 @@ const Checkout = () => {
         navigate("/account/orders", { replace: true });
         return;
       }
+
+      // Purchase conversion — pass the order total (revenue) and order ID so GA4
+      // can attribute revenue accurately. Fall back to the client-side subtotal
+      // if the DB row didn't include total_cents.
+      trackEvent("order_placed", {
+        transaction_id: dbOrderId,
+        value: (dbTotalCents ?? orderSubtotal) / 100,
+        currency: "USD",
+      });
 
       if (!addr || pairs.length === 0) {
         navigate(`/order-confirmation/${dbOrderId}`, { replace: true });

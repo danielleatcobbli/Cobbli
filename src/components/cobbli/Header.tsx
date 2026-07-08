@@ -6,6 +6,7 @@ import accountIcon from "@/assets/icons/account.svg";
 import bagIcon from "@/assets/icons/bag.svg";
 import { useBag } from "@/context/BagContext";
 import { useAuth } from "@/context/AuthContext";
+import { trackEvent } from "@/lib/analytics";
 
 const navLinks = [
   { label: "Start a Repair", to: "/services" },
@@ -42,7 +43,10 @@ const Header = () => {
             <Link
               key={l.label}
               to={l.to}
-              onClick={l.label === "How It Works" ? handleHowItWorksClick : undefined}
+              onClick={(e) => {
+                if (l.label === "How It Works") handleHowItWorksClick(e);
+                if (l.label === "Start a Repair") trackEvent("start_repair", { source: "nav" });
+              }}
               className="opacity-90 hover:opacity-100 transition-opacity"
             >
               {l.label}
@@ -90,6 +94,7 @@ const Header = () => {
                 to={l.to}
                 onClick={(e) => {
                   if (l.label === "How It Works") handleHowItWorksClick(e);
+                  if (l.label === "Start a Repair") trackEvent("start_repair", { source: "nav_mobile" });
                   setOpen(false);
                 }}
                 className="py-1 opacity-90"

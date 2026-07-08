@@ -45,11 +45,18 @@ export const loadAnalytics = () => {
   document.head.appendChild(s);
 
   window.dataLayer = window.dataLayer || [];
-  window.gtag = function gtag(...args: unknown[]) {
-    window.dataLayer!.push(args);
+  window.gtag = function gtag() {
+    // GA4's gtag.js requires the raw `arguments` object here, not a spread
+    // array — plain arrays are treated as data pushes and ignored as commands.
+    window.dataLayer!.push(arguments);
   };
   window.gtag("js", new Date());
-  window.gtag("config", GA_MEASUREMENT_ID, { anonymize_ip: true, debug_mode: true });
+  window.gtag("config", GA_MEASUREMENT_ID, {
+    anonymize_ip: true,
+    // debug_mode routes events to GA4 DebugView — dev only so it doesn't
+    // pollute production reports.
+    ...(import.meta.env.DEV ? { debug_mode: true } : {}),
+  });
 };
 
 export const removeAnalytics = () => {
