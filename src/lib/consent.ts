@@ -49,7 +49,7 @@ export const loadAnalytics = () => {
     window.dataLayer!.push(args);
   };
   window.gtag("js", new Date());
-  window.gtag("config", GA_MEASUREMENT_ID, { anonymize_ip: true });
+  window.gtag("config", GA_MEASUREMENT_ID, { anonymize_ip: true, debug_mode: true });
 };
 
 export const removeAnalytics = () => {
