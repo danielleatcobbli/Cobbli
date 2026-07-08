@@ -28,7 +28,7 @@ const Hero = () => {
               Old-world craftsmanship, modern convenience. We pick up, repair, and return your shoes — without you leaving home.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/start-repair">
+              <Link to="/services">
                 <Button size="lg" variant="hero">
                   Start a repair
                 </Button>

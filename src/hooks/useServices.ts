@@ -15,6 +15,7 @@ type Row = {
   slug: string;
   name: string;
   short_description: string | null;
+  full_description: string | null;
   card_name: string | null;
   card_price_label: string | null;
   categories: string[] | null;
@@ -41,6 +42,7 @@ const mapRow = (r: Row): Service => {
     slug: r.slug,
     name: r.name,
     description: r.short_description ?? "",
+    fullDescription: r.full_description ?? undefined,
     cardName: r.card_name ?? r.name,
     cardPriceLabel: r.card_price_label ?? "",
     categories: (r.categories ?? []) as ServiceCategory[],
@@ -55,7 +57,7 @@ const fetchServices = async (): Promise<Service[]> => {
   const { data, error } = await supabase
     .from("services")
     .select(
-      "id, slug, name, short_description, card_name, card_price_label, categories, popularity_rank, is_coming_soon, qa_config, service_variants(variant_key, variant_label, standard_cents, premium_cents, rank)",
+      "id, slug, name, short_description, full_description, card_name, card_price_label, categories, popularity_rank, is_coming_soon, qa_config, service_variants(variant_key, variant_label, standard_cents, premium_cents, rank)",
     )
     .eq("is_active", true);
   if (error) throw error;

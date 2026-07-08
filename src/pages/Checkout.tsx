@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { Check, ChevronDown, Pencil, Lock, MessageSquare } from "lucide-react";
+import { Check, ChevronDown, Pencil, Lock, Truck } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { Button } from "@/components/ui/button";
@@ -30,8 +30,12 @@ import { usePricingConfig } from "@/hooks/usePricingConfig";
 import { cn } from "@/lib/utils";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { StripeEmbeddedCheckoutPanel } from "@/components/StripeEmbeddedCheckout";
+import {
+  PickupScheduler,
+  type PickupWindow,
+} from "@/components/cobbli/PickupScheduler";
 
-type Step = "contact" | "address" | "payment";
+type Step = "contact" | "address" | "pickup" | "payment";
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -102,6 +106,13 @@ const Checkout = () => {
   const showAddrForm = addingAddr || editingAddrId !== null;
   const addressDone = !showAddrForm && !!selectedAddrId;
   const selectedAddress = addresses.find((a) => a.id === selectedAddrId);
+
+  // ---------- Pickup ----------
+  const [selectedWindow, setSelectedWindow] = useState<PickupWindow | null>(null);
+  const [pickupConflict, setPickupConflict] = useState(false);
+  // Incrementing this key forces PickupScheduler to remount and re-fetch.
+  const [pickupKey, setPickupKey] = useState(0);
+  const pickupDone = !!selectedWindow;
 
   // ---------- Payment ----------
   // If the user has a saved payment method, let them either keep it or
@@ -252,24 +263,105 @@ const Checkout = () => {
       setSelectedAddrId(addr.id);
       setAddingAddr(false);
     }
-    setOpenStep("payment");
+    setOpenStep("pickup");
   };
 
 
   const continueAddress = () => {
     if (!selectedAddrId) return;
+    setOpenStep("pickup");
+  };
+
+  const continuePickup = () => {
+    if (!selectedWindow) return;
+    setPickupConflict(false);
     setOpenStep("payment");
   };
 
-  const allDone = contactDone && addressDone && paymentDone;
+  const allDone = contactDone && addressDone && pickupDone && paymentDone;
 
   const placeOrder = async () => {
     if (!allDone || !selectedAddress || !authUser || placing) return;
     setPlacing(true);
     try {
-      // Build the payload that the webhook will use to create the orders row
-      // and order_items rows once Stripe confirms payment. No DB writes happen
-      // here — abandoned checkouts leave nothing behind.
+      // --- Re-validate the pickup window against live Calendly availability ---
+      // This guards against the race condition where two customers select the
+      // same window simultaneously. We re-fetch and confirm the slot is still
+      // listed before proceeding to payment.
+      if (selectedWindow) {
+        const now = new Date();
+        const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const { data: availData, error: availErr } =
+          await supabase.functions.invoke("calendly-availability", {
+            body: {
+              start_time: now.toISOString(),
+              end_time: endDate.toISOString(),
+            },
+          });
+
+        if (availErr || availData?.error) {
+          // Non-fatal: surface a warning but don't block checkout if the
+          // availability check itself fails (e.g. Calendly is temporarily down).
+          console.warn("Pickup re-validation failed:", availErr ?? availData?.error);
+        } else {
+          const stillAvailable = (availData?.windows ?? []).some(
+            (w: { start_time: string }) =>
+              w.start_time === selectedWindow.start_time,
+          );
+          if (!stillAvailable) {
+            // The window was taken — reset selection and ask the customer to
+            // pick another time before continuing.
+            setPickupConflict(true);
+            setSelectedWindow(null);
+            setPickupKey((k) => k + 1); // force PickupScheduler to re-fetch
+            setOpenStep("pickup");
+            setPlacing(false);
+            return;
+          }
+        }
+      }
+
+      // --- Create the Calendly booking with pre-populated customer data ---
+      // We pass name/phone/email/address so the customer never has to fill in
+      // a separate Calendly form.
+      let pickupEventUri: string | undefined;
+      if (selectedWindow) {
+        const pickupAddress = [
+          selectedAddress.street,
+          selectedAddress.street2,
+          selectedAddress.city,
+          selectedAddress.state,
+          selectedAddress.zip,
+        ]
+          .filter(Boolean)
+          .join(", ");
+
+        const { data: bookData, error: bookErr } =
+          await supabase.functions.invoke("calendly-book", {
+            body: {
+              start_time: selectedWindow.start_time,
+              name: user.name || authUser.email?.split("@")[0] || "Customer",
+              email,
+              phone,
+              address: pickupAddress,
+            },
+          });
+
+        if (bookErr || bookData?.error) {
+          console.error("Calendly booking error:", bookErr ?? bookData?.error);
+          toast({
+            title: "Pickup scheduling issue",
+            description:
+              "We couldn't confirm your pickup window with our scheduling system. " +
+              "Your order will still be placed and we'll contact you to arrange pickup.",
+          });
+        } else {
+          pickupEventUri = bookData?.event_uri as string | undefined;
+        }
+      }
+
+      // --- Build the cart payload (no DB write here — order row is created by
+      //     the Stripe webhook after payment is confirmed) ---
       const payload = {
         contact_email: email,
         contact_phone: phone,
@@ -277,6 +369,13 @@ const Checkout = () => {
         repairs_subtotal_cents: subtotal,
         courier_fee_cents: courierFee,
         total_cents: orderSubtotal,
+        ...(selectedWindow && {
+          pickup_window: {
+            start: selectedWindow.start_time,
+            end: selectedWindow.end_time,
+            ...(pickupEventUri && { calendly_event_uri: pickupEventUri }),
+          },
+        }),
         items: pairs.flatMap((p) =>
           p.services.map((s) => ({
             pair_snapshot: p,
@@ -291,11 +390,12 @@ const Checkout = () => {
       };
       setCartPayload(payload);
       setShowStripe(true);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Please try again.";
       console.error("place order failed", e);
       toast({
         title: "Could not start checkout",
-        description: e?.message || "Please try again.",
+        description: message,
         variant: "destructive",
       });
       setPlacing(false);
@@ -354,17 +454,6 @@ const Checkout = () => {
       <main className="flex-1">
         <div className="container py-10">
           <h1 className="text-3xl md:text-4xl font-semibold mb-6">Checkout</h1>
-
-          <div
-            className="rounded-lg p-4 mb-8 flex items-start gap-3"
-            style={{ backgroundColor: "#fff8e7", border: "1px solid #f0d870" }}
-          >
-            <MessageSquare size={18} className="mt-0.5 shrink-0" style={{ color: "#3d1700" }} />
-            <p className="text-sm" style={{ color: "#3d1700" }}>
-              <span className="font-bold" style={{ color: "#3d1700" }}>We'll text you</span>{" "}
-              to schedule your pickup and return windows once your order is placed.
-            </p>
-          </div>
 
           <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
             <div className="space-y-4">
@@ -568,13 +657,76 @@ const Checkout = () => {
                 )}
               </StepCard>
 
-              {/* Step 3: Payment — handled by Stripe */}
+              {/* Step 3: Schedule pickup */}
               <StepCard
                 index={3}
+                title="Schedule pickup"
+                open={openStep === "pickup"}
+                done={pickupDone && openStep !== "pickup"}
+                onOpen={() => addressDone && setOpenStep("pickup")}
+                summary={
+                  pickupDone && selectedWindow && openStep !== "pickup" ? (
+                    <span className="text-sm text-foreground/80 inline-flex items-center gap-1.5">
+                      <Truck size={13} />
+                      {new Intl.DateTimeFormat("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                        timeZone: "America/New_York",
+                      }).format(new Date(selectedWindow.start_time))}
+                      {" – "}
+                      {new Intl.DateTimeFormat("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                        timeZone: "America/New_York",
+                      }).format(new Date(selectedWindow.end_time))}
+                    </span>
+                  ) : null
+                }
+              >
+                <div className="space-y-4">
+                  {pickupConflict && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                      That pickup window was just taken by another customer.
+                      Please choose a different time below.
+                    </div>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    Choose a 90-minute window for us to pick up your shoes.
+                    All times are Eastern.
+                  </p>
+                  <PickupScheduler
+                    key={pickupKey}
+                    selected={selectedWindow}
+                    onSelect={(w) => {
+                      setSelectedWindow(w);
+                      setPickupConflict(false);
+                    }}
+                    disabled={!addressDone}
+                  />
+                  <div>
+                    <Button
+                      variant="hero"
+                      disabled={!pickupDone}
+                      onClick={continuePickup}
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                </div>
+              </StepCard>
+
+              {/* Step 4: Payment — handled by Stripe */}
+              <StepCard
+                index={4}
                 title="Payment"
                 open={openStep === "payment"}
                 done={paymentDone && openStep !== "payment"}
-                onOpen={() => addressDone && setOpenStep("payment")}
+                onOpen={() => pickupDone && setOpenStep("payment")}
                 summary={
                   paymentDone && openStep !== "payment" ? (
                     <span className="text-sm text-foreground/80 inline-flex items-center gap-1.5">
