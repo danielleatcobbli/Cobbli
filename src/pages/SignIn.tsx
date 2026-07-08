@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
+import { useRole } from "@/hooks/useRole";
 import { consumeReturnTo, peekReturnTo, saveReturnTo } from "@/lib/authRedirect";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -18,12 +19,12 @@ const SignIn = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { role, loading: roleLoading } = useRole();
   const navState = location.state as { from?: string; resetSuccess?: string } | null;
   const fromState = navState?.from;
   const resetSuccess = navState?.resetSuccess;
   // Persist any router-provided "from" so it survives full-page OAuth redirects.
   if (fromState) saveReturnTo(fromState);
-  const successRedirect = peekReturnTo() ?? "/account";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,12 +41,20 @@ const SignIn = () => {
   });
 
   // Redirect already-signed-in users
+  // Role-based post-login routing. A pending deep-link (returnTo) always wins;
+  // otherwise admin/staff land on the ops dashboard and customers on their
+  // account. Wait for the role to resolve so we don't misroute on first paint.
   useEffect(() => {
-    if (user) {
-      const target = consumeReturnTo() ?? successRedirect;
-      navigate(target, { replace: true });
+    if (!user || roleLoading) return;
+    const pending = peekReturnTo();
+    if (pending) {
+      consumeReturnTo();
+      navigate(pending, { replace: true });
+      return;
     }
-  }, [user, navigate, successRedirect]);
+    const target = role === "admin" || role === "staff" ? "/admin/orders" : "/account";
+    navigate(target, { replace: true });
+  }, [user, role, roleLoading, navigate]);
 
   // Reset the locked-screen state whenever the user re-navigates to /signin
   // (e.g. clicking the header account icon from the locked screen).
@@ -71,6 +80,7 @@ const SignIn = () => {
     if (error) {
       setPasswordError("Google sign-in failed. Please try again.");
     }
+    // Redirect is handled by the role-aware effect once `user` is set.
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -114,7 +124,7 @@ const SignIn = () => {
         }
         return;
       }
-      navigate(successRedirect, { replace: true });
+      // Redirect is handled by the role-aware effect once `user` is set.
     } finally {
       setSubmitting(false);
     }

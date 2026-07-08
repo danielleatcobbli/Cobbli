@@ -1,0 +1,37 @@
+# AWS Amplify Hosting build spec for the Cobbli frontend.
+#
+# IMPORTANT: this is a Vite/React single-page app, NOT a Next.js app. It builds
+# to static assets in dist/ — there is no server runtime. Consequences:
+#   - Host as a static SPA (Amplify: "Deploy without Git provider" or a static
+#     build). Add a catch-all rewrite  /<*>  ->  /index.html  (200) in the
+#     Amplify console so client-side routes (e.g. /admin/orders) resolve.
+#   - ONLY VITE_* public vars belong here. They are baked into the client
+#     bundle at build time and are public by design. NEVER put
+#     SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, or any secret here — there
+#     is no server to keep them private. Those live in the FastAPI backend.
+#
+# Required Amplify environment variables (set per-branch in the console):
+#   VITE_SUPABASE_URL             https://vzyrzhfxdrtgyhpddvlj.supabase.co
+#   VITE_SUPABASE_PUBLISHABLE_KEY <anon/publishable key — public>
+#   VITE_API_URL                  <deployed FastAPI base URL, or "" if unset>
+#   VITE_GA_MEASUREMENT_ID        <GA4 id, optional>
+#
+# After first deploy, add the Amplify domain(s) to Supabase Auth redirect URLs
+# (Auth > URL Configuration): https://cobbli.com and any staging domain.
+
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
