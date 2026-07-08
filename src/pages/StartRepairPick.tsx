@@ -39,13 +39,15 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { apiFetchJson } from "@/integrations/api/client";
 import { toast } from "@/hooks/use-toast";
-import { SHOE_TYPES, type ShoeType } from "@/types/service";
+import { SHOE_TYPES, type ShoeType, priceForShoeType, PREMIUM_BRANDS } from "@/types/service";
 import { formatPairLabel, usePairs, type SavedPair } from "@/context/PairsContext";
 import { createPreviewUrl } from "@/lib/heicPreview";
 import { useRepairFlow } from "@/context/RepairFlowContext";
-import { useBag } from "@/context/BagContext";
+import { useBag, type BagService } from "@/context/BagContext";
 import { useAuth } from "@/context/AuthContext";
 import SignInCallout from "@/components/cobbli/SignInCallout";
+import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
+import { useServices } from "@/hooks/useServices";
 
 const COLORS = [
 "Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
@@ -459,16 +461,24 @@ const AddPairModal = ({
   );
 };
 
+const isPremiumBrand = (brand?: string | null) =>
+  !!brand && (PREMIUM_BRANDS as readonly string[]).some((b) => b.toLowerCase() === brand.toLowerCase());
+
 const StartRepair = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedService = searchParams.get("service");
-  const { pairs, deletePair } = usePairs();
-  const { selectedPairId, setSelectedPairId, setSelectedServiceSlugs } = useRepairFlow();
-  const { findByPairId } = useBag();
+  const preselectedBundle = searchParams.get("bundle");
+  const preselectedBundlePrice = searchParams.get("bundlePrice");
+  const { pairs, deletePair, getPair } = usePairs();
+  const { selectedPairId, setSelectedPairId, setSelectedServiceSlugs, paintConsents } = useRepairFlow();
+  const { findByPairId, addPair: addPairToBag } = useBag();
+  const { data: services } = useServices();
   const { user } = useAuth();
   const isGuest = !user;
   const [modalOpen, setModalOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [addedServiceName, setAddedServiceName] = useState("");
   const [editingPair, setEditingPair] = useState<SavedPair | null>(null);
   const [pairToDelete, setPairToDelete] = useState<SavedPair | null>(null);
   const [query, setQuery] = useState("");
@@ -556,6 +566,54 @@ const StartRepair = () => {
 
   const onConfirm = () => {
     if (!selectedPairId) return;
+    const pair = getPair(selectedPairId);
+    if (!pair) return;
+
+    // If a specific service was pre-selected (from "Add to repair" on a card),
+    // add it to the bag directly and show the upsell modal.
+    if (preselectedService && services) {
+      const service = services.find((s) => s.slug === preselectedService);
+      if (service) {
+        const premium = isPremiumBrand(pair.brand);
+        const dollars = priceForShoeType(service, pair.shoeType);
+        const bagSvc: BagService = {
+          id: service.slug,
+          name: service.name,
+          price: dollars * 100,
+          premium,
+          ...(PAINT_CONSENT_SLUGS.has(service.slug) && paintConsents[service.slug]
+            ? { paintConsent: paintConsents[service.slug] }
+            : {}),
+        };
+        addPairToBag([bagSvc], pair.id, formatPairLabel(pair), pair.shoeType);
+        setSelectedServiceSlugs([preselectedService]);
+        setAddedServiceName(service.name);
+        setConfirmOpen(true);
+        return;
+      }
+    }
+
+    // Bundle path — add the bundle itself to the bag as a single flat-priced
+    // line item and show the same upsell modal as a single service, instead
+    // of skipping straight to service selection. Bundles aren't backed by
+    // real catalog services yet, so this uses the price shown on the bundle
+    // card directly (no live-price re-derivation — see BagContext/useLivePricedBag,
+    // which safely falls back to the stored snapshot for an unrecognized id).
+    if (preselectedBundle && preselectedBundlePrice) {
+      const bundleSlug = `bundle-${preselectedBundle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+      const bagSvc: BagService = {
+        id: bundleSlug,
+        name: preselectedBundle,
+        price: parseInt(preselectedBundlePrice, 10),
+      };
+      addPairToBag([bagSvc], pair.id, formatPairLabel(pair), pair.shoeType);
+      setSelectedServiceSlugs([]);
+      setAddedServiceName(preselectedBundle);
+      setConfirmOpen(true);
+      return;
+    }
+
+    // No preselected service or bundle — navigate to service selection.
     const existing = findByPairId(selectedPairId);
     const existingSlugs = existing ? existing.services.map((s) => s.id) : [];
     const merged = preselectedService && !existingSlugs.includes(preselectedService)
@@ -839,6 +897,28 @@ const StartRepair = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Added to your bag</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {addedServiceName} added to your bag for this pair.
+          </p>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setConfirmOpen(false); navigate("/start-repair/services"); }}
+            >
+              Add more services to this pair
+            </Button>
+            <Button onClick={() => { setConfirmOpen(false); navigate("/bag"); }}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
 
   );

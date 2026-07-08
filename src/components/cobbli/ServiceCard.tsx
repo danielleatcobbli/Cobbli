@@ -1,35 +1,72 @@
 import { Link } from "react-router-dom";
 import type { Service } from "@/types/service";
 
-/**
- * Shared service card. Renders the customer-facing "card name" (the
- * what's-wrong phrasing) and the consolidated `cardPriceLabel` verbatim —
- * no "From $X" prefix.
- */
-const ServiceCard = ({ s, fromCategory }: { s: Service; fromCategory?: string }) => {
-  const title = s.cardName || s.name;
-  const to = fromCategory && fromCategory !== "All services"
-    ? `/services/${s.slug}?from=${encodeURIComponent(fromCategory)}`
-    : `/services/${s.slug}`;
+type Props = {
+  s: Service;
+  fromCategory?: string;
+  isPopular?: boolean;
+  /** When provided, an "Add to repair" button is rendered at the bottom of the
+   *  card. The callback receives the service slug; the caller is responsible for
+   *  handling any required modal gates before navigating. */
+  onAddToRepair?: (slug: string) => void;
+};
+
+const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair }: Props) => {
+  const to =
+    fromCategory && fromCategory !== "All services"
+      ? `/services/${s.slug}?from=${encodeURIComponent(fromCategory)}`
+      : `/services/${s.slug}`;
 
   return (
-    <Link
-      to={to}
-      className="group w-full rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col h-full"
-    >
-      <div
-        className="aspect-[4/3] flex items-center justify-center text-center px-4"
-        style={{ backgroundColor: "#3d1700", color: "#fdb600" }}
-      >
-        <span className="text-xl">{title}</span>
-      </div>
-      <div className="p-5 flex flex-col gap-1">
-        <h3 className="text-[15px] leading-snug text-primary">{title}</h3>
-        {s.cardPriceLabel && (
-          <p className="mt-1 font-sans font-medium text-[13px] text-primary">{s.cardPriceLabel}</p>
-        )}
-      </div>
-    </Link>
+    <div className="group w-full rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col h-full">
+      <Link to={to} className="flex flex-col flex-1">
+        <div className="aspect-[4/5] relative overflow-hidden" style={{ backgroundColor: "#3d1700" }}>
+          {s.imageUrl && (
+            <img
+              src={s.imageUrl}
+              alt={s.name}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
+          {isPopular && (
+            <span
+              className="absolute top-2 left-2 text-[10px] font-medium px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
+            >
+              Popular
+            </span>
+          )}
+        </div>
+        <div className="p-4 flex flex-col gap-1 flex-1">
+          <h3 className="text-[14px] font-bold leading-snug" style={{ color: "#3d1700" }}>
+            {s.name}
+          </h3>
+          {s.description && (
+            <p className="text-[12px] leading-snug mt-0.5" style={{ color: "#7a5c40" }}>
+              {s.description}
+            </p>
+          )}
+          {s.cardPriceLabel && (
+            <p className="text-[13px] font-bold mt-auto pt-2" style={{ color: "#3d1700" }}>
+              {s.cardPriceLabel.replace(/\s+per\s+\S.*/i, "").trim()}
+            </p>
+          )}
+        </div>
+      </Link>
+
+      {onAddToRepair && (
+        <div className="px-4 pb-4">
+          <button
+            type="button"
+            onClick={() => onAddToRepair(s.slug)}
+            className="w-full rounded-md py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "#3d1700" }}
+          >
+            Add to repair
+          </button>
+        </div>
+      )}
+    </div>
   );
 };
 

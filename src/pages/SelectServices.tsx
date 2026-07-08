@@ -14,10 +14,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
-import SoleMaterialDialog, { SOLE_MATERIAL_SLUGS } from "@/components/cobbli/SoleMaterialDialog";
 import {
   CATEGORIES_ORDERED,
-  fullResolePrice,
   isEligibleForShoeType,
   PREMIUM_BRANDS,
   priceForShoeType,
@@ -28,30 +26,14 @@ import {
 const isPremiumBrand = (brand?: string | null) =>
   !!brand && (PREMIUM_BRANDS as readonly string[]).some((b) => b.toLowerCase() === brand.toLowerCase());
 
-/** Card price label. Dynamically narrows based on what's known about the pair:
- *  - sole material known → exact price
- *  - care tier known, material unknown → tier range
- *  - neither → full range (handled upstream by the DB cardPriceLabel) */
+/** Card price label — uses the flat DB-sourced label when available, otherwise
+ *  falls back to the shoe-type variant price. */
 const cardPriceLabel = (
   s: Service,
   shoeType: ShoeType,
   premium: boolean,
-  material?: "Leather" | "Rubber",
 ): string => {
-  if (s.slug === "full-resole" && s.variants.length > 0) {
-    if (material) {
-      const exact = fullResolePrice(s, premium, material);
-      if (exact !== null) return `$${exact}`;
-    }
-    const prices = s.variants
-      .map((v) => (premium && v.premium !== undefined ? v.premium : v.standard))
-      .filter((n) => typeof n === "number");
-    if (prices.length > 0) {
-      const lo = Math.min(...prices);
-      const hi = Math.max(...prices);
-      return lo === hi ? `$${lo}` : `$${lo}–$${hi}`;
-    }
-  }
+  if (s.cardPriceLabel) return s.cardPriceLabel;
   const price = priceForShoeType(s, shoeType) ?? 0;
   return `$${price === 0 ? "XX" : price}`;
 };
@@ -69,18 +51,16 @@ const ServiceCard = ({
   s,
   shoeType,
   premium,
-  material,
   selected,
   onAdd,
 }: {
   s: Service;
   shoeType: ShoeType;
   premium: boolean;
-  material?: "Leather" | "Rubber";
   selected: boolean;
   onAdd: () => void;
 }) => {
-  const priceLabel = cardPriceLabel(s, shoeType, premium, material);
+  const priceLabel = cardPriceLabel(s, shoeType, premium);
   const title = s.cardName || s.name;
 
   return (
@@ -128,18 +108,15 @@ const SelectServices = () => {
     selectedServiceSlugs,
     activeCategory,
     paintConsents,
-    soleMaterials,
     setActiveCategory,
     addService,
     removeService,
     setPaintConsent,
-    setSoleMaterial,
     reset,
   } = useRepairFlow();
   const { addPair: addPairToBag } = useBag();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [consentSlug, setConsentSlug] = useState<string | null>(null);
-  const [soleSlug, setSoleSlug] = useState<string | null>(null);
 
   usePageMeta({
     title: "Select services — Cobbli",
@@ -189,10 +166,6 @@ const SelectServices = () => {
       setConsentSlug(slug);
       return;
     }
-    if (SOLE_MATERIAL_SLUGS.has(slug) && !soleMaterials[slug]) {
-      setSoleSlug(slug);
-      return;
-    }
     addService(slug);
   };
 
@@ -200,10 +173,7 @@ const SelectServices = () => {
     if (!canCheckout) return;
     const premium = isPremiumBrand(pair.brand);
     const bagServices: BagService[] = selectedServices.map((s) => {
-      const material = soleMaterials[s.slug];
-      const exactResole =
-        s.slug === "full-resole" && material ? fullResolePrice(s, premium, material) : null;
-      const dollars = exactResole ?? priceForShoeType(s, pair.shoeType) ?? 0;
+      const dollars = priceForShoeType(s, pair.shoeType) ?? 0;
       return {
         id: s.slug,
         name: s.name,
@@ -212,14 +182,13 @@ const SelectServices = () => {
         ...(PAINT_CONSENT_SLUGS.has(s.slug) && paintConsents[s.slug]
           ? { paintConsent: paintConsents[s.slug] }
           : {}),
-        ...(SOLE_MATERIAL_SLUGS.has(s.slug) && material ? { soleMaterial: material } : {}),
       };
     });
     addPairToBag(bagServices, pair.id, formatPairLabel(pair), pair.shoeType);
     setConfirmOpen(true);
   };
 
-  const handleCheckout = () => {
+  const handleDone = () => {
     setConfirmOpen(false);
     reset();
     navigate("/bag");
@@ -227,8 +196,7 @@ const SelectServices = () => {
 
   const handleAddAnother = () => {
     setConfirmOpen(false);
-    reset();
-    navigate("/start-repair");
+    // Pair and flow context preserved — user stays on this page to add more services.
   };
 
   return (
@@ -315,7 +283,6 @@ const SelectServices = () => {
                           s={s}
                           shoeType={pair.shoeType}
                           premium={isPremiumBrand(pair.brand)}
-                          material={soleMaterials[s.slug]}
                           selected={selectedServiceSlugs.includes(s.slug)}
                           onAdd={() => handleCardAdd(s.slug)}
                         />
@@ -347,7 +314,7 @@ const SelectServices = () => {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-2xl">Repair added to bag</DialogTitle>
+            <DialogTitle className="text-2xl">Added to your bag</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             {selectedServices.length} service{selectedServices.length === 1 ? "" : "s"} added for your{" "}
@@ -355,9 +322,9 @@ const SelectServices = () => {
           </p>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={handleAddAnother}>
-              Add another repair
+              Add more services to this pair
             </Button>
-            <Button onClick={handleCheckout}>Checkout</Button>
+            <Button onClick={handleDone}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -375,18 +342,6 @@ const SelectServices = () => {
         }}
       />
 
-      <SoleMaterialDialog
-        open={soleSlug !== null}
-        onOpenChange={(o) => {
-          if (!o) setSoleSlug(null);
-        }}
-        onConfirm={(material) => {
-          if (!soleSlug) return;
-          setSoleMaterial(soleSlug, material);
-          addService(soleSlug);
-          setSoleSlug(null);
-        }}
-      />
     </main>
   );
 };

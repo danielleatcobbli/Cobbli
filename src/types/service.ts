@@ -88,7 +88,11 @@ export type Service = {
   id: string;
   slug: string;
   name: string;
+  /** Short text shown on service cards. */
   description: string;
+  /** Longer richly-worded description shown on the service detail page.
+   *  Falls back to `description` when not set. */
+  fullDescription?: string;
   cardName: string;
   cardPriceLabel: string;
   categories: ServiceCategory[];
@@ -96,6 +100,9 @@ export type Service = {
   isComingSoon: boolean;
   variants: ServiceVariant[];
   qa?: QAConfig;
+  /** Representative "before" photo for this service's card/detail page.
+   *  Falls back to the solid brand-color placeholder when not set. */
+  imageUrl?: string;
 };
 
 /** Lowest standard variant price (dollars), used by the repair flow back-compat. */

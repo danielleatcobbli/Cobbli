@@ -76,7 +76,7 @@ const CoverageRequestForm = () => {
         {zipAlreadyServiced && (
           <p className="text-sm font-medium text-green-700">
             Great news — we already service your area!{" "}
-            <Link to="/start-repair" className="underline underline-offset-4">
+            <Link to="/services" className="underline underline-offset-4">
               Start a repair
             </Link>
             .

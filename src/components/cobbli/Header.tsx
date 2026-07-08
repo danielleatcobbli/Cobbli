@@ -8,7 +8,7 @@ import { useBag } from "@/context/BagContext";
 import { useAuth } from "@/context/AuthContext";
 
 const navLinks = [
-  { label: "Start a Repair", to: "/start-repair" },
+  { label: "Start a Repair", to: "/services" },
   { label: "Services", to: "/services" },
   { label: "How It Works", to: "/#how-it-works" },
   { label: "FAQs", to: "/faqs" },

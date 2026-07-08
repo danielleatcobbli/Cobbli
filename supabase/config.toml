@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.calendly-availability]
+verify_jwt = false
+
+[functions.calendly-book]
+verify_jwt = false

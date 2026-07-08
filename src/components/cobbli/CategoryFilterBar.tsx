@@ -29,16 +29,24 @@ type Props = {
   active: CategoryFilter;
   onChange: (c: CategoryFilter) => void;
   className?: string;
+  /** When true the bar is a single non-wrapping row that scrolls horizontally. */
+  scrollable?: boolean;
+  /** Icon display size in px. Defaults to 24. */
+  iconSize?: number;
 };
 
 /** Shared category filter bar used on the homepage Services preview and the
  *  /services page so icon assets and styling stay in lockstep. */
-const CategoryFilterBar = ({ active, onChange, className }: Props) => {
+const CategoryFilterBar = ({ active, onChange, className, scrollable, iconSize = 24 }: Props) => {
+  const containerClass = scrollable
+    ? `flex flex-nowrap gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1 ${className ?? ""}`
+    : `flex flex-wrap gap-3 md:gap-4 ${className ?? ""}`;
+
   return (
     <div
       role="tablist"
       aria-label="Service categories"
-      className={`flex flex-wrap gap-3 md:gap-4 ${className ?? ""}`}
+      className={containerClass}
     >
       {FILTER_BAR_CATEGORIES.map((c) => {
         const isActive = c === active;
@@ -49,7 +57,7 @@ const CategoryFilterBar = ({ active, onChange, className }: Props) => {
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(c)}
-            className={`flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl text-xs md:text-sm font-medium transition-colors ${
+            className={`shrink-0 flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl text-xs font-medium transition-colors ${
               isActive ? "text-primary border-[1.5px]" : "text-[#7a5c40] hover:text-primary"
             }`}
             style={
@@ -62,9 +70,17 @@ const CategoryFilterBar = ({ active, onChange, className }: Props) => {
               src={ICONS[c]}
               alt=""
               aria-hidden="true"
-              style={{ width: 24, height: 24, opacity: 1 }}
+              style={{ width: iconSize, height: iconSize, opacity: 1 }}
             />
-            <span>{c}</span>
+            <span
+              style={
+                isActive
+                  ? { borderBottom: "2px solid #fdb600", paddingBottom: 1 }
+                  : undefined
+              }
+            >
+              {c}
+            </span>
           </button>
         );
       })}

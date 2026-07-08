@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/context/AuthContext";
+import { useRole } from "@/hooks/useRole";
 import { consumeReturnTo, peekReturnTo, saveReturnTo } from "@/lib/authRedirect";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -19,12 +19,12 @@ const SignIn = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { role, loading: roleLoading } = useRole();
   const navState = location.state as { from?: string; resetSuccess?: string } | null;
   const fromState = navState?.from;
   const resetSuccess = navState?.resetSuccess;
   // Persist any router-provided "from" so it survives full-page OAuth redirects.
   if (fromState) saveReturnTo(fromState);
-  const successRedirect = peekReturnTo() ?? "/account";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,12 +41,20 @@ const SignIn = () => {
   });
 
   // Redirect already-signed-in users
+  // Role-based post-login routing. A pending deep-link (returnTo) always wins;
+  // otherwise admin/staff land on the ops dashboard and customers on their
+  // account. Wait for the role to resolve so we don't misroute on first paint.
   useEffect(() => {
-    if (user) {
-      const target = consumeReturnTo() ?? successRedirect;
-      navigate(target, { replace: true });
+    if (!user || roleLoading) return;
+    const pending = peekReturnTo();
+    if (pending) {
+      consumeReturnTo();
+      navigate(pending, { replace: true });
+      return;
     }
-  }, [user, navigate, successRedirect]);
+    const target = role === "admin" || role === "staff" ? "/admin/orders" : "/account";
+    navigate(target, { replace: true });
+  }, [user, role, roleLoading, navigate]);
 
   // Reset the locked-screen state whenever the user re-navigates to /signin
   // (e.g. clicking the header account icon from the locked screen).
@@ -61,13 +69,18 @@ const SignIn = () => {
   const handleGoogle = async () => {
     setEmailError(null);
     setPasswordError(null);
-    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
-    if (result.error) {
+    // Native Supabase OAuth (replaces the removed Lovable wrapper). Redirect
+    // back to /signin — a non-protected route — so the PKCE code exchange
+    // completes before any auth-gated redirect runs. The saved returnTo (from
+    // checkout/start-repair) is consumed after the session is established.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/signin` },
+    });
+    if (error) {
       setPasswordError("Google sign-in failed. Please try again.");
-      return;
     }
-    if (result.redirected) return;
-    navigate(successRedirect, { replace: true });
+    // Redirect is handled by the role-aware effect once `user` is set.
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -111,7 +124,7 @@ const SignIn = () => {
         }
         return;
       }
-      navigate(successRedirect, { replace: true });
+      // Redirect is handled by the role-aware effect once `user` is set.
     } finally {
       setSubmitting(false);
     }
