@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, ChevronDown, Pencil, Lock, Truck } from "lucide-react";
@@ -128,6 +128,7 @@ const Checkout = () => {
     if (paymentMethods.length === 0) setUseNewCard(true);
   }, [defaultPmId, selectedPmId, paymentMethods.length]);
   const paymentDone = addressDone && (useNewCard || !!selectedPmId);
+  const allDone = contactDone && addressDone && pickupDone && paymentDone;
 
 
   // ---------- Step orchestration ----------
@@ -136,6 +137,11 @@ const Checkout = () => {
   const [cartPayload, setCartPayload] = useState<unknown | null>(null);
   const [showStripe, setShowStripe] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  // Guards the auto-prepare effect below so it only fires once per visit to
+  // the Payment step, rather than re-firing on every render while its
+  // dependencies happen to still be satisfied.
+  const attemptedPaymentPrepRef = useRef(false);
 
   useEffect(() => {
     if (!selectedAddrId && defaultAddrId) setSelectedAddrId(defaultAddrId);
@@ -278,11 +284,10 @@ const Checkout = () => {
     setOpenStep("payment");
   };
 
-  const allDone = contactDone && addressDone && pickupDone && paymentDone;
-
   const placeOrder = async () => {
-    if (!allDone || !selectedAddress || !authUser || placing) return;
+    if (!paymentDone || !selectedAddress || !authUser || placing) return;
     setPlacing(true);
+    setPaymentError(null);
     try {
       // --- Re-validate the pickup window against live Calendly availability ---
       // This guards against the race condition where two customers select the
@@ -393,6 +398,9 @@ const Checkout = () => {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Please try again.";
       console.error("place order failed", e);
+      setPaymentError(message);
+      // Allow the auto-prepare effect to try again once the user hits "Try again".
+      attemptedPaymentPrepRef.current = false;
       toast({
         title: "Could not start checkout",
         description: message,
@@ -401,6 +409,22 @@ const Checkout = () => {
       setPlacing(false);
     }
   };
+
+  // Auto-prepare payment as soon as the Payment step is opened and every
+  // earlier field it depends on (address, chosen card option) is filled in —
+  // no separate "Continue to payment" click required. Resets whenever the
+  // user navigates away from the step so re-opening it tries again fresh.
+  useEffect(() => {
+    if (openStep !== "payment") {
+      attemptedPaymentPrepRef.current = false;
+      return;
+    }
+    if (showStripe || placing || attemptedPaymentPrepRef.current) return;
+    if (!paymentDone || !selectedAddress || !authUser) return;
+    attemptedPaymentPrepRef.current = true;
+    placeOrder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openStep, paymentDone, selectedAddress, authUser, showStripe, placing]);
 
   const returnUrl = `${window.location.origin}/checkout?session_id={CHECKOUT_SESSION_ID}`;
 
@@ -421,30 +445,9 @@ const Checkout = () => {
     );
   }
 
-  if (showStripe && cartPayload) {
-    return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <Header />
-        <PaymentTestModeBanner />
-        <main className="flex-1">
-          <div className="container py-10 max-w-2xl">
-            <h1 className="text-2xl md:text-3xl font-semibold mb-2">Payment</h1>
-            <p className="text-sm text-muted-foreground mb-6">
-              Total <span className="font-medium text-foreground">{formatPrice(orderSubtotal)}</span> — payment is processed securely by Stripe.
-            </p>
-            <div className="rounded-lg border border-border overflow-hidden bg-card">
-              <StripeEmbeddedCheckoutPanel
-                kind="cart"
-                cartPayload={cartPayload}
-                returnUrl={returnUrl}
-              />
-            </div>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
+  // Stripe now renders inline inside the Payment accordion step (see
+  // Step 4 below) instead of swapping to a separate full-page view — the
+  // whole checkout, including payment, stays on this one page.
 
 
   return (
@@ -477,7 +480,7 @@ const Checkout = () => {
                     <Row label="Email" value={email} />
                     <Row label="Phone" value={phone} />
                     <p className="text-xs -mt-1.5" style={{ color: "#7a5c40" }}>
-                      We'll text this number to coordinate your pickup and return
+                      We'll text this number with pickup and return updates
                     </p>
                     <button
                       type="button"
@@ -500,7 +503,7 @@ const Checkout = () => {
                     <Field id="phone" label="Phone">
                       <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
                       <p className="text-xs mt-1.5" style={{ color: "#7a5c40" }}>
-                        We'll text this number to coordinate your pickup and return
+                        We'll text this number with pickup and return updates
                       </p>
                     </Field>
                     <Button variant="hero" disabled={!contactValid} onClick={saveContact}>
@@ -663,7 +666,7 @@ const Checkout = () => {
                 title="Schedule pickup"
                 open={openStep === "pickup"}
                 done={pickupDone && openStep !== "pickup"}
-                onOpen={() => addressDone && setOpenStep("pickup")}
+                onOpen={() => setOpenStep("pickup")}
                 summary={
                   pickupDone && selectedWindow && openStep !== "pickup" ? (
                     <span className="text-sm text-foreground/80 inline-flex items-center gap-1.5">
@@ -675,14 +678,12 @@ const Checkout = () => {
                         hour: "numeric",
                         minute: "2-digit",
                         hour12: true,
-                        timeZone: "America/New_York",
                       }).format(new Date(selectedWindow.start_time))}
                       {" – "}
                       {new Intl.DateTimeFormat("en-US", {
                         hour: "numeric",
                         minute: "2-digit",
                         hour12: true,
-                        timeZone: "America/New_York",
                       }).format(new Date(selectedWindow.end_time))}
                     </span>
                   ) : null
@@ -696,8 +697,7 @@ const Checkout = () => {
                     </div>
                   )}
                   <p className="text-sm text-muted-foreground">
-                    Choose a 90-minute window for us to pick up your shoes.
-                    All times are Eastern.
+                    Choose a time frame when we can come pick up your shoes. We'll arrive sometime within this window.
                   </p>
                   <PickupScheduler
                     key={pickupKey}
@@ -706,7 +706,6 @@ const Checkout = () => {
                       setSelectedWindow(w);
                       setPickupConflict(false);
                     }}
-                    disabled={!addressDone}
                   />
                   <div>
                     <Button
@@ -726,7 +725,7 @@ const Checkout = () => {
                 title="Payment"
                 open={openStep === "payment"}
                 done={paymentDone && openStep !== "payment"}
-                onOpen={() => pickupDone && setOpenStep("payment")}
+                onOpen={() => setOpenStep("payment")}
                 summary={
                   paymentDone && openStep !== "payment" ? (
                     <span className="text-sm text-foreground/80 inline-flex items-center gap-1.5">
@@ -742,87 +741,134 @@ const Checkout = () => {
                 }
               >
                 <div className="space-y-4">
-                  {paymentMethods.length > 0 && (
-                    <div className="space-y-3">
-                      <ul className="space-y-2">
-                        {paymentMethods.map((pm) => (
-                          <li key={pm.id}>
-                            <label
-                              className={cn(
-                                "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
-                                !useNewCard && selectedPmId === pm.id
-                                  ? "border-primary bg-accent/30"
-                                  : "border-border hover:bg-accent/20",
-                              )}
-                            >
-                              <input
-                                type="radio"
-                                name="payment"
-                                checked={!useNewCard && selectedPmId === pm.id}
-                                onChange={() => {
-                                  setSelectedPmId(pm.id);
-                                  setUseNewCard(false);
-                                }}
-                                className="mt-1"
-                              />
-                              <div className="flex-1 text-sm">
-                                <div className="font-medium">
-                                  {pm.brand} ending in {pm.last4}
-                                  {pm.isDefault && (
-                                    <span className="ml-2 text-xs text-muted-foreground">(Default)</span>
+                  {!showStripe && (
+                    <>
+                      {paymentMethods.length > 0 && (
+                        <div className="space-y-3">
+                          <ul className="space-y-2">
+                            {paymentMethods.map((pm) => (
+                              <li key={pm.id}>
+                                <label
+                                  className={cn(
+                                    "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
+                                    !useNewCard && selectedPmId === pm.id
+                                      ? "border-primary bg-accent/30"
+                                      : "border-border hover:bg-accent/20",
                                   )}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  Expires {String(pm.expMonth).padStart(2, "0")}/{String(pm.expYear).slice(-2)}
-                                </div>
+                                >
+                                  <input
+                                    type="radio"
+                                    name="payment"
+                                    checked={!useNewCard && selectedPmId === pm.id}
+                                    onChange={() => {
+                                      setSelectedPmId(pm.id);
+                                      setUseNewCard(false);
+                                    }}
+                                    className="mt-1"
+                                  />
+                                  <div className="flex-1 text-sm">
+                                    <div className="font-medium">
+                                      {pm.brand} ending in {pm.last4}
+                                      {pm.isDefault && (
+                                        <span className="ml-2 text-xs text-muted-foreground">(Default)</span>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Expires {String(pm.expMonth).padStart(2, "0")}/{String(pm.expYear).slice(-2)}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setUseNewCard(true);
+                                    }}
+                                    className="text-sm text-primary underline underline-offset-4 shrink-0"
+                                  >
+                                    Change
+                                  </button>
+                                </label>
+                              </li>
+                            ))}
+                          </ul>
+                          <label
+                            className={cn(
+                              "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
+                              useNewCard ? "border-primary bg-accent/30" : "border-border hover:bg-accent/20",
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="payment"
+                              checked={useNewCard}
+                              onChange={() => setUseNewCard(true)}
+                              className="mt-1"
+                            />
+                            <div className="flex-1 text-sm">
+                              <div className="font-medium">Use a different card</div>
+                              <div className="text-xs text-muted-foreground">
+                                Enter new card details securely on the next step.
                               </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  setUseNewCard(true);
-                                }}
-                                className="text-sm text-primary underline underline-offset-4 shrink-0"
-                              >
-                                Change
-                              </button>
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                      <label
-                        className={cn(
-                          "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
-                          useNewCard ? "border-primary bg-accent/30" : "border-border hover:bg-accent/20",
-                        )}
-                      >
-                        <input
-                          type="radio"
-                          name="payment"
-                          checked={useNewCard}
-                          onChange={() => setUseNewCard(true)}
-                          className="mt-1"
-                        />
-                        <div className="flex-1 text-sm">
-                          <div className="font-medium">Use a different card</div>
-                          <div className="text-xs text-muted-foreground">
-                            Enter new card details securely on the next step.
-                          </div>
+                            </div>
+                          </label>
                         </div>
-                      </label>
-                    </div>
+                      )}
+
+                      {(paymentMethods.length === 0 || useNewCard) && (
+                        <>
+                          <p className="text-sm text-foreground/80 inline-flex items-center gap-2">
+                            <Lock size={14} className="text-primary" />
+                            Your card details are entered securely on the next step, powered by Stripe.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            We accept all major credit and debit cards. You'll review your total before confirming the payment.
+                          </p>
+                        </>
+                      )}
+
+                      {!pickupDone && (
+                        <p className="text-xs text-muted-foreground">
+                          Heads up — you haven't scheduled a pickup window yet. You can still continue to payment, but a pickup time will be needed to complete this order.
+                        </p>
+                      )}
+
+                      {placing && (
+                        <p className="text-sm text-muted-foreground">
+                          Preparing your payment…
+                        </p>
+                      )}
+
+                      {paymentError && (
+                        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+                          <p className="text-sm text-destructive">{paymentError}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              attemptedPaymentPrepRef.current = false;
+                              placeOrder();
+                            }}
+                            className="text-sm text-primary underline underline-offset-4"
+                          >
+                            Try again
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
 
-                  {(paymentMethods.length === 0 || useNewCard) && (
-                    <>
-                      <p className="text-sm text-foreground/80 inline-flex items-center gap-2">
-                        <Lock size={14} className="text-primary" />
-                        Your card details are entered securely on the next step, powered by Stripe.
+                  {showStripe && cartPayload && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Total <span className="font-medium text-foreground">{formatPrice(orderSubtotal)}</span> — payment is processed securely by Stripe.
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        We accept all major credit and debit cards. You'll review your total before confirming the payment.
-                      </p>
-                    </>
+                      <div className="rounded-lg border border-border overflow-hidden bg-card">
+                        <StripeEmbeddedCheckoutPanel
+                          kind="cart"
+                          cartPayload={cartPayload}
+                          returnUrl={returnUrl}
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
               </StepCard>
@@ -850,19 +896,21 @@ const Checkout = () => {
                 <p className="mt-3 text-xs text-muted-foreground">
                   Free courier service on orders over $100
                 </p>
-                <Button
-                  type="button"
-                  variant="hero"
-                  size="lg"
-                  className={cn("w-full mt-6", (!allDone || placing) && "opacity-50 cursor-not-allowed")}
-                  disabled={!allDone || placing}
-                  onClick={placeOrder}
-                >
-                  {placing ? "Preparing payment…" : "Continue to payment"}
-                </Button>
-                <p className="mt-3 text-xs text-muted-foreground text-center">
-                  Taxes calculated at the payment step.
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No NY sales tax on repair services
                 </p>
+                {!showStripe && (
+                  <Button
+                    type="button"
+                    variant="hero"
+                    size="lg"
+                    className={cn("w-full mt-6", !allDone && "opacity-50 cursor-not-allowed")}
+                    disabled={!allDone}
+                    onClick={() => setOpenStep("payment")}
+                  >
+                    Place order
+                  </Button>
+                )}
               </div>
             </aside>
           </div>

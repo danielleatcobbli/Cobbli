@@ -177,7 +177,7 @@ const Bag = () => {
                     Checkout
                   </Button>
                   <p className="mt-3 text-xs text-muted-foreground text-center">
-                    Taxes calculated at checkout.
+                    No NY sales tax on repair services.
                   </p>
                 </div>
               </aside>

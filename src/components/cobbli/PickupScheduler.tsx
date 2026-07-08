@@ -42,7 +42,10 @@ interface PickupSchedulerProps {
 
 // ---------- constants ----------
 
-const TZ = "America/New_York";
+// Display windows in the customer's own browser timezone rather than a
+// hardcoded one — Calendly windows are UTC on the wire, so this only
+// affects presentation.
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const LOOK_AHEAD_DAYS = 7;
 
 // ---------- helpers ----------
