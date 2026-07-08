@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronLeft, ChevronUp, Minus, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronUp } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
@@ -29,46 +29,34 @@ const POPULAR_SERVICE_SLUGS = new Set([
 ]);
 
 // ---------------------------------------------------------------------------
-// Flat pricing — price string + unit label + optional note
+// Flat price fallback — used only when the DB card_price_label is empty.
+// The detail page always shows "per pair" as the unit (hardcoded below).
+// These dollar amounts should stay in sync with card_price_label in the DB.
 // ---------------------------------------------------------------------------
 
-type PricingConfig = {
-  price: string;
-  unit: string;
-  /** Extra explanatory line shown beneath the price (e.g. hardware-repair). */
-  note?: string;
-  /** When true, a quantity stepper is shown and a running total is displayed. */
-  hasQuantity?: boolean;
-};
-
-const SERVICE_PRICING: Record<string, PricingConfig> = {
-  "full-resole":                   { price: "$85",  unit: "per pair" },
-  "high-heel-tip-replacement":     { price: "$35",  unit: "per pair" },
-  "heel-reattachment":             { price: "$100", unit: "per shoe" },
-  "color-restoration":             { price: "$80",  unit: "per pair" },
-  "leather-or-suede-conditioning": { price: "$65",  unit: "per pair" },
-  "deodorizing-treatment":         { price: "$50",  unit: "per pair" },
-  "shoe-shine":                    { price: "$20",  unit: "per pair" },
-  "insole-replacement":            { price: "$50",  unit: "per pair" },
-  "lining-repair":                 { price: "$75",  unit: "per pair" },
-  "seam-repair":                   { price: "$50",  unit: "per pair" },
-  "waterproofing":                 { price: "$30",  unit: "per pair" },
-  "protective-full-sole":          { price: "$50",  unit: "per pair" },
-  "hardware-repair":               {
-    price: "$45",
-    unit: "per buckle or piece of hardware",
-    note: "Only pay for what needs fixing — if two buckles need repair, we'll charge for two",
-    hasQuantity: true,
-  },
-  "buckle-repair":                 { price: "$45",  unit: "per buckle", hasQuantity: true },
-  "strap-repair":                  { price: "$45",  unit: "per strap",  hasQuantity: true },
-  "zipper-reattachment":           { price: "$75",  unit: "per shoe" },
-  "zipper-slider-replacement":     { price: "$45",  unit: "per shoe" },
+const SERVICE_DETAIL_PRICE: Record<string, string> = {
+  "full-resole":                   "$85",
+  "high-heel-tip-replacement":     "$35",
+  "heel-reattachment":             "$100",
+  "color-restoration":             "$80",
+  "leather-or-suede-conditioning": "$65",
+  "deodorizing-treatment":         "$50",
+  "shoe-shine":                    "$20",
+  "insole-replacement":            "$50",
+  "lining-repair":                 "$75",
+  "seam-repair":                   "$50",
+  "waterproofing":                 "$30",
+  "protective-full-sole":          "$50",
+  "hardware-repair":               "$45",
+  "buckle-repair":                 "$45",
+  "strap-repair":                  "$45",
+  "zipper-reattachment":           "$75",
+  "zipper-slider-replacement":     "$45",
   // Coming soon
-  "full-dye":                      { price: "$125", unit: "per pair" },
-  "shoe-stretching":               { price: "$40",  unit: "per pair" },
-  "buckle-replacement":            { price: "$80",  unit: "per pair" },
-  "heel-replacement":              { price: "$150", unit: "per pair" },
+  "full-dye":                      "$125",
+  "shoe-stretching":               "$40",
+  "buckle-replacement":            "$80",
+  "heel-replacement":              "$150",
 };
 
 // ---------------------------------------------------------------------------
@@ -93,7 +81,6 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
   const navigate = useNavigate();
   const { service, isLoading } = useService(slug);
   const [brandsOpen, setBrandsOpen] = useState(false);
-  const [quantity, setQuantity] = useState(1);
   const [consentOpen, setConsentOpen] = useState(false);
   const [soleOpen, setSoleOpen] = useState(false);
   const { setPaintConsent, setSoleMaterial } = useRepairFlow();
@@ -121,11 +108,13 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
 
   if (!service) return <Navigate to={mode === "flow" ? "/start-repair/services" : "/services"} replace />;
 
-  const pricing = SERVICE_PRICING[service.slug];
   const unsupportedBrands = UNSUPPORTED_BRANDS[service.slug];
   const isPopular = POPULAR_SERVICE_SLUGS.has(service.slug);
-  const unitPrice = pricing ? parseInt(pricing.price.replace("$", ""), 10) : 0;
-  const runningTotal = pricing?.hasQuantity ? `$${unitPrice * quantity}` : null;
+  // Use the DB card_price_label as the canonical price (so the detail page always
+  // matches the grid card). Fall back to the local table if the DB value is empty.
+  // Strip any residual "per ..." suffix in case old DB rows haven't been migrated.
+  const rawPrice = service.cardPriceLabel || SERVICE_DETAIL_PRICE[service.slug] || "";
+  const displayPrice = rawPrice.replace(/\s+per\s+\S.*/i, "").trim();
 
   const onBack = () => {
     const from = detailSearchParams.get("from");
@@ -224,60 +213,15 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                   <div className="my-6 border-t border-border" />
 
                   {/* ── Pricing ── */}
-                  {pricing && (
+                  {displayPrice && (
                     <div className="mb-6">
                       <div className="flex items-baseline gap-2">
                         <span className="text-[28px] font-bold leading-none" style={{ color: "#3d1700" }}>
-                          {pricing.price}
+                          {displayPrice}
                         </span>
-                        <span className="text-sm text-muted-foreground">{pricing.unit}</span>
+                        <span className="text-sm text-muted-foreground">per pair</span>
                       </div>
-                      {pricing.note && (
-                        <p className="mt-1.5 text-xs text-muted-foreground">{pricing.note}</p>
-                      )}
                     </div>
-                  )}
-
-                  {/* ── Quantity stepper (hardware-repair etc.) ── */}
-                  {pricing?.hasQuantity && (
-                    <>
-                      <div className="mb-6">
-                        <p className="text-sm font-medium text-primary mb-2">
-                          Quantity needing repair
-                        </p>
-                        <div className="inline-flex items-center rounded-lg border border-border">
-                          <button
-                            type="button"
-                            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                            disabled={quantity <= 1}
-                            aria-label="Decrease quantity"
-                            className="p-2 text-primary disabled:opacity-40"
-                          >
-                            <Minus size={16} />
-                          </button>
-                          <span className="w-10 text-center text-sm font-medium text-primary tabular-nums">
-                            {quantity}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setQuantity((q) => Math.min(10, q + 1))}
-                            disabled={quantity >= 10}
-                            aria-label="Increase quantity"
-                            className="p-2 text-primary disabled:opacity-40"
-                          >
-                            <Plus size={16} />
-                          </button>
-                        </div>
-                        {runningTotal && (
-                          <div className="mt-3 flex items-baseline justify-between rounded-lg bg-muted/40 px-4 py-3">
-                            <span className="text-sm font-medium text-primary">Total</span>
-                            <span className="text-sm font-medium text-primary tabular-nums">
-                              {runningTotal}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </>
                   )}
 
                   {/* ── CTA ── */}

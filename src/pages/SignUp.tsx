@@ -10,8 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/context/AuthContext";
+import { consumeReturnTo, saveReturnTo } from "@/lib/authRedirect";
 import {
   PASSWORD_HELPER_TEXT,
   validatePassword,
@@ -56,7 +56,7 @@ const SignUp = () => {
   });
 
   useEffect(() => {
-    if (user) navigate(successRedirect, { replace: true });
+    if (user) navigate(consumeReturnTo() ?? successRedirect, { replace: true });
   }, [user, navigate, successRedirect]);
 
   const phoneDigits = phone.replace(/\D/g, "").slice(0, 10);
@@ -77,13 +77,17 @@ const SignUp = () => {
 
   const handleGoogle = async () => {
     setFormError(null);
-    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
-    if (result.error) {
+    saveReturnTo(from);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/signup` },
+    });
+    if (error) {
       setFormError("Google sign-in failed. Please try again.");
-      return;
     }
-    if (result.redirected) return;
-    navigate(successRedirect, { replace: true });
+    // On success, Supabase redirects the full page to Google — execution stops here.
+    // We land back on /signup, where the mount effect above consumes the saved
+    // return-to path (see saveReturnTo above) and finishes the redirect.
   };
 
   const handleSubmit = async (e: FormEvent) => {

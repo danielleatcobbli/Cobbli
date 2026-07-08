@@ -41,7 +41,7 @@ const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair }: Props) => {
           )}
           {s.cardPriceLabel && (
             <p className="text-[13px] font-bold mt-auto pt-2" style={{ color: "#3d1700" }}>
-              {s.cardPriceLabel}
+              {s.cardPriceLabel.replace(/\s+per\s+\S.*/i, "").trim()}
             </p>
           )}
         </div>
