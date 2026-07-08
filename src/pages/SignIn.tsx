@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/context/AuthContext";
 import { consumeReturnTo, peekReturnTo, saveReturnTo } from "@/lib/authRedirect";
 
@@ -61,13 +60,17 @@ const SignIn = () => {
   const handleGoogle = async () => {
     setEmailError(null);
     setPasswordError(null);
-    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
-    if (result.error) {
+    // Native Supabase OAuth (replaces the removed Lovable wrapper). Redirect
+    // back to /signin — a non-protected route — so the PKCE code exchange
+    // completes before any auth-gated redirect runs. The saved returnTo (from
+    // checkout/start-repair) is consumed after the session is established.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/signin` },
+    });
+    if (error) {
       setPasswordError("Google sign-in failed. Please try again.");
-      return;
     }
-    if (result.redirected) return;
-    navigate(successRedirect, { replace: true });
   };
 
   const handleSubmit = async (e: FormEvent) => {
