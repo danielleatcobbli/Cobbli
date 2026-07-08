@@ -20,7 +20,14 @@ const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair }: Props) => {
   return (
     <div className="group w-full rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col h-full">
       <Link to={to} className="flex flex-col flex-1">
-        <div className="aspect-[4/5] relative" style={{ backgroundColor: "#3d1700" }}>
+        <div className="aspect-[4/5] relative overflow-hidden" style={{ backgroundColor: "#3d1700" }}>
+          {s.imageUrl && (
+            <img
+              src={s.imageUrl}
+              alt={s.name}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
           {isPopular && (
             <span
               className="absolute top-2 left-2 text-[10px] font-medium px-2 py-0.5 rounded-full"

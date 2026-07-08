@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, ChevronDown } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ const REWORK_OPEN_STATUSES: OrderStatus[] = ["rework-request-pending", "rework-r
 
 const TODAY = "2026-07-08";
 const TOMORROW = "2026-07-09";
-const CURRENT_USER = "DA";
+const CURRENT_USER = "DO";
 
 const ORDERS: Order[] = [
   {
@@ -128,7 +129,7 @@ const ORDERS: Order[] = [
     datePlaced: "2026-06-29",
     customer: { name: "Sarah Chen", phone: "(212) 555-0101" },
     address: "123 Park Ave, New York, NY 10017",
-    workshopAssignee: "DA",
+    workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
     actionRequiredBy: "2026-07-05", // 3 days overdue
@@ -140,7 +141,7 @@ const ORDERS: Order[] = [
     datePlaced: "2026-06-25",
     customer: { name: "Marcus Webb", phone: "(646) 555-0202" },
     address: "456 Lexington Ave, New York, NY 10017",
-    workshopAssignee: "DA",
+    workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
     actionRequiredBy: "2026-07-08", // due today
@@ -152,7 +153,7 @@ const ORDERS: Order[] = [
     datePlaced: "2026-07-06",
     customer: { name: "Priya Nair", phone: "(917) 555-0303" },
     address: "45 W 72nd St, New York, NY 10023",
-    workshopAssignee: "DA",
+    workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
     actionRequiredBy: null,
@@ -173,7 +174,7 @@ const ORDERS: Order[] = [
     customer: { name: "James O'Sullivan", phone: "(212) 555-0404" },
     address: "89 Bleecker St, New York, NY 10012",
     workshopAssignee: "OB",
-    dispatchAssignee: "DA",
+    dispatchAssignee: "DO",
     isRework: false,
     actionRequiredBy: "2026-07-08", // automated reminders exhausted — due today
     lastContactedAt: "2026-07-06", // day-2 automated reminder — customer still hasn't scheduled
@@ -185,7 +186,7 @@ const ORDERS: Order[] = [
     datePlaced: "2026-06-15",
     customer: { name: "Nina Patel", phone: "(347) 555-0505" },
     address: "330 E 57th St, New York, NY 10022",
-    workshopAssignee: "DA",
+    workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: true,
     actionRequiredBy: "2026-07-06", // 2 days overdue
@@ -198,7 +199,7 @@ const ORDERS: Order[] = [
     datePlaced: "2026-06-10",
     customer: { name: "Luca Romano", phone: "(718) 555-0606" },
     address: "55 Water St, Brooklyn, NY 11201",
-    workshopAssignee: "DA",
+    workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: true,
     actionRequiredBy: null,
@@ -212,7 +213,7 @@ const ORDERS: Order[] = [
     customer: { name: "Ava Thompson", phone: "(212) 555-0707" },
     address: "1 Central Park W, New York, NY 10023",
     workshopAssignee: "OB",
-    dispatchAssignee: "DA",
+    dispatchAssignee: "DO",
     isRework: false,
     actionRequiredBy: null,
     lastContactedAt: "2026-07-05",
@@ -226,7 +227,7 @@ const ORDERS: Order[] = [
     datePlaced: "2026-06-01",
     customer: { name: "Derek Huang", phone: "(917) 555-0808" },
     address: "200 Varick St, New York, NY 10014",
-    workshopAssignee: "DA",
+    workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
     actionRequiredBy: null,
@@ -239,7 +240,7 @@ const ORDERS: Order[] = [
     customer: { name: "Grace Kim", phone: "(212) 555-0909" },
     address: "77 Franklin St, New York, NY 10013",
     workshopAssignee: "OB",
-    dispatchAssignee: "DA",
+    dispatchAssignee: "DO",
     isRework: true,
     actionRequiredBy: "2026-07-08", // reminders exhausted — needs dispatch follow-up
     lastContactedAt: "2026-07-06", // day-2 automated reminder — customer still hasn't scheduled
@@ -252,7 +253,7 @@ const ORDERS: Order[] = [
     datePlaced: "2026-07-07",
     customer: { name: "Omar Faruk", phone: "(212) 555-1010" },
     address: "10 Hanover Sq, New York, NY 10005",
-    workshopAssignee: "DA",
+    workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
     actionRequiredBy: "2026-07-11", // upcoming
@@ -264,7 +265,7 @@ const ORDERS: Order[] = [
     datePlaced: "2026-07-04",
     customer: { name: "Bianca Rossi", phone: "(347) 555-1111" },
     address: "14 Wall St, New York, NY 10005",
-    workshopAssignee: "DA",
+    workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
     actionRequiredBy: null, // ball's in the customer's court, no SLA
@@ -277,7 +278,7 @@ const ORDERS: Order[] = [
     customer: { name: "Tomás Vega", phone: "(646) 555-1212" },
     address: "500 W 23rd St, New York, NY 10011",
     workshopAssignee: "OB",
-    dispatchAssignee: "DA",
+    dispatchAssignee: "DO",
     isRework: false,
     actionRequiredBy: null, // ball's in the customer's court, no SLA
   },
@@ -288,8 +289,8 @@ const ORDERS: Order[] = [
     datePlaced: "2026-07-08",
     customer: { name: "Wendy Alvarez", phone: "(212) 555-1313" },
     address: "350 5th Ave, New York, NY 10118",
-    workshopAssignee: "DA",
-    dispatchAssignee: "DA",
+    workshopAssignee: "DO",
+    dispatchAssignee: "DO",
     isRework: false,
     actionRequiredBy: null,
     lastContactedAt: "2026-07-08",
@@ -611,7 +612,7 @@ function FilterRow({
       <MultiSelect
         label="All staff"
         options={[
-          { value: "DA", label: "DA (you)" },
+          { value: "DO", label: "DO (you)" },
           { value: "OB", label: "OB" },
         ]}
         selected={state.assignedFilter}
@@ -636,7 +637,7 @@ function EmptyState({ message = "No orders match the current filters." }: { mess
 const TH: React.CSSProperties = { padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" };
 const TD: React.CSSProperties = { padding: "11px 14px", verticalAlign: "middle" };
 
-function WorkshopTable({ orders, actionFn = workshopAction }: { orders: Order[]; actionFn?: (s: OrderStatus) => string | null }) {
+function WorkshopTable({ orders, actionFn = workshopAction, onRowClick }: { orders: Order[]; actionFn?: (s: OrderStatus) => string | null; onRowClick?: (id: string) => void }) {
   if (orders.length === 0) return <EmptyState />;
   return (
     <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, overflow: "hidden" }}>
@@ -655,6 +656,7 @@ function WorkshopTable({ orders, actionFn = workshopAction }: { orders: Order[];
             return (
               <tr
                 key={o.id}
+                onClick={() => onRowClick?.(o.id)}
                 style={{
                   borderBottom: i < orders.length - 1 ? "1px solid #f0ece5" : "none",
                   borderLeft: `3px solid ${borderCol}`,
@@ -675,7 +677,7 @@ function WorkshopTable({ orders, actionFn = workshopAction }: { orders: Order[];
                 <td style={TD}><StatusPill status={o.status} /></td>
                 <td style={{ ...TD, color: "#6b7280", fontSize: 12 }}>{fmtDate(o.datePlaced)}</td>
                 <td style={TD}><DueCell dateStr={o.actionRequiredBy} /></td>
-                <td style={TD}>
+                <td style={TD} onClick={e => e.stopPropagation()}>
                   {action ? <ActionBtn label={action} /> : <span style={{ color: "#d1d5db" }}>—</span>}
                 </td>
                 <td style={{ ...TD, color: "#9ca3af", fontSize: 12, fontWeight: 500 }}>{o.workshopAssignee}</td>
@@ -693,6 +695,7 @@ function WorkshopTable({ orders, actionFn = workshopAction }: { orders: Order[];
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WorkshopView({ orders, perspective }: { orders: Order[]; perspective: Perspective }) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<WorkshopTab>("action-required");
 
   const defaultAssignee = useMemo(() => (perspective === "admin" ? [] : [CURRENT_USER]), [perspective]);
@@ -783,7 +786,7 @@ function WorkshopView({ orders, perspective }: { orders: Order[]; perspective: P
         onChange={patch => setFilters(f => ({ ...f, ...patch }))}
         statusOptions={statusOptionsByTab[tab]}
       />
-      <WorkshopTable orders={displayed} />
+      <WorkshopTable orders={displayed} onRowClick={id => navigate(`/admin/order/${id}?view=workshop`)} />
     </div>
   );
 }
@@ -792,7 +795,7 @@ function WorkshopView({ orders, perspective }: { orders: Order[]; perspective: P
 // Dispatch — action required table
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DispatchActionTable({ orders }: { orders: Order[] }) {
+function DispatchActionTable({ orders, onRowClick }: { orders: Order[]; onRowClick?: (id: string) => void }) {
   if (orders.length === 0) return <EmptyState />;
   return (
     <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, overflow: "hidden" }}>
@@ -811,6 +814,7 @@ function DispatchActionTable({ orders }: { orders: Order[] }) {
             return (
               <tr
                 key={o.id}
+                onClick={() => onRowClick?.(o.id)}
                 style={{
                   borderBottom: i < orders.length - 1 ? "1px solid #f0ece5" : "none",
                   borderLeft: `3px solid ${borderCol}`,
@@ -829,7 +833,7 @@ function DispatchActionTable({ orders }: { orders: Order[] }) {
                 <td style={TD}><LastContactedCell dateStr={o.lastContactedAt} /></td>
                 <td style={{ ...TD, color: "#6b7280", fontSize: 12 }}>{o.customer.phone}</td>
                 <td style={TD}><DueCell dateStr={o.actionRequiredBy} /></td>
-                <td style={TD}>{action ? <ActionBtn label={action} /> : <span style={{ color: "#d1d5db" }}>—</span>}</td>
+                <td style={TD} onClick={e => e.stopPropagation()}>{action ? <ActionBtn label={action} /> : <span style={{ color: "#d1d5db" }}>—</span>}</td>
               </tr>
             );
           })}
@@ -852,7 +856,7 @@ type ScheduleRow = {
 /** Powers both "Today's schedule" and "Tomorrow's schedule" — same table,
  * just scoped to a different single date, so planning tomorrow's route the
  * night before works exactly like checking today's. */
-function ScheduleTable({ orders, date, emptyMessage }: { orders: Order[]; date: string; emptyMessage: string }) {
+function ScheduleTable({ orders, date, emptyMessage, onRowClick }: { orders: Order[]; date: string; emptyMessage: string; onRowClick?: (id: string) => void }) {
   const rows: ScheduleRow[] = useMemo(() => {
     const result: ScheduleRow[] = [];
     for (const o of orders) {
@@ -880,6 +884,7 @@ function ScheduleTable({ orders, date, emptyMessage }: { orders: Order[]; date: 
           {rows.map(({ order: o, type, slot }, i) => (
             <tr
               key={`${o.id}-${type}`}
+              onClick={() => onRowClick?.(o.id)}
               style={{
                 borderBottom: i < rows.length - 1 ? "1px solid #f0ece5" : "none",
                 backgroundColor: "#fff",
@@ -892,7 +897,7 @@ function ScheduleTable({ orders, date, emptyMessage }: { orders: Order[]; date: 
               </td>
               <td style={TD}><TypePill type={type} /></td>
               <td style={{ ...TD, color: "#374151", fontWeight: 500, fontSize: 12 }}>{slot.timeLabel}</td>
-              <td style={TD}>
+              <td style={TD} onClick={e => e.stopPropagation()}>
                 <a
                   href={`https://maps.google.com/?q=${encodeAddress(o.address)}`}
                   target="_blank"
@@ -920,7 +925,7 @@ function ScheduleTable({ orders, date, emptyMessage }: { orders: Order[]; date: 
 
 /** Every future scheduled pickup/return, not just today/tomorrow — lets
  * Dispatch see everything on the calendar in one place, sorted soonest first. */
-function AllScheduledTable({ orders }: { orders: Order[] }) {
+function AllScheduledTable({ orders, onRowClick }: { orders: Order[]; onRowClick?: (id: string) => void }) {
   const rows: ScheduleRow[] = useMemo(() => {
     const result: ScheduleRow[] = [];
     for (const o of orders) {
@@ -950,6 +955,7 @@ function AllScheduledTable({ orders }: { orders: Order[] }) {
           {rows.map(({ order: o, type, slot }, i) => (
             <tr
               key={`${o.id}-${type}`}
+              onClick={() => onRowClick?.(o.id)}
               style={{
                 borderBottom: i < rows.length - 1 ? "1px solid #f0ece5" : "none",
                 backgroundColor: "#fff",
@@ -992,6 +998,8 @@ function AllScheduledTable({ orders }: { orders: Order[] }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DispatchView({ orders, perspective }: { orders: Order[]; perspective: Perspective }) {
+  const navigate = useNavigate();
+  const goToOrder = (id: string) => navigate(`/admin/order/${id}?view=dispatch`);
   const [tab, setTab] = useState<DispatchTab>("action-required");
 
   const defaultAssignee = useMemo(() => (perspective === "admin" ? [] : [CURRENT_USER]), [perspective]);
@@ -1076,19 +1084,19 @@ function DispatchView({ orders, perspective }: { orders: Order[]; perspective: P
             onChange={patch => setFilters(f => ({ ...f, ...patch }))}
             statusOptions={statusOptionsByTab["action-required"]}
           />
-          <DispatchActionTable orders={filteredActionRequired} />
+          <DispatchActionTable orders={filteredActionRequired} onRowClick={goToOrder} />
         </>
       )}
 
       {tab === "today-schedule" && (
-        <ScheduleTable orders={orders} date={TODAY} emptyMessage="No pickups or returns scheduled for today." />
+        <ScheduleTable orders={orders} date={TODAY} emptyMessage="No pickups or returns scheduled for today." onRowClick={goToOrder} />
       )}
 
       {tab === "tomorrow-schedule" && (
-        <ScheduleTable orders={orders} date={TOMORROW} emptyMessage="No pickups or returns scheduled for tomorrow." />
+        <ScheduleTable orders={orders} date={TOMORROW} emptyMessage="No pickups or returns scheduled for tomorrow." onRowClick={goToOrder} />
       )}
 
-      {tab === "all-scheduled" && <AllScheduledTable orders={orders} />}
+      {tab === "all-scheduled" && <AllScheduledTable orders={orders} onRowClick={goToOrder} />}
 
       {tab === "all-orders" && (
         <>
@@ -1098,7 +1106,7 @@ function DispatchView({ orders, perspective }: { orders: Order[]; perspective: P
             statusOptions={statusOptionsByTab["all-orders"]}
           />
           {/* Reuse WorkshopTable with dispatch assignee filtering already applied */}
-          <WorkshopTable orders={allOrdersScoped} />
+          <WorkshopTable orders={allOrdersScoped} onRowClick={goToOrder} />
         </>
       )}
     </div>

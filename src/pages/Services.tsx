@@ -84,6 +84,10 @@ const BUNDLES: Bundle[] = [
   },
 ];
 
+/** "$250" -> 25000 (cents) — bundles are flat-priced, not yet backed by real
+ * catalog services, so this is the only price source for a bundle bag item. */
+const bundlePriceToCents = (price: string): number => Math.round(parseFloat(price.replace(/[^0-9.]/g, "")) * 100);
+
 // ---------------------------------------------------------------------------
 // Popular service slugs + display order
 // ---------------------------------------------------------------------------
@@ -297,7 +301,11 @@ const Services = () => {
               <BundleCard
                 key={bundle.name}
                 bundle={bundle}
-                onAddToRepair={() => navigate("/start-repair/pick")}
+                onAddToRepair={() =>
+                  navigate(
+                    `/start-repair/pick?bundle=${encodeURIComponent(bundle.name)}&bundlePrice=${bundlePriceToCents(bundle.price)}`,
+                  )
+                }
               />
             ))}
           </div>

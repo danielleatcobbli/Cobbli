@@ -163,6 +163,13 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                 backgroundColor: service.isComingSoon ? "#9a8870" : "#3d1700",
               }}
             >
+              {service.imageUrl && !service.isComingSoon && (
+                <img
+                  src={service.imageUrl}
+                  alt={service.name}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              )}
               {service.isComingSoon && (
                 <span
                   className="absolute top-3 left-3 text-[11px] font-medium px-2.5 py-1 rounded-full"

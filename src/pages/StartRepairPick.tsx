@@ -468,6 +468,8 @@ const StartRepair = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedService = searchParams.get("service");
+  const preselectedBundle = searchParams.get("bundle");
+  const preselectedBundlePrice = searchParams.get("bundlePrice");
   const { pairs, deletePair, getPair } = usePairs();
   const { selectedPairId, setSelectedPairId, setSelectedServiceSlugs, paintConsents } = useRepairFlow();
   const { findByPairId, addPair: addPairToBag } = useBag();
@@ -591,7 +593,27 @@ const StartRepair = () => {
       }
     }
 
-    // No preselected service (e.g. bundle path) — navigate to service selection.
+    // Bundle path — add the bundle itself to the bag as a single flat-priced
+    // line item and show the same upsell modal as a single service, instead
+    // of skipping straight to service selection. Bundles aren't backed by
+    // real catalog services yet, so this uses the price shown on the bundle
+    // card directly (no live-price re-derivation — see BagContext/useLivePricedBag,
+    // which safely falls back to the stored snapshot for an unrecognized id).
+    if (preselectedBundle && preselectedBundlePrice) {
+      const bundleSlug = `bundle-${preselectedBundle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+      const bagSvc: BagService = {
+        id: bundleSlug,
+        name: preselectedBundle,
+        price: parseInt(preselectedBundlePrice, 10),
+      };
+      addPairToBag([bagSvc], pair.id, formatPairLabel(pair), pair.shoeType);
+      setSelectedServiceSlugs([]);
+      setAddedServiceName(preselectedBundle);
+      setConfirmOpen(true);
+      return;
+    }
+
+    // No preselected service or bundle — navigate to service selection.
     const existing = findByPairId(selectedPairId);
     const existingSlugs = existing ? existing.services.map((s) => s.id) : [];
     const merged = preselectedService && !existingSlugs.includes(preselectedService)
