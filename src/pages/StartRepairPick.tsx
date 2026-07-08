@@ -48,6 +48,7 @@ import { useAuth } from "@/context/AuthContext";
 import SignInCallout from "@/components/cobbli/SignInCallout";
 import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
 import { useServices } from "@/hooks/useServices";
+import { trackEvent } from "@/lib/analytics";
 
 const COLORS = [
 "Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
@@ -569,6 +570,8 @@ const StartRepair = () => {
     const pair = getPair(selectedPairId);
     if (!pair) return;
 
+    trackEvent("pair_confirmed", { shoe_type: pair.shoeType });
+
     // If a specific service was pre-selected (from "Add to repair" on a card),
     // add it to the bag directly and show the upsell modal.
     if (preselectedService && services) {
@@ -586,6 +589,12 @@ const StartRepair = () => {
             : {}),
         };
         addPairToBag([bagSvc], pair.id, formatPairLabel(pair), pair.shoeType);
+        trackEvent("service_added", { service_slug: service.slug, source: "start_repair_pick" });
+        trackEvent("repair_added_to_bag", {
+          value: bagSvc.price / 100,
+          currency: "USD",
+          service_count: 1,
+        });
         setSelectedServiceSlugs([preselectedService]);
         setAddedServiceName(service.name);
         setConfirmOpen(true);
@@ -607,6 +616,11 @@ const StartRepair = () => {
         price: parseInt(preselectedBundlePrice, 10),
       };
       addPairToBag([bagSvc], pair.id, formatPairLabel(pair), pair.shoeType);
+      trackEvent("repair_added_to_bag", {
+        value: bagSvc.price / 100,
+        currency: "USD",
+        bundle: preselectedBundle,
+      });
       setSelectedServiceSlugs([]);
       setAddedServiceName(preselectedBundle);
       setConfirmOpen(true);

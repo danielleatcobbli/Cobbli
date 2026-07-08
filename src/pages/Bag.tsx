@@ -17,6 +17,7 @@ import { useBag, formatPrice } from "@/context/BagContext";
 import { useLivePricedBag } from "@/hooks/useLivePricedBag";
 import { useAuth } from "@/context/AuthContext";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
+import { trackEvent } from "@/lib/analytics";
 import bagIcon from "@/assets/icons/bag.svg";
 
 const FREE_COURIER_THRESHOLD = 10000; // $100 in cents
@@ -58,6 +59,11 @@ const Bag = () => {
   const [showAuthGate, setShowAuthGate] = useState(false);
 
   const handleCheckout = () => {
+    trackEvent("checkout_started", {
+      value: orderSubtotal / 100,
+      currency: "USD",
+      authenticated: !!user,
+    });
     if (user) {
       navigate("/checkout");
     } else {
@@ -237,7 +243,9 @@ const EmptyBag = () => (
       You haven't added any repairs yet. Start a repair to get your shoes looking their best.
     </p>
     <Button asChild variant="hero" size="lg">
-      <Link to="/services">Start a repair</Link>
+      <Link to="/services" onClick={() => trackEvent("start_repair", { source: "empty_bag" })}>
+        Start a repair
+      </Link>
     </Button>
   </div>
 );

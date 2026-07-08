@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { consumeReturnTo, saveReturnTo } from "@/lib/authRedirect";
+import { trackEvent } from "@/lib/analytics";
 import {
   PASSWORD_HELPER_TEXT,
   validatePassword,
@@ -160,6 +161,7 @@ const SignUp = () => {
         setEmail("");
         return;
       }
+      trackEvent("account_created", { method: "email" });
       // If email confirmation is required (no session returned), show confirmation prompt
       if (!data.session) {
         setConfirmEmailSent(true);

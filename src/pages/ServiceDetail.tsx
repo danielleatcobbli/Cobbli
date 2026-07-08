@@ -12,6 +12,7 @@ import SoleMaterialDialog, { SOLE_MATERIAL_SLUGS } from "@/components/cobbli/Sol
 import ComingSoonVoteButton from "@/components/cobbli/ComingSoonVoteButton";
 import { useService } from "@/hooks/useServices";
 import { useRepairFlow } from "@/context/RepairFlowContext";
+import { trackEvent } from "@/lib/analytics";
 
 type Mode = "flow" | "standalone";
 
@@ -128,6 +129,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
   const goToPick = () => navigate(`/start-repair/pick?service=${encodeURIComponent(service.slug)}`);
 
   const onStart = () => {
+    trackEvent("start_repair", { source: "service_detail", service_slug: service.slug });
     if (PAINT_CONSENT_SLUGS.has(service.slug)) {
       setConsentOpen(true);
       return;
