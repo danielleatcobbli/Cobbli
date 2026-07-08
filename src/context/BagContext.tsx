@@ -115,12 +115,16 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
     const reconcile = async (userId: string | null) => {
       const prevOwner = ownerRef.current;
       if (!userId) {
-        // Signed out: preserve items but mark as guest so a different user
-        // signing in next will see a mismatch and clear.
-        if (prevOwner !== GUEST_OWNER) {
-          ownerRef.current = GUEST_OWNER;
-          writeOwner(GUEST_OWNER);
-        }
+        // Signed out: leave the owner as-is (the last signed-in user's id, or
+        // GUEST_OWNER if it was never tied to an account). Do NOT collapse it
+        // to GUEST_OWNER here — that previously made "sign out, sign in as a
+        // different person" indistinguishable from "genuine guest cart, first
+        // sign-in," so the next person to sign in silently inherited the
+        // previous user's bag instead of getting a mismatch-and-clear. Leaving
+        // the real owner in place means: the same user signing back in still
+        // sees their bag (owner matches, no-op below), but a *different* user
+        // signing in next correctly hits the "different previous user" branch
+        // and clears it.
         return;
       }
 

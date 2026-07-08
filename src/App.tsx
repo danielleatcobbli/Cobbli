@@ -23,6 +23,7 @@ import AssessmentDeposit from "./pages/AssessmentDeposit";
 import AssessmentConfirmation from "./pages/AssessmentConfirmation";
 import AssessmentProposal from "./pages/AssessmentProposal";
 import Admin from "./pages/Admin";
+import AdminDashboard from "./pages/AdminDashboard";
 import OwnerSettings from "./pages/OwnerSettings";
 import AdminBlog from "./pages/AdminBlog";
 import AdminOrders from "./pages/admin/AdminOrders";
@@ -109,8 +110,8 @@ const App = () => (
                         <Route
                           path="/admin"
                           element={
-                            <RoleRoute allow={["admin"]}>
-                              <Admin />
+                            <RoleRoute allow={["admin", "staff"]}>
+                              <AdminDashboard />
                             </RoleRoute>
                           }
                         />
