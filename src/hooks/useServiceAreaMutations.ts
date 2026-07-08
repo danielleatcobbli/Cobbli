@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/integrations/api/client";
 
 /**
- * Owner mutations for the serviced-ZIP list. Writes are enforced by the
- * owner/admin RLS policy on service_areas — a non-owner call is rejected by
- * the database regardless of the client-side gate. Cache is invalidated so the
- * checkout/account validators pick up changes.
+ * Owner mutations for the serviced-ZIP list. Writes go through the FastAPI
+ * /ops gateway, which authorizes the caller server-side (staff/admin) with RLS
+ * as a backstop. Cache is invalidated so the checkout/account validators pick
+ * up changes.
  */
 export const useServiceAreaMutations = () => {
   const qc = useQueryClient();
@@ -15,10 +15,10 @@ export const useServiceAreaMutations = () => {
     mutationFn: async (zip: string) => {
       const trimmed = zip.trim();
       if (!/^\d{5}$/.test(trimmed)) throw new Error("Enter a valid 5-digit ZIP code.");
-      const { error } = await supabase
-        .from("service_areas")
-        .upsert({ zip: trimmed, is_active: true }, { onConflict: "zip" });
-      if (error) throw error;
+      await apiFetch(`/ops/service-areas/${trimmed}`, {
+        method: "PUT",
+        body: JSON.stringify({ is_active: true }),
+      });
       return trimmed;
     },
     onSuccess: invalidate,
@@ -26,8 +26,7 @@ export const useServiceAreaMutations = () => {
 
   const removeZip = useMutation({
     mutationFn: async (zip: string) => {
-      const { error } = await supabase.from("service_areas").delete().eq("zip", zip);
-      if (error) throw error;
+      await apiFetch(`/ops/service-areas/${zip}`, { method: "DELETE" });
       return zip;
     },
     onSuccess: invalidate,

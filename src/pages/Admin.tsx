@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { apiFetchJson } from "@/integrations/api/client";
+import { apiFetch, apiFetchJson } from "@/integrations/api/client";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { toast } from "@/hooks/use-toast";
 import { Copy, Link2 } from "lucide-react";
@@ -85,27 +85,27 @@ const Admin = () => {
   const fetchRows = async (status: (typeof STATUS_TABS)[number]["id"]) => {
     setRows(null);
     setError(null);
-    const { data: assessments, error: aErr } = await supabase
-      .from("assessments")
-      .select("id, user_id, pairs, status, created_at, proposed_services")
-      .eq("status", status)
-      .order("created_at", { ascending: false });
-    if (aErr) {
-      setError(aErr.message);
+    try {
+      const assessments = await apiFetchJson<Array<Omit<AssessmentRow, "profile">>>(
+        `/ops/assessments?status=${encodeURIComponent(status)}`,
+      );
+      const ids = Array.from(new Set(assessments.map((a) => a.user_id)));
+      const profiles = ids.length
+        ? await apiFetchJson<Array<{ user_id: string; first_name: string | null; last_name: string | null; phone: string | null }>>(
+            `/ops/profiles?ids=${encodeURIComponent(ids.join(","))}`,
+          )
+        : [];
+      const profileMap = new Map(profiles.map((p) => [p.user_id, p]));
+      setRows(
+        assessments.map((a) => ({
+          ...a,
+          profile: profileMap.get(a.user_id) ?? null,
+        })),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load assessments.");
       setRows([]);
-      return;
     }
-    const ids = Array.from(new Set((assessments ?? []).map((a) => a.user_id)));
-    const { data: profiles } = ids.length
-      ? await supabase.from("profiles").select("user_id, first_name, last_name, phone").in("user_id", ids)
-      : { data: [] as any[] };
-    const profileMap = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
-    setRows(
-      (assessments ?? []).map((a: any) => ({
-        ...a,
-        profile: profileMap.get(a.user_id) ?? null,
-      })),
-    );
   };
 
   useEffect(() => {
@@ -181,18 +181,24 @@ const Admin = () => {
         price_cents: r.price_cents,
         tier: r.tier,
       }));
-    const { error: e } = await supabase
-      .from("assessments")
-      .update({
-        proposed_services: proposed_services as unknown as never,
-        status: "proposal_sent",
-      })
-      .eq("id", editing.id);
-    setSaving(false);
-    if (e) {
-      toast({ title: "Could not save", description: e.message, variant: "destructive" });
+    try {
+      await apiFetch(`/ops/assessments/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          proposed_services,
+          status: "proposal_sent",
+        }),
+      });
+    } catch (e) {
+      setSaving(false);
+      toast({
+        title: "Could not save",
+        description: e instanceof Error ? e.message : "Save failed",
+        variant: "destructive",
+      });
       return;
     }
+    setSaving(false);
     toast({
       title: "Proposal sent",
       description: "Shareable link copied to clipboard.",
@@ -219,12 +225,17 @@ const Admin = () => {
 
   const markUnavailable = async (row: AssessmentRow) => {
     if (!confirm("Mark this assessment as Service unavailable? The customer will be notified by email and the order will be closed.")) return;
-    const { error: e } = await supabase
-      .from("assessments")
-      .update({ status: "service_unavailable" })
-      .eq("id", row.id);
-    if (e) {
-      toast({ title: "Could not update", description: e.message, variant: "destructive" });
+    try {
+      await apiFetch(`/ops/assessments/${row.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "service_unavailable" }),
+      });
+    } catch (e) {
+      toast({
+        title: "Could not update",
+        description: e instanceof Error ? e.message : "Update failed",
+        variant: "destructive",
+      });
       return;
     }
     try {

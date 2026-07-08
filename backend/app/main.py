@@ -31,6 +31,10 @@ def create_app() -> FastAPI:
     from app.routes import (  # noqa: PLC0415
         analyze_shoe_photos,
         create_checkout,
+        ops_assessments,
+        ops_blog,
+        ops_profiles,
+        ops_service_admin,
         send_account_locked,
         send_order_confirmation,
         send_password_updated,
@@ -47,6 +51,12 @@ def create_app() -> FastAPI:
     app.include_router(send_password_updated.router)
     app.include_router(send_walkup_welcome.router)
     app.include_router(send_service_unavailable.router)
+
+    # Operations dashboard routes (staff/admin gated) + public blog reads.
+    app.include_router(ops_assessments.router)
+    app.include_router(ops_blog.router)
+    app.include_router(ops_profiles.router)
+    app.include_router(ops_service_admin.router)
 
     return app
 
