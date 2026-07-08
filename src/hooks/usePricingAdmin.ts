@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/integrations/api/client";
 
 export type PricingRow = {
   id: string;
@@ -32,11 +33,10 @@ export const usePricingAdmin = () => {
       if (cents !== null && (!Number.isInteger(cents) || cents < 0)) {
         throw new Error("Price must be a whole, non-negative amount.");
       }
-      const { error } = await supabase
-        .from("services")
-        .update({ base_price_cents: cents })
-        .eq("id", id);
-      if (error) throw error;
+      await apiFetch(`/ops/services/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ base_price_cents: cents }),
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pricing-admin"] });
