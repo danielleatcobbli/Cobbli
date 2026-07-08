@@ -57,10 +57,30 @@ type Comment = {
   text: string;
 };
 
+/** The six required photo angles for both Intake ("before") and Outtake
+ * ("after"). Danielle's call: unlike the rest of the form (condition
+ * assessment, notes), these are a hard requirement, not optional — they're
+ * what protects Cobbli against a customer claiming damage that was already
+ * there at intake, or claiming a service wasn't actually done. Long-term,
+ * the plan is for the condition assessment to eventually go away once the
+ * AI model is trained, but this photo requirement stays permanently. */
+type RequiredPhotoAngle = "sole" | "topDown" | "leftSide" | "rightSide" | "back" | "inside";
+
+/** One photo per required angle (boolean — exactly one photo expected each),
+ * plus an uncapped set of extra close-ups for anything the six standard
+ * angles don't capture well (a specific scuff, a cracked buckle, etc.). */
+type PhotoSet = {
+  angles: Record<RequiredPhotoAngle, boolean>;
+  damageCloseUps: number;
+};
+
 type PhotoGroup = {
+  /** Whatever the customer attached at checkout — unstructured, and not
+   * subject to the six-angle requirement, since that's a staff-taken
+   * standard we can't ask a customer to follow at drop-off. */
   customerSubmitted: number;
-  before: number;
-  after: number;
+  before: PhotoSet;
+  after: PhotoSet;
 };
 
 /** A past pickup/return leg, retained rather than overwritten — e.g. once a
@@ -85,6 +105,43 @@ type ShoePair = {
   services: ServiceLine[];
   intakeStatus: FormStatus;
   completionStatus: FormStatus;
+  /** Per-component condition answers from the Intake form, keyed by
+   * ConditionComponentDef.key — e.g. { sole: ["worn-through"], surface:
+   * ["scuffs", "stains"] }. Optional/undefined until intake is actually
+   * started; local-state only for now (dummy data). */
+  conditionAssessment?: Record<string, string[]>;
+  /** Free-text notes from the Intake form — separate from customerNotes
+   * (what the customer wrote at checkout) and from order-level notes. */
+  intakeNotes?: string;
+  /** Free-text notes from the Outtake form. */
+  outtakeNotes?: string;
+};
+
+/** One answer option within a condition component — "Good"/"Not applicable"
+ * map to no service (nothing wrong); every other option maps to exactly one
+ * catalog service (see CONDITION_COMPONENTS below for why some real
+ * services are deliberately unreachable from this list). */
+type ConditionOption = {
+  value: string;
+  label: string;
+  service?: string;
+};
+
+type ConditionComponentDef = {
+  key: string;
+  /** Used in the on-screen question: "What is the condition of the {label}?" */
+  label: string;
+  /** Whether more than one non-exclusive answer can be true at once (e.g.
+   * Surface: scuffs AND stains can both be present). Single-select
+   * components have fully mutually-exclusive options, Good/Not-applicable
+   * included — picking one clears any other. */
+  multi: boolean;
+  /** Values that behave as an all-or-nothing reset in a multi-select
+   * component (Good / Not applicable) — selecting one clears every other
+   * answer in the group, and selecting anything else clears it. Unused for
+   * single-select components, where every option is already exclusive. */
+  exclusiveValues: string[];
+  options: ConditionOption[];
 };
 
 type OrderDetail = {
@@ -154,6 +211,185 @@ const ACTION_OWNER: Partial<Record<OrderStatus, "workshop" | "dispatch">> = {
   "rework-request-approved":        "dispatch",
 };
 
+/** The six required photo angles, in the order they're shown in the Intake
+ * and Outtake forms. Chosen to cover every condition-assessment component
+ * with no gaps and minimal overlap:
+ *  - Sole: covers Sole, and usually Heel/Heel tip (both visible from underneath).
+ *  - Top-down: covers Surface, Color, Material, and Hardware on the vamp.
+ *  - Left/right side: covers Strap, Buckle, Zipper, side stitching, and a
+ *    second angle on Heel (often easier to judge from the side).
+ *  - Back: the best angle for a cracked or separating heel.
+ *  - Inside: the only angle that covers Insole and Inner lining at all.
+ * "Damage close-ups" (see PhotoSet) is open-ended and uncapped — Danielle's
+ * call, for anything localized the six standard angles don't capture well. */
+const REQUIRED_PHOTO_ANGLES: { key: RequiredPhotoAngle; label: string }[] = [
+  { key: "sole",      label: "Sole (bottom, straight-on)" },
+  { key: "topDown",   label: "Top-down" },
+  { key: "leftSide",  label: "Left side" },
+  { key: "rightSide", label: "Right side" },
+  { key: "back",      label: "Back of shoe" },
+  { key: "inside",    label: "Inside of shoe" },
+];
+
+function emptyPhotoSet(): PhotoSet {
+  return {
+    angles: { sole: false, topDown: false, leftSide: false, rightSide: false, back: false, inside: false },
+    damageCloseUps: 0,
+  };
+}
+
+/** Total photo count for display — six required angles (however many are
+ * filled) plus however many extra damage close-ups have been added. */
+function photoSetCount(p: PhotoSet): number {
+  return Object.values(p.angles).filter(Boolean).length + p.damageCloseUps;
+}
+
+/** All six required angles filled — the gate for completing Intake/Outtake.
+ * Damage close-ups don't factor in since they're uncapped/optional. */
+function photoSetComplete(p: PhotoSet): boolean {
+  return Object.values(p.angles).every(Boolean);
+}
+
+/**
+ * The per-component condition assessment that drives the Intake form.
+ * Danielle's design, checked against the real 20-service catalog and then
+ * revised per her follow-up:
+ *  - Every component always includes a "Good" (or "Not applicable" for
+ *    parts that don't exist on every shoe) baseline, so a blank answer
+ *    never means "nobody looked" — it's always an explicit, positive answer.
+ *  - Deliberately excludes two purely preventative services — Protective
+ *    Soles and Waterproofing — from ever being auto-suggested here.
+ *    Danielle's call: those are opt-in add-ons a customer asks for when they
+ *    want them, and recommending them off a condition scan reads as
+ *    upselling, which risks trust rather than building it. (Contrast with
+ *    Deodorizing/Stretching/Dye, excluded for a different reason — no
+ *    visual signal at all, not a trust concern.)
+ *  - No dedicated "worn down but still attached" heel state — Danielle's
+ *    call: mild sole-area wear is already captured by Sole's own options,
+ *    and anything serious enough to need its own heel condition is already
+ *    covered by Loose/Separated/Missing/Cracked below.
+ *  - "Strap replacement" doesn't exist as a bookable service yet — Danielle
+ *    expects it will in the future, so it's mapped here anyway; until the
+ *    service actually exists this condition only tags photos for AI
+ *    training and doesn't correspond to a real line item.
+ */
+const CONDITION_COMPONENTS: ConditionComponentDef[] = [
+  {
+    key: "sole", label: "sole", multi: false, exclusiveValues: ["good"],
+    options: [
+      { value: "good", label: "Good" },
+      { value: "worn-through", label: "Worn through (hole present)", service: "Resole" },
+      { value: "separated", label: "Separated or detached from upper", service: "Resole" },
+    ],
+  },
+  {
+    key: "heel", label: "heel", multi: false, exclusiveValues: ["good"],
+    options: [
+      { value: "good", label: "Good" },
+      { value: "loose", label: "Loose (not yet detached)", service: "Heel repair" },
+      { value: "separated", label: "Separated (detached but present)", service: "Heel replacement" },
+      { value: "missing", label: "Missing entirely", service: "Heel replacement" },
+      { value: "cracked", label: "Cracked or broken through the body", service: "Heel replacement" },
+    ],
+  },
+  {
+    key: "heel-tip", label: "heel tip", multi: false, exclusiveValues: ["not-applicable", "good"],
+    options: [
+      { value: "not-applicable", label: "Not applicable" },
+      { value: "good", label: "Good" },
+      { value: "worn-down", label: "Worn down", service: "High heel tip repair" },
+      { value: "missing", label: "Missing", service: "High heel tip repair" },
+    ],
+  },
+  {
+    key: "insole", label: "insole", multi: false, exclusiveValues: ["good"],
+    options: [
+      { value: "good", label: "Good" },
+      { value: "worn-down", label: "Worn down", service: "Insole replacement" },
+      { value: "separating", label: "Separating", service: "Insole replacement" },
+    ],
+  },
+  {
+    key: "inner-lining", label: "inner lining", multi: false, exclusiveValues: ["good"],
+    options: [
+      { value: "good", label: "Good" },
+      { value: "scratches-holes", label: "Contains scratches or holes", service: "Lining repair" },
+    ],
+  },
+  {
+    key: "stitching", label: "stitching", multi: false, exclusiveValues: ["good"],
+    options: [
+      { value: "good", label: "Good" },
+      { value: "seam-separated", label: "Seam separated (opened, thread intact)", service: "Seam repair" },
+      { value: "thread-broken", label: "Thread broken or frayed", service: "Seam repair" },
+    ],
+  },
+  {
+    key: "surface", label: "surface", multi: true, exclusiveValues: ["good"],
+    options: [
+      { value: "good", label: "Good" },
+      { value: "dull", label: "Dull, no damage", service: "Shoe shine" },
+      { value: "scuffs", label: "Scuffs present", service: "Scuff, stain, & color restoration" },
+      { value: "scratches", label: "Scratches present", service: "Scuff, stain, & color restoration" },
+      { value: "stains", label: "Stains present", service: "Scuff, stain, & color restoration" },
+    ],
+  },
+  {
+    key: "color", label: "color", multi: true, exclusiveValues: ["good"],
+    options: [
+      { value: "good", label: "Good" },
+      { value: "faded", label: "Faded or streaky", service: "Scuff, stain, & color restoration" },
+      { value: "discolored", label: "Discolored", service: "Scuff, stain, & color restoration" },
+    ],
+  },
+  {
+    key: "material", label: "material", multi: true, exclusiveValues: ["good"],
+    options: [
+      { value: "good", label: "Good" },
+      { value: "dry-cracking", label: "Dry or cracking", service: "Cleaning & conditioning" },
+      { value: "dull-dirty", label: "Dull or dirty (needs conditioning)", service: "Cleaning & conditioning" },
+    ],
+  },
+  {
+    key: "strap", label: "strap", multi: false, exclusiveValues: ["not-applicable", "good"],
+    options: [
+      { value: "not-applicable", label: "Not applicable" },
+      { value: "good", label: "Good" },
+      { value: "separating", label: "Separating from shoe", service: "Strap repair" },
+      { value: "torn-damaged", label: "Torn or otherwise damaged", service: "Strap replacement" },
+    ],
+  },
+  {
+    key: "hardware", label: "hardware", multi: false, exclusiveValues: ["not-applicable", "good"],
+    options: [
+      { value: "not-applicable", label: "Not applicable" },
+      { value: "good", label: "Good" },
+      { value: "loose", label: "Loose or detached", service: "Hardware or buckle repair" },
+      { value: "broken", label: "Broken or damaged", service: "Hardware or buckle replacement" },
+      { value: "missing", label: "Missing", service: "Hardware or buckle replacement" },
+    ],
+  },
+  {
+    key: "buckle", label: "buckle", multi: false, exclusiveValues: ["not-applicable", "good"],
+    options: [
+      { value: "not-applicable", label: "Not applicable" },
+      { value: "good", label: "Good" },
+      { value: "loose", label: "Loose or detached", service: "Hardware or buckle repair" },
+      { value: "broken", label: "Broken or damaged", service: "Hardware or buckle replacement" },
+      { value: "missing", label: "Missing", service: "Hardware or buckle replacement" },
+    ],
+  },
+  {
+    key: "zipper", label: "zipper", multi: true, exclusiveValues: ["not-applicable", "good"],
+    options: [
+      { value: "not-applicable", label: "Not applicable" },
+      { value: "good", label: "Good" },
+      { value: "track-damaged", label: "Track or teeth detached/damaged", service: "Zipper repair" },
+      { value: "slider-broken", label: "Slider broken or missing", service: "Zipper slider repair" },
+    ],
+  },
+];
+
 const ACTION_OWNER_LABEL: Record<"workshop" | "dispatch", string> = {
   workshop: "Workshop action",
   dispatch: "Dispatch action",
@@ -200,7 +436,13 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         shoeBrand: "Cole Haan",
         shoeColorMaterial: "Cognac leather",
         customerNotes: "Please match the color as close as possible to the original — these are for a wedding next month.",
-        photos: { customerSubmitted: 2, before: 2, after: 0 },
+        // Intake complete → all 6 required "before" angles filled. Completion
+        // in-progress → outtake photos partly captured so far (2 of 6).
+        photos: {
+          customerSubmitted: 2,
+          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
+          after:  { angles: { sole: true, topDown: true, leftSide: false, rightSide: false, back: false, inside: false }, damageCloseUps: 0 },
+        },
         services: [
           { id: "1-p1-s1", name: "Resole",                    priceCents: 8500, tag: "original", done: true },
           { id: "1-p1-s2", name: "Cleaning & conditioning",    priceCents: 6500, tag: "original", done: true },
@@ -214,7 +456,12 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         shoeBrand: "Frye",
         shoeColorMaterial: "Black leather",
         // No customerNotes for this pair — shown as "No notes provided" rather than hidden.
-        photos: { customerSubmitted: 1, before: 0, after: 0 },
+        // Intake not started → no required photos taken yet.
+        photos: {
+          customerSubmitted: 1,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
         services: [
           { id: "1-p2-s1", name: "Heel replacement", priceCents: 5500, tag: "original", done: false },
         ],
@@ -259,7 +506,13 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         shoeType: "Oxford / Dress shoe",
         shoeBrand: "Allen Edmonds",
         shoeColorMaterial: "Black leather",
-        photos: { customerSubmitted: 3, before: 4, after: 0 },
+        // Intake complete → all 6 required "before" angles filled. Completion
+        // not started → no "after" photos yet.
+        photos: {
+          customerSubmitted: 3,
+          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 1 },
+          after: emptyPhotoSet(),
+        },
         services: [
           { id: "2-p1-s1", name: "Resole",                        priceCents: 8500, tag: "original", done: true },
           { id: "2-p1-s2", name: "Leather or suede conditioning",  priceCents: 6500, tag: "original", done: false },
@@ -313,7 +566,13 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         shoeType: "Ankle boot",
         shoeBrand: "Isabel Marant",
         shoeColorMaterial: "Tan suede",
-        photos: { customerSubmitted: 2, before: 3, after: 2 },
+        // Both intake and completion are complete → all 6 required angles
+        // filled for both before and after.
+        photos: {
+          customerSubmitted: 2,
+          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
+          after:  { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
+        },
         services: [
           { id: "5-p1-s1", name: "Seam repair", priceCents: 5000, tag: "original", done: true },
           { id: "5-p1-s2", name: "Shoe shine",   priceCents: 2000, tag: "original", done: true },
@@ -366,7 +625,13 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         shoeType: "Chelsea boot",
         shoeBrand: "Common Projects",
         shoeColorMaterial: "Black leather",
-        photos: { customerSubmitted: 2, before: 3, after: 3 },
+        // Both intake and completion are complete → all 6 required angles
+        // filled for both before and after.
+        photos: {
+          customerSubmitted: 2,
+          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
+          after:  { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
+        },
         services: [
           { id: "9-p1-s1", name: "Seam repair", priceCents: 5500, tag: "original", done: true },
           { id: "9-p1-s2", name: "Heel repair",  priceCents: 4500, tag: "rework",   done: true },
@@ -413,7 +678,12 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         shoeType: "Loafer",
         shoeBrand: "Gucci",
         shoeColorMaterial: "Tan leather / horsebit hardware",
-        photos: { customerSubmitted: 4, before: 0, after: 0 },
+        // Intake not started → no required photos taken yet.
+        photos: {
+          customerSubmitted: 4,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
         services: [
           { id: "10-p1-s1", name: "Hardware repair",      priceCents: 4500, tag: "original", done: false },
           { id: "10-p1-s2", name: "Leather conditioning",  priceCents: 6500, tag: "original", done: false },
@@ -631,10 +901,14 @@ function FormRow({
   label,
   status,
   disabled,
+  onClick,
 }: {
   label: string;
   status: FormStatus;
   disabled: boolean;
+  /** Reopens the form (Intake so far) for review or to keep filling it in —
+   * omitted for forms that don't have a UI to open yet (Outtake). */
+  onClick?: () => void;
 }) {
   const statusText = status === "not-started" ? "Not started" : status === "in-progress" ? "In progress" : "Complete";
   const iconColor = status === "complete" ? "#166534" : disabled ? "#d1d5db" : status === "in-progress" ? "#92400e" : "#9ca3af";
@@ -642,6 +916,7 @@ function FormRow({
     <button
       type="button"
       disabled={disabled}
+      onClick={onClick}
       style={{
         display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
         padding: "10px 12px", borderRadius: 6, border: "1px solid #e0d8cc",
@@ -731,6 +1006,440 @@ function ServiceChecklist({
   );
 }
 
+/** One condition component's options, rendered as a row of toggle pills
+ * under a plain section header (just the component name — "Sole," "Heel,"
+ * etc.) rather than repeating the full "What is the condition of the...?"
+ * question for every single component. That question is asked once, as the
+ * section intro above the whole group (see IntakeFormModal) — Danielle's
+ * call, to make a 13-component form easier to scan. Single-select components
+ * behave like radio buttons (including Good/Not-applicable); multi-select
+ * components allow combining non-exclusive answers, with Good/Not-applicable
+ * still acting as an all-or-nothing reset — see toggleCondition in PairCard
+ * for the logic. */
+function ConditionGroup({
+  comp,
+  selected,
+  onToggle,
+}: {
+  comp: ConditionComponentDef;
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  const heading = comp.label.charAt(0).toUpperCase() + comp.label.slice(1);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 600, color: "#374151" }}>
+        {heading}
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {comp.options.map(opt => {
+          const isSelected = selected.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onToggle(opt.value)}
+              style={{
+                padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 500,
+                border: isSelected ? "1px solid #3d1700" : "1px solid #e0d8cc",
+                backgroundColor: isSelected ? "#3d1700" : "#fff",
+                color: isSelected ? "#fff" : "#374151",
+                cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit",
+              }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** The required-photo capture UI, shared between Intake ("before") and
+ * Outtake ("after") — six labeled angle tiles (tap to mark captured, tap
+ * again to clear — dummy data, no real camera/upload yet) plus an
+ * open-ended, uncapped set of damage close-ups. These six are a hard
+ * requirement (Danielle: they're what protects Cobbli against a customer
+ * claiming damage that was already there, or that a service wasn't done),
+ * unlike everything else in Intake/Outtake, which stays optional. */
+function PhotoAngleGrid({
+  photos,
+  onToggleAngle,
+  onAddCloseUp,
+  onRemoveCloseUp,
+}: {
+  photos: PhotoSet;
+  onToggleAngle: (angle: RequiredPhotoAngle) => void;
+  onAddCloseUp: () => void;
+  onRemoveCloseUp: () => void;
+}) {
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {REQUIRED_PHOTO_ANGLES.map(a => {
+          const filled = photos.angles[a.key];
+          return (
+            <button
+              key={a.key}
+              type="button"
+              onClick={() => onToggleAngle(a.key)}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
+                width: 96, height: 88, borderRadius: 8, cursor: "pointer", fontFamily: "inherit", textAlign: "center",
+                border: filled ? "1px solid #166534" : "1px dashed #d1d5db",
+                backgroundColor: filled ? "#f0fdf4" : "#fafafa",
+              }}
+            >
+              {filled
+                ? <CheckCircle2 size={18} style={{ color: "#166534" }} />
+                : <Camera size={18} style={{ color: "#9ca3af" }} />}
+              <span style={{ fontSize: 10, fontWeight: 500, color: filled ? "#166534" : "#6b7280", lineHeight: 1.2, padding: "0 4px" }}>
+                {a.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 12, color: "#6b7280" }}>Damage close-ups: {photos.damageCloseUps}</span>
+        <button
+          type="button"
+          onClick={onAddCloseUp}
+          style={{ fontSize: 12, padding: "3px 9px", borderRadius: 6, border: "1px solid #e0d8cc", backgroundColor: "#fff", color: "#374151", cursor: "pointer", fontFamily: "inherit" }}
+        >
+          + Add
+        </button>
+        {photos.damageCloseUps > 0 && (
+          <button
+            type="button"
+            onClick={onRemoveCloseUp}
+            style={{ fontSize: 12, padding: "3px 9px", borderRadius: 6, border: "1px solid #e0d8cc", backgroundColor: "#fff", color: "#374151", cursor: "pointer", fontFamily: "inherit" }}
+          >
+            − Remove
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The Intake form itself — read-only services list (mirrors what's on this
+ * pair, not editable here), the required photo capture, the full
+ * per-component condition assessment, and a free-text notes field. "Save &
+ * finish later" marks the pair in-progress without requiring everything
+ * filled in (photos and a complete assessment are both optional to *save*);
+ * "Complete intake" is what actually unblocks the Services checklist and
+ * Outtake for this pair, and is gated on all six required photos being
+ * present — the one hard requirement in this whole form. */
+function IntakeFormModal({
+  pair,
+  services,
+  photos,
+  onTogglePhotoAngle,
+  onAddDamageCloseUp,
+  onRemoveDamageCloseUp,
+  answers,
+  notes,
+  onToggleCondition,
+  onNotesChange,
+  onClose,
+  onSave,
+}: {
+  pair: ShoePair;
+  services: ServiceLine[];
+  photos: PhotoSet;
+  onTogglePhotoAngle: (angle: RequiredPhotoAngle) => void;
+  onAddDamageCloseUp: () => void;
+  onRemoveDamageCloseUp: () => void;
+  answers: Record<string, string[]>;
+  notes: string;
+  onToggleCondition: (comp: ConditionComponentDef, value: string) => void;
+  onNotesChange: (value: string) => void;
+  onClose: () => void;
+  onSave: (status: FormStatus) => void;
+}) {
+  const photosComplete = photoSetComplete(photos);
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, backgroundColor: "rgba(61,23,0,0.35)",
+        display: "flex", alignItems: "flex-start", justifyContent: "center",
+        padding: "40px 16px", zIndex: 50, overflowY: "auto",
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{ backgroundColor: "#fff", borderRadius: 10, maxWidth: 640, width: "100%", padding: "24px 28px", marginBottom: 40 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#3d1700" }}>
+            Intake form{pair.shoeType ? ` — ${pair.shoeType}` : ""}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 13, fontFamily: "inherit" }}
+          >
+            Close
+          </button>
+        </div>
+        <p style={{ margin: "0 0 20px", fontSize: 12, color: "#9ca3af" }}>
+          Assess this pair component by component. Every answer tags the pair for future AI training —
+          it's separate from, and never changes, the services already on this order.
+        </p>
+
+        <div style={{ marginBottom: 18 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Services being performed
+          </p>
+          {services.length === 0 ? (
+            <p style={{ color: "#9ca3af", fontSize: 13, margin: 0 }}>No services recorded yet.</p>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "#374151" }}>
+              {services.map(s => <li key={s.id}>{s.name}</li>)}
+            </ul>
+          )}
+        </div>
+
+        <div style={{ borderTop: "1px solid #f0ece5", paddingTop: 16, marginBottom: 18 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Photos — required
+          </p>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#9ca3af" }}>
+            All six angles are required to complete intake — this is what protects Cobbli if a customer later claims damage that was already there at drop-off.
+          </p>
+          <PhotoAngleGrid
+            photos={photos}
+            onToggleAngle={onTogglePhotoAngle}
+            onAddCloseUp={onAddDamageCloseUp}
+            onRemoveCloseUp={onRemoveDamageCloseUp}
+          />
+        </div>
+
+        <div style={{ borderTop: "1px solid #f0ece5", paddingTop: 16 }}>
+          <p style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            What is the condition of the...
+          </p>
+          {CONDITION_COMPONENTS.map(comp => (
+            <ConditionGroup
+              key={comp.key}
+              comp={comp}
+              selected={answers[comp.key] ?? []}
+              onToggle={value => onToggleCondition(comp, value)}
+            />
+          ))}
+        </div>
+
+        <div>
+          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Notes</p>
+          <textarea
+            value={notes}
+            onChange={e => onNotesChange(e.target.value)}
+            placeholder="Anything the checklist above doesn't capture..."
+            rows={3}
+            style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #e0d8cc", fontFamily: "inherit", fontSize: 13, resize: "vertical", boxSizing: "border-box" }}
+          />
+        </div>
+
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #f0ece5" }}>
+          {!photosComplete && (
+            <div
+              role="alert"
+              style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", marginBottom: 10,
+                borderRadius: 6, backgroundColor: "#fef2f2", border: "1px solid #fecaca",
+                fontSize: 12, color: "#991b1b", fontWeight: 500,
+              }}
+            >
+              <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+              All 6 required photos must be added before intake can be marked complete.
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => onSave("in-progress")}
+              style={{ padding: "8px 16px", backgroundColor: "#fff", color: "#374151", border: "1px solid #e0d8cc", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Save &amp; finish later
+            </button>
+            <button
+              type="button"
+              disabled={!photosComplete}
+              onClick={() => onSave("complete")}
+              style={{
+                padding: "8px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                backgroundColor: photosComplete ? "#3d1700" : "#d1d5db",
+                color: "#fff",
+                cursor: photosComplete ? "pointer" : "not-allowed",
+              }}
+            >
+              Complete intake
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The Outtake form — mirrors Intake's structure per Danielle's call
+ * (required photos should be symmetric between the two, so before/after
+ * actually line up shot-for-shot). Services are shown read-only here too:
+ * per the resolved spec, Outtake reuses the same checklist staff already
+ * checked off during the repair (see "Services applied") rather than a
+ * second, separate confirmation pass. Gated on both all services being
+ * checked off *and* all six required "after" photos being present. */
+function OuttakeFormModal({
+  pair,
+  services,
+  photos,
+  onTogglePhotoAngle,
+  onAddDamageCloseUp,
+  onRemoveDamageCloseUp,
+  notes,
+  onNotesChange,
+  onClose,
+  onSave,
+}: {
+  pair: ShoePair;
+  services: ServiceLine[];
+  photos: PhotoSet;
+  onTogglePhotoAngle: (angle: RequiredPhotoAngle) => void;
+  onAddDamageCloseUp: () => void;
+  onRemoveDamageCloseUp: () => void;
+  notes: string;
+  onNotesChange: (value: string) => void;
+  onClose: () => void;
+  onSave: (status: FormStatus) => void;
+}) {
+  const photosComplete = photoSetComplete(photos);
+  const allServicesDone = services.length > 0 && services.every(s => s.done);
+  const canComplete = photosComplete && allServicesDone;
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, backgroundColor: "rgba(61,23,0,0.35)",
+        display: "flex", alignItems: "flex-start", justifyContent: "center",
+        padding: "40px 16px", zIndex: 50, overflowY: "auto",
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{ backgroundColor: "#fff", borderRadius: 10, maxWidth: 640, width: "100%", padding: "24px 28px", marginBottom: 40 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#3d1700" }}>
+            Outtake form{pair.shoeType ? ` — ${pair.shoeType}` : ""}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 13, fontFamily: "inherit" }}
+          >
+            Close
+          </button>
+        </div>
+        <p style={{ margin: "0 0 20px", fontSize: 12, color: "#9ca3af" }}>
+          Confirm each service was completed and document the finished pair — this closes out the repair for this pair.
+        </p>
+
+        <div style={{ marginBottom: 18 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Services completed
+          </p>
+          {services.length === 0 ? (
+            <p style={{ color: "#9ca3af", fontSize: 13, margin: 0 }}>No services recorded yet.</p>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+              {services.map(s => (
+                <li key={s.id} style={{ color: s.done ? "#166534" : "#991b1b" }}>
+                  {s.name} — {s.done ? "done" : "not yet checked off"}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!allServicesDone && services.length > 0 && (
+            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#991b1b" }}>
+              All services must be checked off (see "Services applied" on the pair card) before outtake can be completed.
+            </p>
+          )}
+        </div>
+
+        <div style={{ borderTop: "1px solid #f0ece5", paddingTop: 16 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Photos — required
+          </p>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#9ca3af" }}>
+            Same six angles as intake, so before and after actually line up shot-for-shot.
+          </p>
+          <PhotoAngleGrid
+            photos={photos}
+            onToggleAngle={onTogglePhotoAngle}
+            onAddCloseUp={onAddDamageCloseUp}
+            onRemoveCloseUp={onRemoveDamageCloseUp}
+          />
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Notes</p>
+          <textarea
+            value={notes}
+            onChange={e => onNotesChange(e.target.value)}
+            placeholder="Anything worth noting about the finished repair..."
+            rows={3}
+            style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #e0d8cc", fontFamily: "inherit", fontSize: 13, resize: "vertical", boxSizing: "border-box" }}
+          />
+        </div>
+
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #f0ece5" }}>
+          {!canComplete && (
+            <div
+              role="alert"
+              style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", marginBottom: 10,
+                borderRadius: 6, backgroundColor: "#fef2f2", border: "1px solid #fecaca",
+                fontSize: 12, color: "#991b1b", fontWeight: 500,
+              }}
+            >
+              <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+              {!allServicesDone
+                ? "All services must be checked off, and all 6 required photos added, before outtake can be marked complete."
+                : "All 6 required photos must be added before outtake can be marked complete."}
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => onSave("in-progress")}
+              style={{ padding: "8px 16px", backgroundColor: "#fff", color: "#374151", border: "1px solid #e0d8cc", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Save &amp; finish later
+            </button>
+            <button
+              type="button"
+              disabled={!canComplete}
+              onClick={() => onSave("complete")}
+              style={{
+                padding: "8px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                backgroundColor: canComplete ? "#3d1700" : "#d1d5db",
+                color: "#fff",
+                cursor: canComplete ? "pointer" : "not-allowed",
+              }}
+            >
+              Complete outtake
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** One card per pair of shoes in the order — shoe details, notes, photos,
  * a services checklist, and this pair's own intake/outtake status, all in one
  * place (Danielle's ask: this reads closer to the compact "Repair summary"
@@ -739,7 +1448,25 @@ function ServiceChecklist({
  * outtake for a pair is blocked until that pair's own intake is complete. */
 function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total: number }) {
   const [services, setServices] = useState<ServiceLine[]>(pair.services);
-  const intakeDone = pair.intakeStatus === "complete";
+
+  // Intake/Outtake status now live in local state (rather than reading
+  // pair.intakeStatus/completionStatus directly) so actually completing a
+  // form in this session takes effect immediately — unblocking the Services
+  // checklist and Outtake, or closing out the pair, without needing a page
+  // reload or real backend round-trip.
+  const [intakeStatus, setIntakeStatus] = useState<FormStatus>(pair.intakeStatus);
+  const [completionStatus, setCompletionStatus] = useState<FormStatus>(pair.completionStatus);
+  const [conditionAnswers, setConditionAnswers] = useState<Record<string, string[]>>(pair.conditionAssessment ?? {});
+  const [intakeNotes, setIntakeNotes] = useState(pair.intakeNotes ?? "");
+  const [outtakeNotes, setOuttakeNotes] = useState(pair.outtakeNotes ?? "");
+  const [beforePhotos, setBeforePhotos] = useState<PhotoSet>(pair.photos.before);
+  const [afterPhotos, setAfterPhotos] = useState<PhotoSet>(pair.photos.after);
+  const [intakeModalOpen, setIntakeModalOpen] = useState(false);
+  const [outtakeModalOpen, setOuttakeModalOpen] = useState(false);
+
+  const intakeDone = intakeStatus === "complete";
+  const outtakeDone = completionStatus === "complete";
+
   const toggleService = (id: string) => {
     // Guard the handler itself, not just the UI — a service can't be marked
     // done on a pair whose intake isn't complete yet (Danielle's bug report:
@@ -747,80 +1474,172 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
     if (!intakeDone) return;
     setServices(prev => prev.map(s => (s.id === id ? { ...s, done: !s.done } : s)));
   };
+
+  // Good/Not-applicable is an all-or-nothing reset; beyond that, single-select
+  // components behave like radio buttons (every option mutually exclusive),
+  // while multi-select components (Surface, Color, Material, Zipper) allow
+  // combining non-exclusive answers — e.g. scuffs and stains can both be true.
+  const toggleCondition = (comp: ConditionComponentDef, value: string) => {
+    setConditionAnswers(prev => {
+      const current = prev[comp.key] ?? [];
+      if (!comp.multi) {
+        const next = current.includes(value) ? [] : [value];
+        return { ...prev, [comp.key]: next };
+      }
+      if (comp.exclusiveValues.includes(value)) {
+        const next = current.includes(value) ? [] : [value];
+        return { ...prev, [comp.key]: next };
+      }
+      const withoutExclusive = current.filter(v => !comp.exclusiveValues.includes(v));
+      const next = withoutExclusive.includes(value)
+        ? withoutExclusive.filter(v => v !== value)
+        : [...withoutExclusive, value];
+      return { ...prev, [comp.key]: next };
+    });
+  };
+
+  const toggleBeforePhotoAngle = (angle: RequiredPhotoAngle) => {
+    setBeforePhotos(prev => ({ ...prev, angles: { ...prev.angles, [angle]: !prev.angles[angle] } }));
+  };
+  const toggleAfterPhotoAngle = (angle: RequiredPhotoAngle) => {
+    setAfterPhotos(prev => ({ ...prev, angles: { ...prev.angles, [angle]: !prev.angles[angle] } }));
+  };
+
+  const saveIntake = (status: FormStatus) => {
+    setIntakeStatus(status);
+    setIntakeModalOpen(false);
+  };
+  const saveOuttake = (status: FormStatus) => {
+    setCompletionStatus(status);
+    setOuttakeModalOpen(false);
+  };
+
   const servicesTotal = services.reduce((s, l) => s + l.priceCents, 0);
   const allServicesDone = services.length > 0 && services.every(s => s.done);
 
-  const outtakeDone = pair.completionStatus === "complete";
   const headerCta = !intakeDone
-    ? (pair.intakeStatus === "not-started" ? "Complete intake form" : "Continue intake form")
+    ? (intakeStatus === "not-started" ? "Complete intake form" : "Continue intake form")
     : !outtakeDone
-    ? (pair.completionStatus === "not-started" ? "Complete outtake form" : "Continue outtake form")
+    ? (completionStatus === "not-started" ? "Complete outtake form" : "Continue outtake form")
     : null;
 
   const title = total > 1
     ? `Pair ${index + 1}${pair.shoeType ? ` — ${pair.shoeType}` : ""}`
     : (pair.shoeType || "Shoe & services");
 
-  const photoGroups = [
-    { label: "Customer-submitted", count: pair.photos.customerSubmitted },
-    { label: "Before (intake)",    count: pair.photos.before },
-    { label: "After (outtake)",    count: pair.photos.after },
-  ];
+  const beforeFilled = REQUIRED_PHOTO_ANGLES.filter(a => beforePhotos.angles[a.key]).length;
+  const beforeComplete = beforeFilled === REQUIRED_PHOTO_ANGLES.length;
+  const afterFilled = REQUIRED_PHOTO_ANGLES.filter(a => afterPhotos.angles[a.key]).length;
+  const afterComplete = afterFilled === REQUIRED_PHOTO_ANGLES.length;
 
   return (
-    <Card
-      title={title}
-      headerAction={headerCta && (
-        <button
-          type="button"
-          style={{ padding: "6px 14px", backgroundColor: "#3d1700", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}
-        >
-          {headerCta} →
-        </button>
-      )}
-    >
-      <KVRow label="Shoe type">{pair.shoeType || "—"}</KVRow>
-      <KVRow label="Brand">{pair.shoeBrand || "—"}</KVRow>
-      <KVRow label="Color / material">{pair.shoeColorMaterial || "—"}</KVRow>
-      <KVRow label="Notes">
-        {pair.customerNotes
-          ? <span style={{ fontStyle: "italic" }}>{pair.customerNotes}</span>
-          : <span style={{ color: "#9ca3af" }}>No notes provided</span>}
-      </KVRow>
-
-      <div style={{ marginTop: 14 }}>
-        <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Photos (optional)</p>
-        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-          {photoGroups.map(g => (
-            <div key={g.label} style={{ minWidth: 140 }}>
-              <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>{g.label} · {g.count}</p>
-              <PhotoGrid count={g.count} label={g.label} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 14 }}>
-        <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Services applied</p>
-        <ServiceChecklist services={services} onToggle={toggleService} locked={!intakeDone} />
-        {services.length > 0 && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6, fontSize: 13, fontWeight: 600, color: "#3d1700" }}>
-            Total: {fmtPrice(servicesTotal)}
-          </div>
+    <>
+      <Card
+        title={title}
+        headerAction={headerCta && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!intakeDone) setIntakeModalOpen(true);
+              else if (!outtakeDone) setOuttakeModalOpen(true);
+            }}
+            style={{ padding: "6px 14px", backgroundColor: "#3d1700", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}
+          >
+            {headerCta} →
+          </button>
         )}
-      </div>
+      >
+        <KVRow label="Shoe type">{pair.shoeType || "—"}</KVRow>
+        <KVRow label="Brand">{pair.shoeBrand || "—"}</KVRow>
+        <KVRow label="Color / material">{pair.shoeColorMaterial || "—"}</KVRow>
+        <KVRow label="Notes">
+          {pair.customerNotes
+            ? <span style={{ fontStyle: "italic" }}>{pair.customerNotes}</span>
+            : <span style={{ color: "#9ca3af" }}>No notes provided</span>}
+        </KVRow>
 
-      <div style={{ marginTop: 14 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <FormRow label="Intake form" status={pair.intakeStatus} disabled={false} />
-          <FormRow label="Outtake form" status={pair.completionStatus} disabled={!intakeDone} />
+        <div style={{ marginTop: 14 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Photos</p>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+            <div style={{ minWidth: 140 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>Customer-submitted (optional) · {pair.photos.customerSubmitted}</p>
+              <PhotoGrid count={pair.photos.customerSubmitted} label="Customer-submitted" />
+            </div>
+            <div style={{ minWidth: 180 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>
+                Before (intake) — required · {beforeFilled}/{REQUIRED_PHOTO_ANGLES.length}
+                {beforePhotos.damageCloseUps > 0 ? ` + ${beforePhotos.damageCloseUps} extra` : ""}
+              </p>
+              <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, backgroundColor: beforeComplete ? "#dcfce7" : "#fef3c7", color: beforeComplete ? "#166534" : "#92400e" }}>
+                {beforeComplete ? "Required photos complete" : "Required photos missing"}
+              </span>
+            </div>
+            <div style={{ minWidth: 180 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>
+                After (outtake) — required · {afterFilled}/{REQUIRED_PHOTO_ANGLES.length}
+                {afterPhotos.damageCloseUps > 0 ? ` + ${afterPhotos.damageCloseUps} extra` : ""}
+              </p>
+              <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, backgroundColor: afterComplete ? "#dcfce7" : "#fef3c7", color: afterComplete ? "#166534" : "#92400e" }}>
+                {afterComplete ? "Required photos complete" : "Required photos missing"}
+              </span>
+            </div>
+          </div>
         </div>
-        <p style={{ margin: "10px 0 0", fontSize: 11, color: "#9ca3af" }}>
-          Complete intake to start the repair — services can't be checked off until then. Complete outtake to close it out.
-          {!allServicesDone && services.length > 0 ? " All services must be checked off before outtake can be marked complete." : ""}
-        </p>
-      </div>
-    </Card>
+
+        <div style={{ marginTop: 14 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Services applied</p>
+          <ServiceChecklist services={services} onToggle={toggleService} locked={!intakeDone} />
+          {services.length > 0 && (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6, fontSize: 13, fontWeight: 600, color: "#3d1700" }}>
+              Total: {fmtPrice(servicesTotal)}
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <FormRow label="Intake form" status={intakeStatus} disabled={false} onClick={() => setIntakeModalOpen(true)} />
+            <FormRow label="Outtake form" status={completionStatus} disabled={!intakeDone} onClick={() => setOuttakeModalOpen(true)} />
+          </div>
+          <p style={{ margin: "10px 0 0", fontSize: 11, color: "#9ca3af" }}>
+            Complete intake to start the repair — services can't be checked off until then. Complete outtake to close it out.
+            {!allServicesDone && services.length > 0 ? " All services must be checked off before outtake can be marked complete." : ""}
+          </p>
+        </div>
+      </Card>
+
+      {intakeModalOpen && (
+        <IntakeFormModal
+          pair={pair}
+          services={services}
+          photos={beforePhotos}
+          onTogglePhotoAngle={toggleBeforePhotoAngle}
+          onAddDamageCloseUp={() => setBeforePhotos(prev => ({ ...prev, damageCloseUps: prev.damageCloseUps + 1 }))}
+          onRemoveDamageCloseUp={() => setBeforePhotos(prev => ({ ...prev, damageCloseUps: Math.max(0, prev.damageCloseUps - 1) }))}
+          answers={conditionAnswers}
+          notes={intakeNotes}
+          onToggleCondition={toggleCondition}
+          onNotesChange={setIntakeNotes}
+          onClose={() => setIntakeModalOpen(false)}
+          onSave={saveIntake}
+        />
+      )}
+
+      {outtakeModalOpen && (
+        <OuttakeFormModal
+          pair={pair}
+          services={services}
+          photos={afterPhotos}
+          onTogglePhotoAngle={toggleAfterPhotoAngle}
+          onAddDamageCloseUp={() => setAfterPhotos(prev => ({ ...prev, damageCloseUps: prev.damageCloseUps + 1 }))}
+          onRemoveDamageCloseUp={() => setAfterPhotos(prev => ({ ...prev, damageCloseUps: Math.max(0, prev.damageCloseUps - 1) }))}
+          notes={outtakeNotes}
+          onNotesChange={setOuttakeNotes}
+          onClose={() => setOuttakeModalOpen(false)}
+          onSave={saveOuttake}
+        />
+      )}
+    </>
   );
 }
 
@@ -899,7 +1718,7 @@ function WorkshopSummaryCard({ order }: { order: OrderDetail }) {
       {order.pairs.map((pair, i) => {
         const totalServices = pair.services.length;
         const doneServices = pair.services.filter(s => s.done).length;
-        const totalPhotos = pair.photos.customerSubmitted + pair.photos.before + pair.photos.after;
+        const totalPhotos = pair.photos.customerSubmitted + photoSetCount(pair.photos.before) + photoSetCount(pair.photos.after);
         return (
           <div
             key={pair.id}
@@ -1119,7 +1938,7 @@ export default function AdminOrderDetail() {
           {detailView === "workshop" ? "Workshop" : "Dispatch"} — Order detail
         </span>
         <div style={{ width: 34, height: 34, borderRadius: "50%", backgroundColor: "#fdb600", color: "#3d1700", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
-          DA
+          DO
         </div>
       </header>
 
