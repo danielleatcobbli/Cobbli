@@ -13,9 +13,9 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiFetchJson } from "@/integrations/api/client";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import {
-  BLOG_BUCKET,
   type BlogPost,
   type BlogStatus,
   formatPublishedDate,
@@ -74,9 +74,14 @@ const AdminBlog = () => {
 
   const handleDelete = async (post: BlogPost) => {
     if (!window.confirm(`Delete "${post.title}"? This can't be undone.`)) return;
-    const { error } = await supabase.from("blog_posts").delete().eq("id", post.id);
-    if (error) {
-      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+    try {
+      await apiFetch(`/ops/blog/posts/${post.id}`, { method: "DELETE" });
+    } catch (error) {
+      toast({
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Delete failed",
+        variant: "destructive",
+      });
       return;
     }
     toast({ title: "Post deleted" });
@@ -236,16 +241,20 @@ const Editor = ({ initial, authorId, onCancel, onSaved }: EditorProps) => {
     }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `covers/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage
-        .from(BLOG_BUCKET)
-        .upload(path, file, { contentType: file.type, upsert: false });
-      if (error) {
-        toast({ title: "Upload failed", description: error.message, variant: "destructive" });
-        return;
-      }
-      setForm((f) => ({ ...f, cover_image_url: path }));
+      const body = new FormData();
+      body.append("file", file);
+      body.append("kind", "cover");
+      const { url } = await apiFetchJson<{ url: string }>("/ops/blog/upload", {
+        method: "POST",
+        body,
+      });
+      setForm((f) => ({ ...f, cover_image_url: url }));
+    } catch (error) {
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Upload failed",
+        variant: "destructive",
+      });
     } finally {
       setUploading(false);
     }
@@ -259,17 +268,23 @@ const Editor = ({ initial, authorId, onCancel, onSaved }: EditorProps) => {
       input.onchange = async () => {
         const file = input.files?.[0];
         if (!file) return resolve(null);
-        const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-        const path = `inline/${crypto.randomUUID()}.${ext}`;
-        const { error } = await supabase.storage
-          .from(BLOG_BUCKET)
-          .upload(path, file, { contentType: file.type, upsert: false });
-        if (error) {
-          toast({ title: "Image upload failed", description: error.message, variant: "destructive" });
-          return resolve(null);
+        try {
+          const body = new FormData();
+          body.append("file", file);
+          body.append("kind", "inline");
+          const { url } = await apiFetchJson<{ url: string }>("/ops/blog/upload", {
+            method: "POST",
+            body,
+          });
+          resolve(url);
+        } catch (error) {
+          toast({
+            title: "Image upload failed",
+            description: error instanceof Error ? error.message : "Image upload failed",
+            variant: "destructive",
+          });
+          resolve(null);
         }
-        const url = await resolveCoverUrl(path);
-        resolve(url);
       };
       input.click();
     });
@@ -299,20 +314,25 @@ const Editor = ({ initial, authorId, onCancel, onSaved }: EditorProps) => {
         published_at: form.published_at,
       };
 
-      if (isEditing && initial) {
-        const { error } = await supabase.from("blog_posts").update(payload).eq("id", initial.id);
-        if (error) {
-          toast({ title: "Save failed", description: error.message, variant: "destructive" });
-          return;
+      try {
+        if (isEditing && initial) {
+          await apiFetch(`/ops/blog/posts/${initial.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+        } else {
+          await apiFetch("/ops/blog/posts", {
+            method: "POST",
+            body: JSON.stringify({ ...payload, author_id: authorId }),
+          });
         }
-      } else {
-        const { error } = await supabase
-          .from("blog_posts")
-          .insert({ ...payload, author_id: authorId });
-        if (error) {
-          toast({ title: "Save failed", description: error.message, variant: "destructive" });
-          return;
-        }
+      } catch (error) {
+        toast({
+          title: "Save failed",
+          description: error instanceof Error ? error.message : "Save failed",
+          variant: "destructive",
+        });
+        return;
       }
       toast({ title: nextStatus === "published" ? "Post published" : "Draft saved" });
       onSaved();

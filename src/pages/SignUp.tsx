@@ -77,6 +77,10 @@ const SignUp = () => {
 
   const handleGoogle = async () => {
     setFormError(null);
+    // Native Supabase OAuth (replaces the removed Lovable wrapper). Redirect
+    // back to /signup — a non-protected route — so the PKCE code exchange
+    // completes; the saved returnTo (checkout/start-repair) is consumed after
+    // the session is established.
     saveReturnTo(from);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -85,9 +89,8 @@ const SignUp = () => {
     if (error) {
       setFormError("Google sign-in failed. Please try again.");
     }
-    // On success, Supabase redirects the full page to Google — execution stops here.
-    // We land back on /signup, where the mount effect above consumes the saved
-    // return-to path (see saveReturnTo above) and finishes the redirect.
+    // We land back on /signup, where the mount effect above consumes the
+    // saved return-to path via consumeReturnTo() and finishes the redirect.
   };
 
   const handleSubmit = async (e: FormEvent) => {
