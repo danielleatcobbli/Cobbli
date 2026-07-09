@@ -64,14 +64,23 @@ type Comment = {
  * there at intake, or claiming a service wasn't actually done. Long-term,
  * the plan is for the condition assessment to eventually go away once the
  * AI model is trained, but this photo requirement stays permanently. */
-type RequiredPhotoAngle = "sole" | "topDown" | "leftSide" | "rightSide" | "back" | "inside";
+export type RequiredPhotoAngle = "sole" | "topDown" | "leftSide" | "rightSide" | "back" | "inside";
 
-/** One photo per required angle (boolean — exactly one photo expected each),
- * plus an uncapped set of extra close-ups for anything the six standard
+/** An actual captured photo — a real file, previewable in the browser via an
+ * object URL (client-side only; nothing uploads to a server yet, consistent
+ * with the rest of this page's dummy-data/local-state approach). */
+export type CapturedPhoto = {
+  id: string;
+  previewUrl: string;
+  fileName: string;
+};
+
+/** One photo per required angle — undefined/absent means not yet captured —
+ * plus an uncapped list of extra close-ups for anything the six standard
  * angles don't capture well (a specific scuff, a cracked buckle, etc.). */
-type PhotoSet = {
-  angles: Record<RequiredPhotoAngle, boolean>;
-  damageCloseUps: number;
+export type PhotoSet = {
+  angles: Partial<Record<RequiredPhotoAngle, CapturedPhoto>>;
+  damageCloseUps: CapturedPhoto[];
 };
 
 type PhotoGroup = {
@@ -94,7 +103,7 @@ type LogisticsLeg = { label: string; date: string; timeLabel: string };
  * from a single checkout (one bag, several pairs) — each pair has its own
  * shoe details, notes, photos, services, and its own independent intake/
  * outtake gating, rather than one combined status for the whole order. */
-type ShoePair = {
+export type ShoePair = {
   id: string;
   shoeType: string;
   shoeBrand: string;
@@ -144,7 +153,7 @@ type ConditionComponentDef = {
   options: ConditionOption[];
 };
 
-type OrderDetail = {
+export type OrderDetail = {
   id: string;
   orderNumber: string;
   status: OrderStatus;
@@ -222,7 +231,7 @@ const ACTION_OWNER: Partial<Record<OrderStatus, "workshop" | "dispatch">> = {
  *  - Inside: the only angle that covers Insole and Inner lining at all.
  * "Damage close-ups" (see PhotoSet) is open-ended and uncapped — Danielle's
  * call, for anything localized the six standard angles don't capture well. */
-const REQUIRED_PHOTO_ANGLES: { key: RequiredPhotoAngle; label: string }[] = [
+export const REQUIRED_PHOTO_ANGLES: { key: RequiredPhotoAngle; label: string }[] = [
   { key: "sole",      label: "Sole (bottom, straight-on)" },
   { key: "topDown",   label: "Top-down" },
   { key: "leftSide",  label: "Left side" },
@@ -232,22 +241,45 @@ const REQUIRED_PHOTO_ANGLES: { key: RequiredPhotoAngle; label: string }[] = [
 ];
 
 function emptyPhotoSet(): PhotoSet {
-  return {
-    angles: { sole: false, topDown: false, leftSide: false, rightSide: false, back: false, inside: false },
-    damageCloseUps: 0,
-  };
+  return { angles: {}, damageCloseUps: [] };
 }
 
 /** Total photo count for display — six required angles (however many are
  * filled) plus however many extra damage close-ups have been added. */
 function photoSetCount(p: PhotoSet): number {
-  return Object.values(p.angles).filter(Boolean).length + p.damageCloseUps;
+  return Object.values(p.angles).filter(Boolean).length + p.damageCloseUps.length;
 }
 
 /** All six required angles filled — the gate for completing Intake/Outtake.
- * Damage close-ups don't factor in since they're uncapped/optional. */
-function photoSetComplete(p: PhotoSet): boolean {
-  return Object.values(p.angles).every(Boolean);
+ * Checked explicitly against REQUIRED_PHOTO_ANGLES (not just Object.values)
+ * since angles is a partial record — an empty object would otherwise pass
+ * an Object.values(...).every(...) check vacuously. Damage close-ups don't
+ * factor in since they're uncapped/optional. */
+export function photoSetComplete(p: PhotoSet): boolean {
+  return REQUIRED_PHOTO_ANGLES.every(a => !!p.angles[a.key]);
+}
+
+/** A simple, offline SVG placeholder used for dummy-data photos that were
+ * already "captured" before this page had a real upload UI — clearly a
+ * placeholder (not a real photo), avoiding any false impression this is
+ * production photo data. Real uploads (see PhotoAngleTile) use an actual
+ * object URL from the picked file instead of this. */
+function placeholderPhoto(label: string): CapturedPhoto {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#e0d8cc"/><text x="50%" y="50%" font-family="sans-serif" font-size="16" fill="#3d1700" text-anchor="middle" dominant-baseline="middle">${label}</text></svg>`;
+  return {
+    id: `placeholder-${label}-${Math.random().toString(36).slice(2)}`,
+    previewUrl: `data:image/svg+xml,${encodeURIComponent(svg)}`,
+    fileName: `${label}.svg`,
+  };
+}
+
+/** All six required angles pre-filled with placeholders — shorthand for
+ * dummy-data pairs whose intake/outtake is already "complete" and therefore
+ * must have every required angle present. */
+function allAnglesPlaceholder(): Partial<Record<RequiredPhotoAngle, CapturedPhoto>> {
+  const result: Partial<Record<RequiredPhotoAngle, CapturedPhoto>> = {};
+  for (const a of REQUIRED_PHOTO_ANGLES) result[a.key] = placeholderPhoto(a.label);
+  return result;
 }
 
 /**
@@ -390,6 +422,16 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
   },
 ];
 
+/** Every component must have at least one selected answer — Danielle's call:
+ * for now, while the whole point of this form is maximizing AI training
+ * data, nothing in the condition assessment is optional to *complete*
+ * intake with (only "Save & finish later" allows partial answers). This is
+ * a temporary, current-phase policy — see the requirements doc note on this
+ * form being deliberately more thorough than its long-term shape. */
+function allConditionsAnswered(answers: Record<string, string[]>): boolean {
+  return CONDITION_COMPONENTS.every(c => (answers[c.key]?.length ?? 0) > 0);
+}
+
 const ACTION_OWNER_LABEL: Record<"workshop" | "dispatch", string> = {
   workshop: "Workshop action",
   dispatch: "Dispatch action",
@@ -406,7 +448,7 @@ const ACTION_OWNER_COLOR: Record<"workshop" | "dispatch", string> = {
 
 const TODAY = "2026-07-08";
 
-const ORDER_DETAILS: Record<string, OrderDetail> = {
+export const ORDER_DETAILS: Record<string, OrderDetail> = {
   // Demo order for Danielle's per-pair-of-shoes preview request. Two pairs in
   // one order — one further along (intake done, services checked, outtake in
   // progress) and one just starting — to show how pairs progress independently
@@ -440,8 +482,8 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         // in-progress → outtake photos partly captured so far (2 of 6).
         photos: {
           customerSubmitted: 2,
-          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
-          after:  { angles: { sole: true, topDown: true, leftSide: false, rightSide: false, back: false, inside: false }, damageCloseUps: 0 },
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: { sole: placeholderPhoto("Sole"), topDown: placeholderPhoto("Top-down") }, damageCloseUps: [] },
         },
         services: [
           { id: "1-p1-s1", name: "Resole",                    priceCents: 8500, tag: "original", done: true },
@@ -510,7 +552,7 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         // not started → no "after" photos yet.
         photos: {
           customerSubmitted: 3,
-          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 1 },
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [placeholderPhoto("Damage close-up")] },
           after: emptyPhotoSet(),
         },
         services: [
@@ -570,8 +612,8 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         // filled for both before and after.
         photos: {
           customerSubmitted: 2,
-          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
-          after:  { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
         },
         services: [
           { id: "5-p1-s1", name: "Seam repair", priceCents: 5000, tag: "original", done: true },
@@ -629,8 +671,8 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         // filled for both before and after.
         photos: {
           customerSubmitted: 2,
-          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
-          after:  { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
         },
         services: [
           { id: "9-p1-s1", name: "Seam repair", priceCents: 5500, tag: "original", done: true },
@@ -693,6 +735,369 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
       },
     ],
     comments: [],
+  },
+  // Orders 3, 4, 6, 7, 8, 11–14 below: these exist in AdminDashboard's dummy
+  // ORDERS list (so they show up in real dashboard tables/tabs, including
+  // Dispatch's pickup/return schedule tabs) but previously had no matching
+  // entry here — clicking into any of them fell through to buildFallback(),
+  // which returns pairs: []. That's what caused the Dispatch "Repair
+  // summary" sidebar to say "No shoe pairs recorded yet" for an order with a
+  // pickup already scheduled — Danielle's bug report: a real order should
+  // never have zero pairs, regardless of status. Filled in with lightweight
+  // but real pair/service data (matching each order's dashboard context) so
+  // Dispatch always has enough to answer a basic "what am I picking up /
+  // what's being done to it" question, without needing full Workshop-level
+  // detail (photos, condition assessment) on orders that aren't this
+  // session's main demo (ORD-2026-001).
+  "3": {
+    id: "3",
+    orderNumber: "ORD-2026-003",
+    status: "pickup-scheduled",
+    datePlaced: "2026-07-06",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Priya Nair",
+      phone: "(917) 555-0303",
+      email: "priya.nair@email.com",
+    },
+    address: "45 W 72nd St, New York, NY 10023",
+    lastContactedAt: "2026-07-06",
+    pickupSlot: { date: "2026-07-08", timeLabel: "10:00 – 11:30 AM" },
+    pairs: [
+      {
+        id: "3-p1",
+        shoeType: "Sneakers",
+        shoeBrand: "Common Projects",
+        shoeColorMaterial: "White leather",
+        customerNotes: "Please be gentle with the suede panel on the side.",
+        // Pickup hasn't happened yet — nothing captured on either side.
+        photos: {
+          customerSubmitted: 2,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
+        services: [
+          { id: "3-p1-s1", name: "Scuff, stain, & color restoration", priceCents: 8000, tag: "original", done: false },
+          { id: "3-p1-s2", name: "Cleaning & conditioning",           priceCents: 6500, tag: "original", done: false },
+        ],
+        intakeStatus: "not-started",
+        completionStatus: "not-started",
+      },
+    ],
+    comments: [],
+    notes: "Ring buzzer 3B — concierge can accept",
+  },
+  "4": {
+    id: "4",
+    orderNumber: "ORD-2026-004",
+    status: "ready-for-return",
+    datePlaced: "2026-07-02",
+    isRework: false,
+    actionRequiredBy: "2026-07-08",
+    workshopAssignee: "OB",
+    dispatchAssignee: "DO",
+    customer: {
+      name: "James O'Sullivan",
+      phone: "(212) 555-0404",
+      email: "james.osullivan@email.com",
+    },
+    address: "89 Bleecker St, New York, NY 10012",
+    lastContactedAt: "2026-07-06",
+    pickupSlot: { date: "2026-07-03", timeLabel: "9:00 – 10:30 AM" },
+    pairs: [
+      {
+        id: "4-p1",
+        shoeType: "Chukka boots",
+        shoeBrand: "Red Wing",
+        shoeColorMaterial: "Brown leather",
+        // Repair fully done, awaiting return scheduling → intake and
+        // outtake both complete, all required photos on file.
+        photos: {
+          customerSubmitted: 2,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "4-p1-s1", name: "Resole",           priceCents: 8500, tag: "original", done: true },
+          { id: "4-p1-s2", name: "Heel replacement", priceCents: 5500, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+  },
+  "6": {
+    id: "6",
+    orderNumber: "ORD-2026-006",
+    status: "rework-request-denied",
+    datePlaced: "2026-06-10",
+    isRework: true,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Luca Romano",
+      phone: "(718) 555-0606",
+      email: "luca.romano@email.com",
+    },
+    address: "55 Water St, Brooklyn, NY 11201",
+    pickupSlot: { date: "2026-06-10", timeLabel: "1:00 – 2:30 PM" },
+    returnSlot: { date: "2026-06-17", timeLabel: "3:00 – 4:30 PM" },
+    pairs: [
+      {
+        id: "6-p1",
+        shoeType: "Loafers",
+        shoeBrand: "Ferragamo",
+        shoeColorMaterial: "Black leather",
+        photos: {
+          customerSubmitted: 1,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "6-p1-s1", name: "Cleaning & conditioning", priceCents: 6500, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+    notes: "Dispute escalated to owner — see Slack thread",
+  },
+  "7": {
+    id: "7",
+    orderNumber: "ORD-2026-007",
+    status: "return-scheduled",
+    datePlaced: "2026-06-18",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "OB",
+    dispatchAssignee: "DO",
+    customer: {
+      name: "Ava Thompson",
+      phone: "(212) 555-0707",
+      email: "ava.thompson@email.com",
+    },
+    address: "1 Central Park W, New York, NY 10023",
+    lastContactedAt: "2026-07-05",
+    pickupSlot: { date: "2026-06-19", timeLabel: "11:00 AM – 12:30 PM" },
+    returnSlot: { date: "2026-07-08", timeLabel: "2:00 – 3:30 PM" },
+    pairs: [
+      {
+        id: "7-p1",
+        shoeType: "Pumps",
+        shoeBrand: "Jimmy Choo",
+        shoeColorMaterial: "Nude patent leather",
+        photos: {
+          customerSubmitted: 1,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "7-p1-s1", name: "High heel tip repair", priceCents: 3500, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+    notes: "Leave with doorman if customer unavailable",
+  },
+  "8": {
+    id: "8",
+    orderNumber: "ORD-2026-008",
+    status: "completed",
+    datePlaced: "2026-06-01",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Derek Huang",
+      phone: "(917) 555-0808",
+      email: "derek.huang@email.com",
+    },
+    address: "200 Varick St, New York, NY 10014",
+    pickupSlot: { date: "2026-06-02", timeLabel: "10:00 – 11:30 AM" },
+    returnSlot: { date: "2026-06-10", timeLabel: "1:00 – 2:30 PM" },
+    pairs: [
+      {
+        id: "8-p1",
+        shoeType: "Derby shoes",
+        shoeBrand: "Allen Edmonds",
+        shoeColorMaterial: "Oxblood leather",
+        photos: {
+          customerSubmitted: 2,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "8-p1-s1", name: "Resole", priceCents: 8500, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+  },
+  // 11 and 12 are Proposals (awaiting customer response) — no logistics yet,
+  // and the services below are *proposed*, not yet approved or performed, so
+  // nothing is checked off and intake/outtake haven't started. These will
+  // move to the (not-yet-built) Proposal details page once that's built —
+  // for now they at least stop showing up empty if clicked into.
+  "11": {
+    id: "11",
+    orderNumber: "ORD-2026-011",
+    status: "proposal-awaiting-customer-response",
+    datePlaced: "2026-07-04",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Bianca Rossi",
+      phone: "(347) 555-1111",
+      email: "bianca.rossi@email.com",
+    },
+    address: "14 Wall St, New York, NY 10005",
+    pairs: [
+      {
+        id: "11-p1",
+        shoeType: "Sandals",
+        shoeBrand: "Birkenstock",
+        shoeColorMaterial: "Tan suede",
+        photos: {
+          customerSubmitted: 2,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
+        services: [
+          { id: "11-p1-s1", name: "Strap repair", priceCents: 4500, tag: "original", done: false },
+        ],
+        intakeStatus: "not-started",
+        completionStatus: "not-started",
+      },
+    ],
+    comments: [],
+  },
+  "12": {
+    id: "12",
+    orderNumber: "ORD-2026-012",
+    status: "proposal-awaiting-customer-response",
+    datePlaced: "2026-07-03",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "OB",
+    dispatchAssignee: "DO",
+    customer: {
+      name: "Tomás Vega",
+      phone: "(646) 555-1212",
+      email: "tomas.vega@email.com",
+    },
+    address: "500 W 23rd St, New York, NY 10011",
+    pairs: [
+      {
+        id: "12-p1",
+        shoeType: "Sneakers",
+        shoeBrand: "Golden Goose",
+        shoeColorMaterial: "White / silver leather",
+        photos: {
+          customerSubmitted: 3,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
+        services: [
+          { id: "12-p1-s1", name: "Scuff, stain, & color restoration", priceCents: 8000, tag: "original", done: false },
+        ],
+        intakeStatus: "not-started",
+        completionStatus: "not-started",
+      },
+    ],
+    comments: [],
+  },
+  "13": {
+    id: "13",
+    orderNumber: "ORD-2026-013",
+    status: "pickup-scheduled",
+    datePlaced: "2026-07-08",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "DO",
+    customer: {
+      name: "Wendy Alvarez",
+      phone: "(212) 555-1313",
+      email: "wendy.alvarez@email.com",
+    },
+    address: "350 5th Ave, New York, NY 10118",
+    lastContactedAt: "2026-07-08",
+    pickupSlot: { date: "2026-07-09", timeLabel: "9:00 – 10:30 AM" },
+    pairs: [
+      {
+        id: "13-p1",
+        shoeType: "Oxfords",
+        shoeBrand: "To Boot New York",
+        shoeColorMaterial: "Burgundy leather",
+        // Pickup is tomorrow — nothing captured yet.
+        photos: {
+          customerSubmitted: 2,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
+        services: [
+          { id: "13-p1-s1", name: "Resole",              priceCents: 8500, tag: "original", done: false },
+          { id: "13-p1-s2", name: "High heel tip repair", priceCents: 3500, tag: "original", done: false },
+        ],
+        intakeStatus: "not-started",
+        completionStatus: "not-started",
+      },
+    ],
+    comments: [],
+    notes: "Front desk will hold shoes at reception",
+  },
+  "14": {
+    id: "14",
+    orderNumber: "ORD-2026-014",
+    status: "return-scheduled",
+    datePlaced: "2026-06-28",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "OB",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Felix Ono",
+      phone: "(646) 555-1414",
+      email: "felix.ono@email.com",
+    },
+    address: "20 W 34th St, New York, NY 10001",
+    lastContactedAt: "2026-07-07",
+    pickupSlot: { date: "2026-06-29", timeLabel: "10:00 – 11:30 AM" },
+    returnSlot: { date: "2026-07-11", timeLabel: "1:00 – 2:30 PM" },
+    pairs: [
+      {
+        id: "14-p1",
+        shoeType: "Derby shoes",
+        shoeBrand: "Allen Edmonds",
+        shoeColorMaterial: "Black leather",
+        photos: {
+          customerSubmitted: 1,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "14-p1-s1", name: "Cleaning & conditioning", priceCents: 6500, tag: "original", done: true },
+          { id: "14-p1-s2", name: "Waterproofing",           priceCents: 3000, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+    notes: "Building requires photo ID at security desk",
   },
 };
 
@@ -1056,69 +1461,162 @@ function ConditionGroup({
   );
 }
 
+/** One required-angle tile — a real file upload (not just a "mark as done"
+ * toggle, per Danielle's feedback: staff should actually attach a photo they
+ * can preview, not just tick a checkbox). Tapping an empty tile opens the
+ * device's file/camera picker; once a photo's attached, the tile shows an
+ * actual thumbnail preview with a remove ("×") button to clear and retake. */
+function PhotoAngleTile({
+  label,
+  photo,
+  onUpload,
+  onRemove,
+}: {
+  label: string;
+  photo: CapturedPhoto | undefined;
+  onUpload: (file: File) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div style={{ width: 96 }}>
+      <div style={{ position: "relative", width: 96, height: 80 }}>
+        <label
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 96, height: 80, borderRadius: 8, cursor: "pointer", overflow: "hidden",
+            border: photo ? "1px solid #166534" : "1px dashed #d1d5db",
+            backgroundColor: photo ? "#f0fdf4" : "#fafafa",
+          }}
+        >
+          {photo
+            ? <img src={photo.previewUrl} alt={label} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : <Camera size={20} style={{ color: "#9ca3af" }} />}
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) onUpload(file);
+              e.target.value = ""; // allow re-selecting the same file to retake
+            }}
+          />
+        </label>
+        {photo && (
+          <button
+            type="button"
+            onClick={onRemove}
+            title="Remove photo"
+            style={{
+              position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%",
+              backgroundColor: "#fff", border: "1px solid #e0d8cc", color: "#991b1b", fontSize: 12, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <p style={{ margin: "4px 0 0", fontSize: 10, fontWeight: 500, color: photo ? "#166534" : "#6b7280", textAlign: "center", lineHeight: 1.2 }}>
+        {label}
+      </p>
+    </div>
+  );
+}
+
+/** Damage close-ups — an uncapped, open-ended list of extra photos (unlike
+ * the six required angles, there's no fixed number expected). Each uploaded
+ * photo shows as its own removable thumbnail; the dashed tile at the end is
+ * always there to add another. */
+function DamageCloseUpRow({
+  photos,
+  onAdd,
+  onRemove,
+}: {
+  photos: CapturedPhoto[];
+  onAdd: (file: File) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
+      {photos.map(p => (
+        <div key={p.id} style={{ position: "relative", width: 72, height: 72 }}>
+          <img
+            src={p.previewUrl}
+            alt="Damage close-up"
+            style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8, border: "1px solid #166534" }}
+          />
+          <button
+            type="button"
+            onClick={() => onRemove(p.id)}
+            title="Remove photo"
+            style={{
+              position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%",
+              backgroundColor: "#fff", border: "1px solid #e0d8cc", color: "#991b1b", fontSize: 11, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <label
+        style={{
+          width: 72, height: 72, borderRadius: 8, border: "1px dashed #d1d5db", backgroundColor: "#fafafa",
+          display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
+        }}
+      >
+        <Camera size={18} style={{ color: "#9ca3af" }} />
+        <input
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) onAdd(file);
+            e.target.value = "";
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
 /** The required-photo capture UI, shared between Intake ("before") and
- * Outtake ("after") — six labeled angle tiles (tap to mark captured, tap
- * again to clear — dummy data, no real camera/upload yet) plus an
- * open-ended, uncapped set of damage close-ups. These six are a hard
- * requirement (Danielle: they're what protects Cobbli against a customer
- * claiming damage that was already there, or that a service wasn't done),
- * unlike everything else in Intake/Outtake, which stays optional. */
+ * Outtake ("after") — six labeled angle tiles, each a real upload (not a
+ * "mark as done" toggle), plus an open-ended, uncapped row of damage
+ * close-ups. These six angles are a hard requirement (Danielle: they're
+ * what protects Cobbli against a customer claiming damage that was already
+ * there, or that a service wasn't done). */
 function PhotoAngleGrid({
   photos,
-  onToggleAngle,
+  onUploadAngle,
+  onRemoveAngle,
   onAddCloseUp,
   onRemoveCloseUp,
 }: {
   photos: PhotoSet;
-  onToggleAngle: (angle: RequiredPhotoAngle) => void;
-  onAddCloseUp: () => void;
-  onRemoveCloseUp: () => void;
+  onUploadAngle: (angle: RequiredPhotoAngle, file: File) => void;
+  onRemoveAngle: (angle: RequiredPhotoAngle) => void;
+  onAddCloseUp: (file: File) => void;
+  onRemoveCloseUp: (id: string) => void;
 }) {
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {REQUIRED_PHOTO_ANGLES.map(a => {
-          const filled = photos.angles[a.key];
-          return (
-            <button
-              key={a.key}
-              type="button"
-              onClick={() => onToggleAngle(a.key)}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
-                width: 96, height: 88, borderRadius: 8, cursor: "pointer", fontFamily: "inherit", textAlign: "center",
-                border: filled ? "1px solid #166534" : "1px dashed #d1d5db",
-                backgroundColor: filled ? "#f0fdf4" : "#fafafa",
-              }}
-            >
-              {filled
-                ? <CheckCircle2 size={18} style={{ color: "#166534" }} />
-                : <Camera size={18} style={{ color: "#9ca3af" }} />}
-              <span style={{ fontSize: 10, fontWeight: 500, color: filled ? "#166534" : "#6b7280", lineHeight: 1.2, padding: "0 4px" }}>
-                {a.label}
-              </span>
-            </button>
-          );
-        })}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {REQUIRED_PHOTO_ANGLES.map(a => (
+          <PhotoAngleTile
+            key={a.key}
+            label={a.label}
+            photo={photos.angles[a.key]}
+            onUpload={file => onUploadAngle(a.key, file)}
+            onRemove={() => onRemoveAngle(a.key)}
+          />
+        ))}
       </div>
-      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 12, color: "#6b7280" }}>Damage close-ups: {photos.damageCloseUps}</span>
-        <button
-          type="button"
-          onClick={onAddCloseUp}
-          style={{ fontSize: 12, padding: "3px 9px", borderRadius: 6, border: "1px solid #e0d8cc", backgroundColor: "#fff", color: "#374151", cursor: "pointer", fontFamily: "inherit" }}
-        >
-          + Add
-        </button>
-        {photos.damageCloseUps > 0 && (
-          <button
-            type="button"
-            onClick={onRemoveCloseUp}
-            style={{ fontSize: 12, padding: "3px 9px", borderRadius: 6, border: "1px solid #e0d8cc", backgroundColor: "#fff", color: "#374151", cursor: "pointer", fontFamily: "inherit" }}
-          >
-            − Remove
-          </button>
-        )}
+      <div style={{ marginTop: 14 }}>
+        <p style={{ margin: "0 0 6px", fontSize: 12, color: "#6b7280" }}>Damage close-ups ({photos.damageCloseUps.length})</p>
+        <DamageCloseUpRow photos={photos.damageCloseUps} onAdd={onAddCloseUp} onRemove={onRemoveCloseUp} />
       </div>
     </div>
   );
@@ -1127,16 +1625,19 @@ function PhotoAngleGrid({
 /** The Intake form itself — read-only services list (mirrors what's on this
  * pair, not editable here), the required photo capture, the full
  * per-component condition assessment, and a free-text notes field. "Save &
- * finish later" marks the pair in-progress without requiring everything
- * filled in (photos and a complete assessment are both optional to *save*);
- * "Complete intake" is what actually unblocks the Services checklist and
- * Outtake for this pair, and is gated on all six required photos being
- * present — the one hard requirement in this whole form. */
+ * finish later" marks the pair in-progress without requiring anything
+ * filled in; "Complete intake" is what actually unblocks the Services
+ * checklist and Outtake for this pair, and — per Danielle's direction, while
+ * this phase is about maximizing AI training data — is gated on **both**
+ * all six required photos being present **and** every condition component
+ * having an answer. Notes stays optional even at "Complete," since it's a
+ * catch-all for anything extra, not something every intake will need. */
 function IntakeFormModal({
   pair,
   services,
   photos,
-  onTogglePhotoAngle,
+  onUploadPhotoAngle,
+  onRemovePhotoAngle,
   onAddDamageCloseUp,
   onRemoveDamageCloseUp,
   answers,
@@ -1149,9 +1650,10 @@ function IntakeFormModal({
   pair: ShoePair;
   services: ServiceLine[];
   photos: PhotoSet;
-  onTogglePhotoAngle: (angle: RequiredPhotoAngle) => void;
-  onAddDamageCloseUp: () => void;
-  onRemoveDamageCloseUp: () => void;
+  onUploadPhotoAngle: (angle: RequiredPhotoAngle, file: File) => void;
+  onRemovePhotoAngle: (angle: RequiredPhotoAngle) => void;
+  onAddDamageCloseUp: (file: File) => void;
+  onRemoveDamageCloseUp: (id: string) => void;
   answers: Record<string, string[]>;
   notes: string;
   onToggleCondition: (comp: ConditionComponentDef, value: string) => void;
@@ -1160,6 +1662,8 @@ function IntakeFormModal({
   onSave: (status: FormStatus) => void;
 }) {
   const photosComplete = photoSetComplete(photos);
+  const conditionsComplete = allConditionsAnswered(answers);
+  const canComplete = photosComplete && conditionsComplete;
   return (
     <div
       style={{
@@ -1212,15 +1716,19 @@ function IntakeFormModal({
           </p>
           <PhotoAngleGrid
             photos={photos}
-            onToggleAngle={onTogglePhotoAngle}
+            onUploadAngle={onUploadPhotoAngle}
+            onRemoveAngle={onRemovePhotoAngle}
             onAddCloseUp={onAddDamageCloseUp}
             onRemoveCloseUp={onRemoveDamageCloseUp}
           />
         </div>
 
         <div style={{ borderTop: "1px solid #f0ece5", paddingTop: 16 }}>
-          <p style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
             What is the condition of the...
+          </p>
+          <p style={{ margin: "0 0 14px", fontSize: 12, color: "#9ca3af" }}>
+            Every component below is required to complete intake, for now — maximizing labeled training data matters more than form length while the AI model is still being trained.
           </p>
           {CONDITION_COMPONENTS.map(comp => (
             <ConditionGroup
@@ -1244,7 +1752,7 @@ function IntakeFormModal({
         </div>
 
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #f0ece5" }}>
-          {!photosComplete && (
+          {!canComplete && (
             <div
               role="alert"
               style={{
@@ -1254,7 +1762,11 @@ function IntakeFormModal({
               }}
             >
               <AlertTriangle size={13} style={{ flexShrink: 0 }} />
-              All 6 required photos must be added before intake can be marked complete.
+              {!photosComplete && !conditionsComplete
+                ? "All 6 required photos and every condition below must be completed before intake can be marked complete."
+                : !photosComplete
+                ? "All 6 required photos must be added before intake can be marked complete."
+                : "Every condition below must have an answer before intake can be marked complete."}
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -1267,13 +1779,13 @@ function IntakeFormModal({
             </button>
             <button
               type="button"
-              disabled={!photosComplete}
+              disabled={!canComplete}
               onClick={() => onSave("complete")}
               style={{
                 padding: "8px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                backgroundColor: photosComplete ? "#3d1700" : "#d1d5db",
+                backgroundColor: canComplete ? "#3d1700" : "#d1d5db",
                 color: "#fff",
-                cursor: photosComplete ? "pointer" : "not-allowed",
+                cursor: canComplete ? "pointer" : "not-allowed",
               }}
             >
               Complete intake
@@ -1296,7 +1808,8 @@ function OuttakeFormModal({
   pair,
   services,
   photos,
-  onTogglePhotoAngle,
+  onUploadPhotoAngle,
+  onRemovePhotoAngle,
   onAddDamageCloseUp,
   onRemoveDamageCloseUp,
   notes,
@@ -1307,9 +1820,10 @@ function OuttakeFormModal({
   pair: ShoePair;
   services: ServiceLine[];
   photos: PhotoSet;
-  onTogglePhotoAngle: (angle: RequiredPhotoAngle) => void;
-  onAddDamageCloseUp: () => void;
-  onRemoveDamageCloseUp: () => void;
+  onUploadPhotoAngle: (angle: RequiredPhotoAngle, file: File) => void;
+  onRemovePhotoAngle: (angle: RequiredPhotoAngle) => void;
+  onAddDamageCloseUp: (file: File) => void;
+  onRemoveDamageCloseUp: (id: string) => void;
   notes: string;
   onNotesChange: (value: string) => void;
   onClose: () => void;
@@ -1379,7 +1893,8 @@ function OuttakeFormModal({
           </p>
           <PhotoAngleGrid
             photos={photos}
-            onToggleAngle={onTogglePhotoAngle}
+            onUploadAngle={onUploadPhotoAngle}
+            onRemoveAngle={onRemovePhotoAngle}
             onAddCloseUp={onAddDamageCloseUp}
             onRemoveCloseUp={onRemoveDamageCloseUp}
           />
@@ -1498,12 +2013,46 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
     });
   };
 
-  const toggleBeforePhotoAngle = (angle: RequiredPhotoAngle) => {
-    setBeforePhotos(prev => ({ ...prev, angles: { ...prev.angles, [angle]: !prev.angles[angle] } }));
+  // Real file uploads — previewed via an object URL (client-side only, no
+  // server upload yet). Revoking the old URL when a photo is replaced or
+  // removed avoids piling up object URLs in memory over a long session.
+  const uploadPhoto = (
+    setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>,
+    angle: RequiredPhotoAngle,
+    file: File,
+  ) => {
+    const photo: CapturedPhoto = { id: `${angle}-${Date.now()}`, previewUrl: URL.createObjectURL(file), fileName: file.name };
+    setPhotos(prev => {
+      const existing = prev.angles[angle];
+      if (existing) URL.revokeObjectURL(existing.previewUrl);
+      return { ...prev, angles: { ...prev.angles, [angle]: photo } };
+    });
   };
-  const toggleAfterPhotoAngle = (angle: RequiredPhotoAngle) => {
-    setAfterPhotos(prev => ({ ...prev, angles: { ...prev.angles, [angle]: !prev.angles[angle] } }));
+  const removePhoto = (setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>, angle: RequiredPhotoAngle) => {
+    setPhotos(prev => {
+      const existing = prev.angles[angle];
+      if (existing) URL.revokeObjectURL(existing.previewUrl);
+      const nextAngles = { ...prev.angles };
+      delete nextAngles[angle];
+      return { ...prev, angles: nextAngles };
+    });
   };
+  const addCloseUp = (setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>, file: File) => {
+    const photo: CapturedPhoto = { id: `closeup-${Date.now()}-${Math.random().toString(36).slice(2)}`, previewUrl: URL.createObjectURL(file), fileName: file.name };
+    setPhotos(prev => ({ ...prev, damageCloseUps: [...prev.damageCloseUps, photo] }));
+  };
+  const removeCloseUp = (setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>, id: string) => {
+    setPhotos(prev => {
+      const target = prev.damageCloseUps.find(p => p.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return { ...prev, damageCloseUps: prev.damageCloseUps.filter(p => p.id !== id) };
+    });
+  };
+
+  const uploadBeforePhoto = (angle: RequiredPhotoAngle, file: File) => uploadPhoto(setBeforePhotos, angle, file);
+  const removeBeforePhoto = (angle: RequiredPhotoAngle) => removePhoto(setBeforePhotos, angle);
+  const uploadAfterPhoto = (angle: RequiredPhotoAngle, file: File) => uploadPhoto(setAfterPhotos, angle, file);
+  const removeAfterPhoto = (angle: RequiredPhotoAngle) => removePhoto(setAfterPhotos, angle);
 
   const saveIntake = (status: FormStatus) => {
     setIntakeStatus(status);
@@ -1568,7 +2117,7 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
             <div style={{ minWidth: 180 }}>
               <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>
                 Before (intake) — required · {beforeFilled}/{REQUIRED_PHOTO_ANGLES.length}
-                {beforePhotos.damageCloseUps > 0 ? ` + ${beforePhotos.damageCloseUps} extra` : ""}
+                {beforePhotos.damageCloseUps.length > 0 ? ` + ${beforePhotos.damageCloseUps.length} extra` : ""}
               </p>
               <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, backgroundColor: beforeComplete ? "#dcfce7" : "#fef3c7", color: beforeComplete ? "#166534" : "#92400e" }}>
                 {beforeComplete ? "Required photos complete" : "Required photos missing"}
@@ -1577,7 +2126,7 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
             <div style={{ minWidth: 180 }}>
               <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>
                 After (outtake) — required · {afterFilled}/{REQUIRED_PHOTO_ANGLES.length}
-                {afterPhotos.damageCloseUps > 0 ? ` + ${afterPhotos.damageCloseUps} extra` : ""}
+                {afterPhotos.damageCloseUps.length > 0 ? ` + ${afterPhotos.damageCloseUps.length} extra` : ""}
               </p>
               <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, backgroundColor: afterComplete ? "#dcfce7" : "#fef3c7", color: afterComplete ? "#166534" : "#92400e" }}>
                 {afterComplete ? "Required photos complete" : "Required photos missing"}
@@ -1613,9 +2162,10 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
           pair={pair}
           services={services}
           photos={beforePhotos}
-          onTogglePhotoAngle={toggleBeforePhotoAngle}
-          onAddDamageCloseUp={() => setBeforePhotos(prev => ({ ...prev, damageCloseUps: prev.damageCloseUps + 1 }))}
-          onRemoveDamageCloseUp={() => setBeforePhotos(prev => ({ ...prev, damageCloseUps: Math.max(0, prev.damageCloseUps - 1) }))}
+          onUploadPhotoAngle={uploadBeforePhoto}
+          onRemovePhotoAngle={removeBeforePhoto}
+          onAddDamageCloseUp={file => addCloseUp(setBeforePhotos, file)}
+          onRemoveDamageCloseUp={id => removeCloseUp(setBeforePhotos, id)}
           answers={conditionAnswers}
           notes={intakeNotes}
           onToggleCondition={toggleCondition}
@@ -1630,9 +2180,10 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
           pair={pair}
           services={services}
           photos={afterPhotos}
-          onTogglePhotoAngle={toggleAfterPhotoAngle}
-          onAddDamageCloseUp={() => setAfterPhotos(prev => ({ ...prev, damageCloseUps: prev.damageCloseUps + 1 }))}
-          onRemoveDamageCloseUp={() => setAfterPhotos(prev => ({ ...prev, damageCloseUps: Math.max(0, prev.damageCloseUps - 1) }))}
+          onUploadPhotoAngle={uploadAfterPhoto}
+          onRemovePhotoAngle={removeAfterPhoto}
+          onAddDamageCloseUp={file => addCloseUp(setAfterPhotos, file)}
+          onRemoveDamageCloseUp={id => removeCloseUp(setAfterPhotos, id)}
           notes={outtakeNotes}
           onNotesChange={setOuttakeNotes}
           onClose={() => setOuttakeModalOpen(false)}

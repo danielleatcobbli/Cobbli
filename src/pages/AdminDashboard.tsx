@@ -17,7 +17,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ChevronDown } from "lucide-react";
+import { Search, ChevronDown, Star, Download } from "lucide-react";
+import {
+  ORDER_DETAILS,
+  REQUIRED_PHOTO_ANGLES,
+  photoSetComplete,
+  type RequiredPhotoAngle,
+  type PhotoSet,
+} from "./AdminOrderDetail";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -62,7 +69,7 @@ type Order = {
   notes?: string;
 };
 
-type TopView = "workshop" | "dispatch" | "kpis";
+type TopView = "workshop" | "dispatch" | "photos" | "kpis";
 type WorkshopTab = "action-required" | "all-orders" | "proposals" | "awaiting-repair" | "in-repair" | "reworks" | "completed";
 type DispatchTab = "action-required" | "today-schedule" | "tomorrow-schedule" | "all-scheduled" | "all-orders";
 
@@ -1114,6 +1121,247 @@ function DispatchView({ orders, perspective }: { orders: Order[]; perspective: P
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Photos view — before/after gallery for pulling social media content
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One completed pair (both intake and outtake photo sets finished) that's
+ * eligible to show up in the gallery — a pair with no "after" photos yet has
+ * nothing to compare, so it never appears here. Admin-only, same as KPIs:
+ * curating marketing content isn't a Workshop/Dispatch operational task. */
+type GalleryItem = {
+  orderId: string;
+  orderNumber: string;
+  pairId: string;
+  shoeBrand: string;
+  shoeType: string;
+  shoeColorMaterial: string;
+  serviceNames: string[];
+  before: PhotoSet;
+  after: PhotoSet;
+};
+
+function buildGalleryItems(): GalleryItem[] {
+  const items: GalleryItem[] = [];
+  for (const order of Object.values(ORDER_DETAILS)) {
+    for (const pair of order.pairs) {
+      if (photoSetComplete(pair.photos.before) && photoSetComplete(pair.photos.after)) {
+        items.push({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          pairId: pair.id,
+          shoeBrand: pair.shoeBrand,
+          shoeType: pair.shoeType,
+          shoeColorMaterial: pair.shoeColorMaterial,
+          serviceNames: pair.services.map(s => s.name),
+          before: pair.photos.before,
+          after: pair.photos.after,
+        });
+      }
+    }
+  }
+  return items;
+}
+
+/** Strips the parenthetical detail off a photo-angle label for compact pill
+ * display — e.g. "Sole (bottom, straight-on)" → "Sole". */
+function shortAngleLabel(label: string): string {
+  return label.replace(/\s*\(.*\)/, "");
+}
+
+function ServicePill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: "6px 12px",
+        borderRadius: 9999,
+        fontSize: 12,
+        fontWeight: 500,
+        border: active ? "1px solid #3d1700" : "1px solid #e0d8cc",
+        backgroundColor: active ? "#3d1700" : "#fff",
+        color: active ? "#fff" : "#6b7280",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function AnglePill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: "5px 10px",
+        borderRadius: 6,
+        fontSize: 11,
+        fontWeight: 500,
+        border: active ? "1px solid #d97706" : "1px solid #e0d8cc",
+        backgroundColor: active ? "#fef3c7" : "#fff",
+        color: active ? "#92400e" : "#9ca3af",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** A single before/after card — drag anywhere on the photo to compare. Each
+ * card owns its own slider position; the angle shown is shared across every
+ * card via the parent's selector, so switching to "Back of shoe" compares
+ * that angle across every transformation at once. */
+function GalleryCard({
+  item,
+  angle,
+  featured,
+  onToggleFeatured,
+  onOpenOrder,
+}: {
+  item: GalleryItem;
+  angle: RequiredPhotoAngle;
+  featured: boolean;
+  onToggleFeatured: () => void;
+  onOpenOrder: () => void;
+}) {
+  const [pos, setPos] = useState(50);
+  const before = item.before.angles[angle];
+  const after = item.after.angles[angle];
+  if (!before || !after) return null; // guarded by photoSetComplete at build time — defensive only
+
+  return (
+    <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, padding: 10 }}>
+      <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 6, overflow: "hidden", backgroundColor: "#f3f4f6" }}>
+        <img src={after.previewUrl} alt="After" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        <img
+          src={before.previewUrl}
+          alt="Before"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", clipPath: `inset(0 ${100 - pos}% 0 0)` }}
+        />
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: `${pos}%`, width: 2, backgroundColor: "#fff", pointerEvents: "none", transform: "translateX(-1px)" }} />
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={pos}
+          onChange={e => setPos(Number(e.target.value))}
+          aria-label="Drag to compare before and after"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "ew-resize", margin: 0 }}
+        />
+        <span style={{ position: "absolute", top: 8, left: 8, fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, backgroundColor: "rgba(255,255,255,0.9)", color: "#3d1700", pointerEvents: "none" }}>Before</span>
+        <span style={{ position: "absolute", top: 8, right: 8, fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, backgroundColor: "rgba(255,255,255,0.9)", color: "#3d1700", pointerEvents: "none" }}>After</span>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginTop: 8, gap: 8 }}>
+        <div style={{ cursor: "pointer" }} onClick={onOpenOrder}>
+          <p style={{ fontWeight: 500, fontSize: 13, margin: 0, color: "#1f2937" }}>{item.shoeBrand} {item.shoeType}</p>
+          <p style={{ fontSize: 11, color: "#9ca3af", margin: 0, marginTop: 2 }}>{item.shoeColorMaterial} · {item.orderNumber}</p>
+        </div>
+        <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={onToggleFeatured}
+            title={featured ? "Unmark as featured" : "Mark as featured for social"}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}
+          >
+            <Star size={15} fill={featured ? "#fdb600" : "none"} color={featured ? "#fdb600" : "#9ca3af"} />
+          </button>
+          <a
+            href={after.previewUrl}
+            download={after.fileName}
+            title="Download after photo"
+            style={{ padding: 4, display: "flex", color: "#9ca3af" }}
+          >
+            <Download size={15} />
+          </a>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
+        {item.serviceNames.map(name => (
+          <span key={name} style={{ fontSize: 10, fontWeight: 500, padding: "2px 8px", borderRadius: 4, backgroundColor: "#faece7", color: "#993c1d" }}>
+            {name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PhotosView() {
+  const navigate = useNavigate();
+  const items = useMemo(buildGalleryItems, []);
+  const serviceOptions = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(i => i.serviceNames.forEach(n => set.add(n)));
+    return Array.from(set).sort();
+  }, [items]);
+
+  const [serviceFilter, setServiceFilter] = useState<string>("all");
+  const [angle, setAngle] = useState<RequiredPhotoAngle>("topDown");
+  const [featured, setFeatured] = useState<Set<string>>(new Set());
+
+  const toggleFeatured = (pairId: string) => {
+    setFeatured(prev => {
+      const next = new Set(prev);
+      if (next.has(pairId)) next.delete(pairId);
+      else next.add(pairId);
+      return next;
+    });
+  };
+
+  const filtered = serviceFilter === "all" ? items : items.filter(i => i.serviceNames.includes(serviceFilter));
+
+  if (items.length === 0) {
+    return <EmptyState message="No completed pairs yet — before-and-after photos show up here once both intake and outtake photo sets are finished." />;
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, lineHeight: 1.6, maxWidth: 640 }}>
+        Pulled automatically from completed intake and outtake photos — only pairs with a full before and after set show up here. Drag any photo to compare, switch the angle to find the best shot, and star the ones worth posting.
+      </p>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <ServicePill label="All services" active={serviceFilter === "all"} onClick={() => setServiceFilter("all")} />
+        {serviceOptions.map(s => (
+          <ServicePill key={s} label={s} active={serviceFilter === s} onClick={() => setServiceFilter(s)} />
+        ))}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Angle</span>
+        {REQUIRED_PHOTO_ANGLES.map(a => (
+          <AnglePill key={a.key} label={shortAngleLabel(a.label)} active={angle === a.key} onClick={() => setAngle(a.key)} />
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState message="No transformations match this filter." />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+          {filtered.map(item => (
+            <GalleryCard
+              key={item.pairId}
+              item={item}
+              angle={angle}
+              featured={featured.has(item.pairId)}
+              onToggleFeatured={() => toggleFeatured(item.pairId)}
+              onOpenOrder={() => navigate(`/admin/order/${item.orderId}`)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // KPIs view
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1307,7 +1555,7 @@ export default function AdminDashboard() {
   const visibleTopTabs: [TopView, string][] = useMemo(() => {
     if (perspective === "workshop-staff") return [["workshop", "Workshop"]];
     if (perspective === "dispatch-staff") return [["dispatch", "Dispatch"]];
-    return [["workshop", "Workshop"], ["dispatch", "Dispatch"], ["kpis", "KPIs"]];
+    return [["workshop", "Workshop"], ["dispatch", "Dispatch"], ["photos", "Photos"], ["kpis", "KPIs"]];
   }, [perspective]);
 
   // Land on (and snap back to) whichever tab the current perspective is
@@ -1376,12 +1624,18 @@ export default function AdminDashboard() {
 
       {/* ── Main content ── */}
       <main style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 20px" }}>
-        <SummaryStrip view={view} orders={ORDERS} activeActionOrders={activeActionOrders} />
+        {/* Operational tiles don't apply to the Photos tab — nothing there to
+            summarize (overdue tasks, escalations, etc. are workshop/dispatch
+            concepts, not a marketing-content concern). */}
+        {view !== "photos" && (
+          <SummaryStrip view={view} orders={ORDERS} activeActionOrders={activeActionOrders} />
+        )}
 
         {/* View panel */}
         <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, padding: "20px 20px 24px" }}>
           {view === "workshop" && <WorkshopView orders={ORDERS} perspective={perspective} />}
           {view === "dispatch" && <DispatchView orders={ORDERS} perspective={perspective} />}
+          {view === "photos"   && <PhotosView />}
           {view === "kpis"     && <KPIsView />}
         </div>
       </main>
