@@ -34,7 +34,17 @@ class Settings(BaseSettings):
     )
 
     brevo_api_key: str = Field(default="", validation_alias="BREVO_API_KEY")
-    ai_api_key: str = Field(default="", validation_alias="AI_API_KEY")
+
+    # Shoe-photo analysis now runs on AWS Bedrock (Claude vision) instead of the
+    # Lovable AI gateway. Auth is IAM (instance role), so no API key. AWS_REGION
+    # is provided by App Runner automatically; default keeps local dev working.
+    bedrock_region: str = Field(
+        default="us-east-1", validation_alias="BEDROCK_REGION"
+    )
+    bedrock_model_id: str = Field(
+        default="us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        validation_alias="BEDROCK_MODEL_ID",
+    )
 
     cors_allow_origins: str = Field(
         default="*", validation_alias="CORS_ALLOW_ORIGINS"

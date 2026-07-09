@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import base64
 import json
 import re
 from typing import Any
 
+import boto3
 import httpx
+from botocore.exceptions import ClientError
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -15,8 +18,9 @@ from app.supabase_client import get_supabase_admin
 
 router = APIRouter(prefix="/analyze-shoe-photos", tags=["ai"])
 
-AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions"
-AI_MODEL = "google/gemini-2.5-pro"
+# Bedrock throttling / capacity errors we treat as "no result" (soft-fail),
+# mirroring the old gateway's 402/429 handling.
+_SOFT_FAIL_ERRORS = {"ThrottlingException", "ServiceUnavailableException"}
 
 SHOE_TYPES = ["Sneakers", "Boots", "Ankle boots", "Heels", "Flats", "Loafers", "Sandals"]
 COLORS = [
@@ -33,10 +37,10 @@ class AnalyzeRequest(BaseModel):
     bucket: str | None = None
 
 
-def _build_prompt(urls: list[str]) -> list[dict[str, Any]]:
+def _prompt_text() -> str:
     shoe_types = ", ".join(SHOE_TYPES)
     color_list = ", ".join(COLORS)
-    text = (
+    return (
         "You are helping classify a pair of shoes from customer photos for a shoe repair "
         "service.\n"
         "Identify, from the photos:\n"
@@ -53,9 +57,37 @@ def _build_prompt(urls: list[str]) -> list[dict[str, Any]]:
         "Reply ONLY with strict JSON: "
         '{"shoeType": string|null, "colors": string[], "brand": string|null}.'
     )
-    content: list[dict[str, Any]] = [{"type": "text", "text": text}]
-    content.extend({"type": "image_url", "image_url": {"url": u}} for u in urls)
-    return content
+
+
+def _fetch_image_block(url: str) -> dict[str, Any] | None:
+    """Download a signed image URL and return a Bedrock image content block.
+
+    Bedrock's Claude API takes inline base64 bytes (it does not fetch URLs), so
+    each photo must be downloaded here. A photo that fails to download is skipped
+    rather than failing the whole request.
+    """
+    try:
+        resp = httpx.get(url, timeout=20.0)
+        resp.raise_for_status()
+    except httpx.HTTPError:
+        return None
+    media_type = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+    if not media_type.startswith("image/"):
+        media_type = "image/jpeg"
+    return {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": media_type,
+            "data": base64.standard_b64encode(resp.content).decode("ascii"),
+        },
+    }
+
+
+def _build_messages(image_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    content: list[dict[str, Any]] = list(image_blocks)
+    content.append({"type": "text", "text": _prompt_text()})
+    return [{"role": "user", "content": content}]
 
 
 def _extract_signed_url(result: Any) -> str | None:
@@ -98,6 +130,33 @@ def _normalize(parsed: dict[str, Any]) -> dict[str, Any]:
     return {"shoeType": shoe_type, "colors": colors, "brand": brand}
 
 
+def _bedrock_client():
+    settings = get_settings()
+    return boto3.client("bedrock-runtime", region_name=settings.bedrock_region)
+
+
+def _invoke_bedrock(image_blocks: list[dict[str, Any]]) -> str:
+    """Call Bedrock Claude and return the raw text content. Raises on hard errors."""
+    settings = get_settings()
+    body = json.dumps(
+        {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 512,
+            "messages": _build_messages(image_blocks),
+        }
+    )
+    resp = _bedrock_client().invoke_model(
+        modelId=settings.bedrock_model_id,
+        body=body,
+        contentType="application/json",
+        accept="application/json",
+    )
+    payload = json.loads(resp["body"].read())
+    parts = payload.get("content") or [{}]
+    text = parts[0].get("text") if isinstance(parts[0], dict) else None
+    return text if isinstance(text, str) else ""
+
+
 @router.post("/")
 async def analyze_shoe_photos(
     payload: AnalyzeRequest,
@@ -105,10 +164,6 @@ async def analyze_shoe_photos(
 ) -> JSONResponse:
     _ = user  # auth-only; user identity isn't used in the request itself
     try:
-        settings = get_settings()
-        if not settings.ai_api_key:
-            raise RuntimeError("AI_API_KEY not configured")
-
         photo_paths = payload.photoPaths
         if not isinstance(photo_paths, list) or len(photo_paths) == 0:
             return JSONResponse({"error": "photoPaths required"}, status_code=400)
@@ -133,29 +188,19 @@ async def analyze_shoe_photos(
         if not urls:
             return JSONResponse(EMPTY_RESULT)
 
-        async with httpx.AsyncClient(timeout=60.0) as http:
-            ai_res = await http.post(
-                AI_GATEWAY_URL,
-                headers={
-                    "Authorization": f"Bearer {settings.ai_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": AI_MODEL,
-                    "messages": [{"role": "user", "content": _build_prompt(urls)}],
-                },
-            )
+        image_blocks = [b for b in (_fetch_image_block(u) for u in urls) if b]
+        if not image_blocks:
+            return JSONResponse(EMPTY_RESULT)
 
-        if ai_res.status_code >= 400:
-            if ai_res.status_code in (402, 429):
+        try:
+            raw = _invoke_bedrock(image_blocks)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in _SOFT_FAIL_ERRORS:
                 return JSONResponse(EMPTY_RESULT)
-            raise RuntimeError(f"AI gateway {ai_res.status_code}")
+            raise
 
-        body = ai_res.json()
-        choices = body.get("choices") or [{}]
-        message = choices[0].get("message") or {}
-        raw = message.get("content")
-        parsed = _parse_ai_content(raw if isinstance(raw, str) else "")
+        parsed = _parse_ai_content(raw)
         return JSONResponse(_normalize(parsed))
     except Exception as exc:
         return JSONResponse(
