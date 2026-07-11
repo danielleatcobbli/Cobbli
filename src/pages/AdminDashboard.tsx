@@ -19,18 +19,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, ChevronDown, Star, Download } from "lucide-react";
 import {
-  ORDER_DETAILS,
   REQUIRED_PHOTO_ANGLES,
-  photoSetComplete,
   type RequiredPhotoAngle,
   type PhotoSet,
 } from "./AdminOrderDetail";
+import { fetchOrders, fetchGalleryItems, type GalleryItem } from "./adminData";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-type OrderStatus =
+export type OrderStatus =
   | "proposal-awaiting-our-response"
   | "proposal-awaiting-customer-response"
   | "pickup-scheduled"
@@ -45,9 +44,9 @@ type OrderStatus =
   | "rework-request-approved"
   | "rework-request-denied";
 
-type ScheduleSlot = { date: string; timeLabel: string };
+export type ScheduleSlot = { date: string; timeLabel: string };
 
-type Order = {
+export type Order = {
   id: string;
   orderNumber: string;
   status: OrderStatus;
@@ -128,6 +127,10 @@ const TODAY = "2026-07-08";
 const TOMORROW = "2026-07-09";
 const CURRENT_USER = "DO";
 
+// No longer used to render the page (see fetchOrders() in adminData.ts,
+// wired up in the AdminDashboard component below) — kept only as a
+// reference for the shape/dummy-data conventions the rest of this file's
+// components still document against.
 const ORDERS: Order[] = [
   {
     id: "1",
@@ -1128,40 +1131,6 @@ function DispatchView({ orders, perspective }: { orders: Order[]; perspective: P
  * eligible to show up in the gallery — a pair with no "after" photos yet has
  * nothing to compare, so it never appears here. Admin-only, same as KPIs:
  * curating marketing content isn't a Workshop/Dispatch operational task. */
-type GalleryItem = {
-  orderId: string;
-  orderNumber: string;
-  pairId: string;
-  shoeBrand: string;
-  shoeType: string;
-  shoeColorMaterial: string;
-  serviceNames: string[];
-  before: PhotoSet;
-  after: PhotoSet;
-};
-
-function buildGalleryItems(): GalleryItem[] {
-  const items: GalleryItem[] = [];
-  for (const order of Object.values(ORDER_DETAILS)) {
-    for (const pair of order.pairs) {
-      if (photoSetComplete(pair.photos.before) && photoSetComplete(pair.photos.after)) {
-        items.push({
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          pairId: pair.id,
-          shoeBrand: pair.shoeBrand,
-          shoeType: pair.shoeType,
-          shoeColorMaterial: pair.shoeColorMaterial,
-          serviceNames: pair.services.map(s => s.name),
-          before: pair.photos.before,
-          after: pair.photos.after,
-        });
-      }
-    }
-  }
-  return items;
-}
-
 /** Strips the parenthetical detail off a photo-angle label for compact pill
  * display — e.g. "Sole (bottom, straight-on)" → "Sole". */
 function shortAngleLabel(label: string): string {
@@ -1295,7 +1264,19 @@ function GalleryCard({
 
 function PhotosView() {
   const navigate = useNavigate();
-  const items = useMemo(buildGalleryItems, []);
+  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchGalleryItems()
+      .then(rows => { if (!cancelled) setItems(rows); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   const serviceOptions = useMemo(() => {
     const set = new Set<string>();
     items.forEach(i => i.serviceNames.forEach(n => set.add(n)));
@@ -1316,6 +1297,9 @@ function PhotosView() {
   };
 
   const filtered = serviceFilter === "all" ? items : items.filter(i => i.serviceNames.includes(serviceFilter));
+
+  if (loading) return <EmptyState message="Loading photos…" />;
+  if (error) return <EmptyState message={`Couldn't load photos: ${error}`} />;
 
   if (items.length === 0) {
     return <EmptyState message="No completed pairs yet — before-and-after photos show up here once both intake and outtake photo sets are finished." />;
@@ -1552,6 +1536,26 @@ export default function AdminDashboard() {
   const [perspective, setPerspective] = useState<Perspective>("admin");
   const [view, setView] = useState<TopView>("workshop");
 
+  // Real data (Section 12 developer requirement) — replaces the hardcoded
+  // ORDERS array above, which is now unused dead weight kept only as a
+  // reference for the shape/dummy-data conventions the rest of this file
+  // still follows. Every downstream view (Workshop/Dispatch/Photos/
+  // SummaryStrip) consumes the exact same Order[] shape either way, so
+  // nothing else in this file needed to change.
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setOrdersLoading(true);
+    fetchOrders()
+      .then(rows => { if (!cancelled) setOrders(rows); })
+      .catch(err => { if (!cancelled) setOrdersError(err instanceof Error ? err.message : String(err)); })
+      .finally(() => { if (!cancelled) setOrdersLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   const visibleTopTabs: [TopView, string][] = useMemo(() => {
     if (perspective === "workshop-staff") return [["workshop", "Workshop"]];
     if (perspective === "dispatch-staff") return [["dispatch", "Dispatch"]];
@@ -1566,9 +1570,27 @@ export default function AdminDashboard() {
     if (!allowed.includes(view)) setView(allowed[0]);
   }, [visibleTopTabs, view]);
 
-  const workshopActionOrders = useMemo(() => workshopActionOrdersFor(ORDERS, perspective), [perspective]);
-  const dispatchActionOrders = useMemo(() => dispatchActionOrdersFor(ORDERS, perspective), [perspective]);
+  const workshopActionOrders = useMemo(() => workshopActionOrdersFor(orders, perspective), [orders, perspective]);
+  const dispatchActionOrders = useMemo(() => dispatchActionOrdersFor(orders, perspective), [orders, perspective]);
   const activeActionOrders = view === "dispatch" ? dispatchActionOrders : workshopActionOrders;
+
+  if (ordersLoading) {
+    return (
+      <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Public Sans', 'Albert Sans', sans-serif", color: "#9ca3af", fontSize: 14 }}>
+        Loading orders…
+      </div>
+    );
+  }
+
+  if (ordersError) {
+    return (
+      <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Public Sans', 'Albert Sans', sans-serif" }}>
+        <div style={{ textAlign: "center", color: "#991b1b", fontSize: 14, maxWidth: 420 }}>
+          Couldn't load orders: {ordersError}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", fontFamily: "'Public Sans', 'Albert Sans', sans-serif" }}>
@@ -1628,13 +1650,13 @@ export default function AdminDashboard() {
             summarize (overdue tasks, escalations, etc. are workshop/dispatch
             concepts, not a marketing-content concern). */}
         {view !== "photos" && (
-          <SummaryStrip view={view} orders={ORDERS} activeActionOrders={activeActionOrders} />
+          <SummaryStrip view={view} orders={orders} activeActionOrders={activeActionOrders} />
         )}
 
         {/* View panel */}
         <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, padding: "20px 20px 24px" }}>
-          {view === "workshop" && <WorkshopView orders={ORDERS} perspective={perspective} />}
-          {view === "dispatch" && <DispatchView orders={ORDERS} perspective={perspective} />}
+          {view === "workshop" && <WorkshopView orders={orders} perspective={perspective} />}
+          {view === "dispatch" && <DispatchView orders={orders} perspective={perspective} />}
           {view === "photos"   && <PhotosView />}
           {view === "kpis"     && <KPIsView />}
         </div>

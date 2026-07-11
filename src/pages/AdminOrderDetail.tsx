@@ -13,9 +13,10 @@
  * Route: /admin/order/:id?view=workshop|dispatch  (view= just sets the initial tab)
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, Circle, Clock, FileText, MapPin, MessageSquare, Phone, User, XCircle } from "lucide-react";
+import { fetchOrderDetail, uploadPairPhoto, removePairPhoto } from "./adminData";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types  (mirrors AdminDashboard — will share a module once wired to live data)
@@ -73,6 +74,10 @@ export type CapturedPhoto = {
   id: string;
   previewUrl: string;
   fileName: string;
+  /** Full Storage path (bucket-relative), used to delete the underlying file
+   * when a photo is removed/retaken. Absent for old placeholder/dummy-data
+   * photos, which were never actually uploaded anywhere. */
+  storagePath?: string;
 };
 
 /** One photo per required angle — undefined/absent means not yet captured —
@@ -444,6 +449,12 @@ const ACTION_OWNER_COLOR: Record<"workshop" | "dispatch", string> = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dummy data  (one fully-populated order + fallbacks)
+//
+// No longer used to render the page (see fetchOrderDetail() in adminData.ts,
+// wired into the default export below) — kept only as a reference for the
+// shape/dummy-data conventions the rest of this file still follows, and
+// because CONDITION_COMPONENTS, REQUIRED_PHOTO_ANGLES, etc. above are still
+// live and worth having realistic examples next to.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TODAY = "2026-07-08";
@@ -1961,7 +1972,7 @@ function OuttakeFormModal({
  * style than the previous split-into-three-cards layout). An order with
  * multiple pairs gets one of these per pair, each progressing independently —
  * outtake for a pair is blocked until that pair's own intake is complete. */
-function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total: number }) {
+function PairCard({ pair, index, total, orderId }: { pair: ShoePair; index: number; total: number; orderId: string }) {
   const [services, setServices] = useState<ServiceLine[]>(pair.services);
 
   // Intake/Outtake status now live in local state (rather than reading
@@ -2013,46 +2024,77 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
     });
   };
 
-  // Real file uploads — previewed via an object URL (client-side only, no
-  // server upload yet). Revoking the old URL when a photo is replaced or
-  // removed avoids piling up object URLs in memory over a long session.
-  const uploadPhoto = (
+  // Real uploads — goes straight to the pair-photos Storage bucket (see
+  // adminData.ts) and records a pair_photos row, rather than the old
+  // client-only URL.createObjectURL() preview. Failures surface an alert and
+  // leave the tile as it was (nothing optimistically added/removed before
+  // the round-trip confirms).
+  const uploadPhoto = async (
     setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>,
+    side: "before" | "after",
     angle: RequiredPhotoAngle,
     file: File,
   ) => {
-    const photo: CapturedPhoto = { id: `${angle}-${Date.now()}`, previewUrl: URL.createObjectURL(file), fileName: file.name };
-    setPhotos(prev => {
-      const existing = prev.angles[angle];
-      if (existing) URL.revokeObjectURL(existing.previewUrl);
-      return { ...prev, angles: { ...prev.angles, [angle]: photo } };
-    });
+    try {
+      const photo = await uploadPairPhoto({ orderId, pairId: pair.id, side, angle, file });
+      setPhotos(prev => ({ ...prev, angles: { ...prev.angles, [angle]: photo } }));
+    } catch (err) {
+      console.error("Failed to upload photo:", err);
+      alert("Couldn't upload that photo — please try again.");
+    }
   };
-  const removePhoto = (setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>, angle: RequiredPhotoAngle) => {
-    setPhotos(prev => {
-      const existing = prev.angles[angle];
-      if (existing) URL.revokeObjectURL(existing.previewUrl);
-      const nextAngles = { ...prev.angles };
-      delete nextAngles[angle];
-      return { ...prev, angles: nextAngles };
-    });
+  const removePhoto = async (
+    photos: PhotoSet,
+    setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>,
+    angle: RequiredPhotoAngle,
+  ) => {
+    const existing = photos.angles[angle];
+    if (!existing) return;
+    try {
+      if (existing.storagePath) await removePairPhoto(existing, existing.storagePath);
+      setPhotos(prev => {
+        const nextAngles = { ...prev.angles };
+        delete nextAngles[angle];
+        return { ...prev, angles: nextAngles };
+      });
+    } catch (err) {
+      console.error("Failed to remove photo:", err);
+      alert("Couldn't remove that photo — please try again.");
+    }
   };
-  const addCloseUp = (setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>, file: File) => {
-    const photo: CapturedPhoto = { id: `closeup-${Date.now()}-${Math.random().toString(36).slice(2)}`, previewUrl: URL.createObjectURL(file), fileName: file.name };
-    setPhotos(prev => ({ ...prev, damageCloseUps: [...prev.damageCloseUps, photo] }));
+  const addCloseUp = async (
+    setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>,
+    side: "before" | "after",
+    file: File,
+  ) => {
+    try {
+      const photo = await uploadPairPhoto({ orderId, pairId: pair.id, side, angle: null, file });
+      setPhotos(prev => ({ ...prev, damageCloseUps: [...prev.damageCloseUps, photo] }));
+    } catch (err) {
+      console.error("Failed to upload photo:", err);
+      alert("Couldn't upload that photo — please try again.");
+    }
   };
-  const removeCloseUp = (setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>, id: string) => {
-    setPhotos(prev => {
-      const target = prev.damageCloseUps.find(p => p.id === id);
-      if (target) URL.revokeObjectURL(target.previewUrl);
-      return { ...prev, damageCloseUps: prev.damageCloseUps.filter(p => p.id !== id) };
-    });
+  const removeCloseUp = async (
+    photos: PhotoSet,
+    setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>,
+    id: string,
+  ) => {
+    const target = photos.damageCloseUps.find(p => p.id === id);
+    if (!target) return;
+    try {
+      if (target.storagePath) await removePairPhoto(target, target.storagePath);
+      setPhotos(prev => ({ ...prev, damageCloseUps: prev.damageCloseUps.filter(p => p.id !== id) }));
+    } catch (err) {
+      console.error("Failed to remove photo:", err);
+      alert("Couldn't remove that photo — please try again.");
+    }
   };
 
-  const uploadBeforePhoto = (angle: RequiredPhotoAngle, file: File) => uploadPhoto(setBeforePhotos, angle, file);
-  const removeBeforePhoto = (angle: RequiredPhotoAngle) => removePhoto(setBeforePhotos, angle);
-  const uploadAfterPhoto = (angle: RequiredPhotoAngle, file: File) => uploadPhoto(setAfterPhotos, angle, file);
-  const removeAfterPhoto = (angle: RequiredPhotoAngle) => removePhoto(setAfterPhotos, angle);
+  const uploadBeforePhoto = (angle: RequiredPhotoAngle, file: File) => uploadPhoto(setBeforePhotos, "before", angle, file);
+  const removeBeforePhoto = (angle: RequiredPhotoAngle) => removePhoto(beforePhotos, setBeforePhotos, angle);
+  const uploadAfterPhoto = (angle: RequiredPhotoAngle, file: File) => uploadPhoto(setAfterPhotos, "after", angle, file);
+  const removeAfterPhoto = (angle: RequiredPhotoAngle) => removePhoto(afterPhotos, setAfterPhotos, angle);
 
   const saveIntake = (status: FormStatus) => {
     setIntakeStatus(status);
@@ -2164,8 +2206,8 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
           photos={beforePhotos}
           onUploadPhotoAngle={uploadBeforePhoto}
           onRemovePhotoAngle={removeBeforePhoto}
-          onAddDamageCloseUp={file => addCloseUp(setBeforePhotos, file)}
-          onRemoveDamageCloseUp={id => removeCloseUp(setBeforePhotos, id)}
+          onAddDamageCloseUp={file => addCloseUp(setBeforePhotos, "before", file)}
+          onRemoveDamageCloseUp={id => removeCloseUp(beforePhotos, setBeforePhotos, id)}
           answers={conditionAnswers}
           notes={intakeNotes}
           onToggleCondition={toggleCondition}
@@ -2182,8 +2224,8 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
           photos={afterPhotos}
           onUploadPhotoAngle={uploadAfterPhoto}
           onRemovePhotoAngle={removeAfterPhoto}
-          onAddDamageCloseUp={file => addCloseUp(setAfterPhotos, file)}
-          onRemoveDamageCloseUp={id => removeCloseUp(setAfterPhotos, id)}
+          onAddDamageCloseUp={file => addCloseUp(setAfterPhotos, "after", file)}
+          onRemoveDamageCloseUp={id => removeCloseUp(afterPhotos, setAfterPhotos, id)}
           notes={outtakeNotes}
           onNotesChange={setOuttakeNotes}
           onClose={() => setOuttakeModalOpen(false)}
@@ -2478,7 +2520,37 @@ export default function AdminOrderDetail() {
     }, { replace: true });
   };
 
-  const order = ORDER_DETAILS[id] ?? buildFallback(id);
+  const [order, setOrder] = useState<OrderDetail | null>(null);
+  const [orderLoading, setOrderLoading] = useState(true);
+  const [orderError, setOrderError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setOrderLoading(true);
+    setOrderError(null);
+    fetchOrderDetail(id)
+      .then(result => { if (!cancelled) setOrder(result ?? buildFallback(id)); })
+      .catch(err => { if (!cancelled) setOrderError(err instanceof Error ? err.message : String(err)); })
+      .finally(() => { if (!cancelled) setOrderLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
+
+  if (orderLoading || !order) {
+    if (orderError) {
+      return (
+        <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Public Sans', 'Albert Sans', sans-serif" }}>
+          <div style={{ textAlign: "center", color: "#991b1b", fontSize: 14, maxWidth: 420 }}>
+            Couldn't load this order: {orderError}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Public Sans', 'Albert Sans', sans-serif", color: "#9ca3af", fontSize: 14 }}>
+        Loading order…
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", fontFamily: "'Public Sans', 'Albert Sans', sans-serif" }}>
@@ -2514,7 +2586,7 @@ export default function AdminOrderDetail() {
                   </Card>
                 ) : (
                   order.pairs.map((pair, i) => (
-                    <PairCard key={pair.id} pair={pair} index={i} total={order.pairs.length} />
+                    <PairCard key={pair.id} pair={pair} index={i} total={order.pairs.length} orderId={order.id} />
                   ))
                 )}
                 <CommentsCard order={order} />

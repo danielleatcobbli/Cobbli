@@ -12,6 +12,8 @@ def _order(**overrides) -> dict:
         "order_number": "CB-1001",
         "delivery_method": "door-to-door",
         "contact_email": "buyer@example.com",
+        "contact_phone": "555-0100",
+        "placed_at": "2026-07-01T10:00:00Z",
         "delivery_address": {
             "street": "123 Main St",
             "street2": "",
@@ -87,21 +89,27 @@ def test_happy_path_sends_brevo_template(client, admin_mock) -> None:
 
     brevo_mock.assert_awaited_once()
     kwargs = brevo_mock.await_args.kwargs
-    assert kwargs["template_id"] == 1
+    # 15 is the real, active "Order confirmation" Brevo template — template
+    # 1 doesn't exist in the account (see requirements doc Section 15).
+    assert kwargs["template_id"] == 15
     assert kwargs["to"] == [{"email": "buyer@example.com", "name": "Jane"}]
     assert kwargs["tags"] == ["order-confirmation"]
     params = kwargs["params"]
     assert params["first_name"] == "Jane"
     assert params["order_number"] == "CB-1001"
-    assert params["pair_identifier"] == "Nike Air Max"
-    assert params["service_1"] == "Sole repair"
-    assert params["service_2"] == "Polish"
-    assert params["price"] == "$45.00"
+    assert params["order_date"] == "2026-07-01T10:00:00Z"
+    assert params["pickup_datetime"] == ""
+    assert params["contact_phone"] == "555-0100"
     assert params["pickup_address"] == "123 Main St, Brooklyn, NY, 11201"
-    assert params["repairs_subtotal"] == "$45.00"
-    assert params["courier_fee"] == "$10.00"
+    assert params["items"] == [
+        {"name": "Nike Air Max", "service": "Sole repair", "description": "", "qty": 1},
+        {"name": "Nike Air Max", "service": "Polish", "description": "", "qty": 1},
+    ]
+    assert params["repair_subtotal"] == "$45.00"
+    assert params["delivery_fee"] == "$10.00"
     assert params["tax"] == "$5.00"
     assert params["order_total"] == "$60.00"
+    assert params["support_email"] == "support@cobbli.com"
 
 
 def test_skips_when_not_door_to_door(client) -> None:
@@ -144,7 +152,7 @@ def test_missing_order_id_returns_500(client) -> None:
     assert "error" in res.json()
 
 
-def test_falls_back_to_default_pair_identifier(client) -> None:
+def test_falls_back_to_default_item_name(client) -> None:
     admin = _build_admin_mock(
         profile={"first_name": "", "email": "x@example.com"},
         items=[
@@ -167,10 +175,9 @@ def test_falls_back_to_default_pair_identifier(client) -> None:
 
     assert res.status_code == 200
     params = brevo_mock.await_args.kwargs["params"]
-    assert params["pair_identifier"] == "Your pair"
-    assert params["service_1"] == "Service"
-    assert params["service_2"] == ""
-    assert params["price"] == "$0.00"
+    assert params["items"] == [
+        {"name": "Your pair", "service": "Service", "description": "", "qty": 1}
+    ]
 
 
 def test_brevo_failure_returns_500(client, admin_mock) -> None:

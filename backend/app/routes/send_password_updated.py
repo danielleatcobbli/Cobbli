@@ -9,7 +9,10 @@ from app.supabase_client import get_supabase_admin
 
 router = APIRouter(prefix="/email", tags=["email"])
 
-BREVO_TEMPLATE_ID = 7
+# Was 7, which is actually the "Account locked" template — a customer
+# updating their password was getting told their account had been locked.
+# 8 is the real "Password updated" template. See requirements doc Section 15.
+BREVO_TEMPLATE_ID = 8
 
 
 @router.post("/password-updated")

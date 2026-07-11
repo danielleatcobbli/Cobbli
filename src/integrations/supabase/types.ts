@@ -59,8 +59,6 @@ export type Database = {
           deposit_amount_cents: number | null
           deposit_paid_at: string | null
           deposit_status: string
-          description: string | null
-          guest_email: string | null
           id: string
           pairs: Json
           proposal_token: string
@@ -69,15 +67,13 @@ export type Database = {
           stripe_payment_intent_id: string | null
           stripe_session_id: string | null
           updated_at: string
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           created_at?: string
           deposit_amount_cents?: number | null
           deposit_paid_at?: string | null
           deposit_status?: string
-          description?: string | null
-          guest_email?: string | null
           id?: string
           pairs?: Json
           proposal_token?: string
@@ -86,15 +82,13 @@ export type Database = {
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
           updated_at?: string
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           created_at?: string
           deposit_amount_cents?: number | null
           deposit_paid_at?: string | null
           deposit_status?: string
-          description?: string | null
-          guest_email?: string | null
           id?: string
           pairs?: Json
           proposal_token?: string
@@ -103,7 +97,7 @@ export type Database = {
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
           updated_at?: string
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -227,24 +221,30 @@ export type Database = {
       order_items: {
         Row: {
           created_at: string
+          done: boolean
           id: string
           order_id: string
+          order_pair_id: string | null
           pair_snapshot: Json
           price_cents: number
           service_snapshot: Json
         }
         Insert: {
           created_at?: string
+          done?: boolean
           id?: string
           order_id: string
+          order_pair_id?: string | null
           pair_snapshot: Json
           price_cents: number
           service_snapshot: Json
         }
         Update: {
           created_at?: string
+          done?: boolean
           id?: string
           order_id?: string
+          order_pair_id?: string | null
           pair_snapshot?: Json
           price_cents?: number
           service_snapshot?: Json
@@ -257,23 +257,129 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "order_items_order_pair_id_fkey"
+            columns: ["order_pair_id"]
+            isOneToOne: false
+            referencedRelation: "order_pairs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_notes: {
+        Row: {
+          author_id: string | null
+          author_name: string | null
+          body: string
+          created_at: string
+          id: string
+          order_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_name?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          order_id: string
+        }
+        Update: {
+          author_id?: string | null
+          author_name?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_notes_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_pairs: {
+        Row: {
+          completion_status: string
+          condition_assessment: Json
+          created_at: string
+          customer_notes: string | null
+          id: string
+          intake_notes: string | null
+          intake_status: string
+          order_id: string
+          outtake_notes: string | null
+          shoe_brand: string | null
+          shoe_color_material: string | null
+          shoe_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          completion_status?: string
+          condition_assessment?: Json
+          created_at?: string
+          customer_notes?: string | null
+          id?: string
+          intake_notes?: string | null
+          intake_status?: string
+          order_id: string
+          outtake_notes?: string | null
+          shoe_brand?: string | null
+          shoe_color_material?: string | null
+          shoe_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          completion_status?: string
+          condition_assessment?: Json
+          created_at?: string
+          customer_notes?: string | null
+          id?: string
+          intake_notes?: string | null
+          intake_status?: string
+          order_id?: string
+          outtake_notes?: string | null
+          shoe_brand?: string | null
+          shoe_color_material?: string | null
+          shoe_type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_pairs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
         ]
       }
       orders: {
         Row: {
+          action_required_by: string | null
           contact_email: string
           contact_phone: string
           courier_fee_cents: number
           created_at: string
           delivery_address: Json | null
           delivery_method: string
+          dispatch_assignee: string | null
           id: string
+          last_contacted_at: string | null
+          notes: string | null
           order_number: string
           paid_at: string | null
           payment_method_snapshot: Json | null
           payment_status: string
+          pickup_date: string | null
+          pickup_time_label: string | null
           placed_at: string
           repairs_subtotal_cents: number
+          return_date: string | null
+          return_time_label: string | null
           status: string
           stripe_payment_intent_id: string | null
           stripe_session_id: string | null
@@ -281,21 +387,30 @@ export type Database = {
           total_cents: number
           updated_at: string
           user_id: string
+          workshop_assignee: string | null
         }
         Insert: {
+          action_required_by?: string | null
           contact_email: string
           contact_phone: string
           courier_fee_cents?: number
           created_at?: string
           delivery_address?: Json | null
           delivery_method: string
+          dispatch_assignee?: string | null
           id?: string
+          last_contacted_at?: string | null
+          notes?: string | null
           order_number?: string
           paid_at?: string | null
           payment_method_snapshot?: Json | null
           payment_status?: string
+          pickup_date?: string | null
+          pickup_time_label?: string | null
           placed_at?: string
           repairs_subtotal_cents: number
+          return_date?: string | null
+          return_time_label?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
@@ -303,21 +418,30 @@ export type Database = {
           total_cents: number
           updated_at?: string
           user_id: string
+          workshop_assignee?: string | null
         }
         Update: {
+          action_required_by?: string | null
           contact_email?: string
           contact_phone?: string
           courier_fee_cents?: number
           created_at?: string
           delivery_address?: Json | null
           delivery_method?: string
+          dispatch_assignee?: string | null
           id?: string
+          last_contacted_at?: string | null
+          notes?: string | null
           order_number?: string
           paid_at?: string | null
           payment_method_snapshot?: Json | null
           payment_status?: string
+          pickup_date?: string | null
+          pickup_time_label?: string | null
           placed_at?: string
           repairs_subtotal_cents?: number
+          return_date?: string | null
+          return_time_label?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
@@ -325,8 +449,44 @@ export type Database = {
           total_cents?: number
           updated_at?: string
           user_id?: string
+          workshop_assignee?: string | null
         }
         Relationships: []
+      }
+      pair_photos: {
+        Row: {
+          angle: string | null
+          created_at: string
+          id: string
+          order_pair_id: string
+          side: string
+          storage_path: string
+        }
+        Insert: {
+          angle?: string | null
+          created_at?: string
+          id?: string
+          order_pair_id: string
+          side: string
+          storage_path: string
+        }
+        Update: {
+          angle?: string | null
+          created_at?: string
+          id?: string
+          order_pair_id?: string
+          side?: string
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pair_photos_order_pair_id_fkey"
+            columns: ["order_pair_id"]
+            isOneToOne: false
+            referencedRelation: "order_pairs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pairs: {
         Row: {
@@ -363,7 +523,6 @@ export type Database = {
           billing_address_id: string | null
           card_brand: string
           card_last4: string
-          cardholder_name: string | null
           created_at: string
           exp_month: number
           exp_year: number
@@ -377,7 +536,6 @@ export type Database = {
           billing_address_id?: string | null
           card_brand: string
           card_last4: string
-          cardholder_name?: string | null
           created_at?: string
           exp_month: number
           exp_year: number
@@ -391,7 +549,6 @@ export type Database = {
           billing_address_id?: string | null
           card_brand?: string
           card_last4?: string
-          cardholder_name?: string | null
           created_at?: string
           exp_month?: number
           exp_year?: number
@@ -411,6 +568,27 @@ export type Database = {
           },
         ]
       }
+      pricing_config: {
+        Row: {
+          key: string
+          label: string | null
+          updated_at: string
+          value_cents: number
+        }
+        Insert: {
+          key: string
+          label?: string | null
+          updated_at?: string
+          value_cents: number
+        }
+        Update: {
+          key?: string
+          label?: string | null
+          updated_at?: string
+          value_cents?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -419,6 +597,7 @@ export type Database = {
           id: string
           last_name: string | null
           phone: string | null
+          staff_team: string | null
           updated_at: string
           user_id: string
         }
@@ -429,6 +608,7 @@ export type Database = {
           id?: string
           last_name?: string | null
           phone?: string | null
+          staff_team?: string | null
           updated_at?: string
           user_id: string
         }
@@ -439,6 +619,7 @@ export type Database = {
           id?: string
           last_name?: string | null
           phone?: string | null
+          staff_team?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -506,27 +687,6 @@ export type Database = {
           label?: string | null
           updated_at?: string
           zip?: string
-        }
-        Relationships: []
-      }
-      pricing_config: {
-        Row: {
-          key: string
-          label: string | null
-          updated_at: string
-          value_cents: number
-        }
-        Insert: {
-          key: string
-          label?: string | null
-          updated_at?: string
-          value_cents: number
-        }
-        Update: {
-          key?: string
-          label?: string | null
-          updated_at?: string
-          value_cents?: number
         }
         Relationships: []
       }
@@ -605,19 +765,19 @@ export type Database = {
           created_at: string
           id: string
           service_id: string
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
           service_id: string
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           created_at?: string
           id?: string
           service_id?: string
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -637,13 +797,16 @@ export type Database = {
           categories: string[]
           created_at: string
           eligible_shoe_types: string[]
+          excluded_brands: string[]
           full_description: string | null
           id: string
           image_url: string | null
           is_active: boolean
           is_coming_soon: boolean
+          is_popular: boolean
           name: string
           notes: string | null
+          page_qa: Json | null
           popularity_rank: number
           qa_config: Json | null
           short_description: string | null
@@ -658,13 +821,16 @@ export type Database = {
           categories?: string[]
           created_at?: string
           eligible_shoe_types?: string[]
+          excluded_brands?: string[]
           full_description?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean
           is_coming_soon?: boolean
+          is_popular?: boolean
           name: string
           notes?: string | null
+          page_qa?: Json | null
           popularity_rank?: number
           qa_config?: Json | null
           short_description?: string | null
@@ -679,13 +845,16 @@ export type Database = {
           categories?: string[]
           created_at?: string
           eligible_shoe_types?: string[]
+          excluded_brands?: string[]
           full_description?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean
           is_coming_soon?: boolean
+          is_popular?: boolean
           name?: string
           notes?: string | null
+          page_qa?: Json | null
           popularity_rank?: number
           qa_config?: Json | null
           short_description?: string | null
@@ -782,6 +951,7 @@ export type Database = {
         Returns: boolean
       }
       is_account_locked: { Args: { _email: string }; Returns: boolean }
+      is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
       record_failed_signin: { Args: { _email: string }; Returns: Json }
       reset_failed_attempts: { Args: { _user_id: string }; Returns: undefined }
     }
