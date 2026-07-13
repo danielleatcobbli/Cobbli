@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, X, FileVideo, Play } from "lucide-react";
+import { Plus, X, FileVideo, Play, Camera, Video, Upload } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
@@ -88,6 +88,8 @@ const AssessmentUpload = () => {
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
+  const cameraVideoInputRef = useRef<HTMLInputElement>(null);
   const uploadMapRef = useRef<Map<File, UploadEntry>>(new Map());
   const sessionTsRef = useRef<string>("");
 
@@ -182,6 +184,8 @@ const AssessmentUpload = () => {
       return [...prev, ...added];
     });
     if (inputRef.current) inputRef.current.value = "";
+    if (cameraPhotoInputRef.current) cameraPhotoInputRef.current.value = "";
+    if (cameraVideoInputRef.current) cameraVideoInputRef.current.value = "";
   };
 
   const remove = (idx: number) =>
@@ -257,6 +261,8 @@ const AssessmentUpload = () => {
             Upload photos or a short video and we'll recommend the right repairs.
           </p>
 
+          {/* Library picker — used by the desktop dropzone below, and by the
+              "Choose from library" option in the mobile action row. */}
           <input
             ref={inputRef}
             type="file"
@@ -265,7 +271,30 @@ const AssessmentUpload = () => {
             className="hidden"
             onChange={(e) => onPick(e.target.files)}
           />
+          {/* Camera capture inputs — mobile only. `capture="environment"`
+              opens the device camera directly (rear-facing) instead of the
+              photo library, so these are kept as separate inputs from the
+              library picker above rather than reused with a dynamic accept
+              attribute. Photo and video are separate inputs since a device's
+              camera capture UI is single-purpose per input. */}
+          <input
+            ref={cameraPhotoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => onPick(e.target.files)}
+          />
+          <input
+            ref={cameraVideoInputRef}
+            type="file"
+            accept="video/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => onPick(e.target.files)}
+          />
 
+          {/* Desktop — unchanged drag-and-drop dropzone. */}
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
@@ -280,7 +309,7 @@ const AssessmentUpload = () => {
                 onPick(e.dataTransfer.files);
               }
             }}
-            className={`mt-8 w-full rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
+            className={`mt-8 hidden w-full rounded-xl border-2 border-dashed p-8 text-center transition-colors md:block ${
               dragOver
                 ? "border-primary bg-secondary/60"
                 : "border-border hover:border-primary/60 hover:bg-secondary/40"
@@ -294,6 +323,40 @@ const AssessmentUpload = () => {
               JPG, PNG, HEIC, MP4, MOV · up to {MAX_FILES} files · 50MB max each
             </p>
           </button>
+
+          {/* Mobile — explicit take photo / record video / choose from
+              library actions (Danielle's Poshmark-style reference), instead
+              of relying on the browser's default file-picker behavior. */}
+          <div className="mt-8 grid grid-cols-3 gap-2 md:hidden">
+            <button
+              type="button"
+              onClick={() => cameraPhotoInputRef.current?.click()}
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-border p-4 text-center hover:border-primary/60 hover:bg-secondary/40 transition-colors"
+            >
+              <Camera size={22} className="text-primary" />
+              <span className="text-xs font-medium text-primary">Take photo</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => cameraVideoInputRef.current?.click()}
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-border p-4 text-center hover:border-primary/60 hover:bg-secondary/40 transition-colors"
+            >
+              <Video size={22} className="text-primary" />
+              <span className="text-xs font-medium text-primary">Record video</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-border p-4 text-center hover:border-primary/60 hover:bg-secondary/40 transition-colors"
+            >
+              <Upload size={22} className="text-primary" />
+              <span className="text-xs font-medium text-primary">Choose from library</span>
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground md:hidden">
+            JPG, PNG, HEIC, MP4, MOV · up to {MAX_FILES} files · 50MB max each
+          </p>
+
           <p className="mt-2 text-sm italic text-muted-foreground">
             We'll use your photo or video to fill in as many shoe details as we can
           </p>

@@ -24,6 +24,7 @@ import {
   type PhotoSet,
 } from "./AdminOrderDetail";
 import { fetchOrders, fetchGalleryItems, type GalleryItem } from "./adminData";
+import BeforeAfterSlider from "@/components/cobbli/BeforeAfterSlider";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -1198,33 +1199,13 @@ function GalleryCard({
   onToggleFeatured: () => void;
   onOpenOrder: () => void;
 }) {
-  const [pos, setPos] = useState(50);
   const before = item.before.angles[angle];
   const after = item.after.angles[angle];
   if (!before || !after) return null; // guarded by photoSetComplete at build time — defensive only
 
   return (
     <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, padding: 10 }}>
-      <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 6, overflow: "hidden", backgroundColor: "#f3f4f6" }}>
-        <img src={after.previewUrl} alt="After" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-        <img
-          src={before.previewUrl}
-          alt="Before"
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", clipPath: `inset(0 ${100 - pos}% 0 0)` }}
-        />
-        <div style={{ position: "absolute", top: 0, bottom: 0, left: `${pos}%`, width: 2, backgroundColor: "#fff", pointerEvents: "none", transform: "translateX(-1px)" }} />
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={pos}
-          onChange={e => setPos(Number(e.target.value))}
-          aria-label="Drag to compare before and after"
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "ew-resize", margin: 0 }}
-        />
-        <span style={{ position: "absolute", top: 8, left: 8, fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, backgroundColor: "rgba(255,255,255,0.9)", color: "#3d1700", pointerEvents: "none" }}>Before</span>
-        <span style={{ position: "absolute", top: 8, right: 8, fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, backgroundColor: "rgba(255,255,255,0.9)", color: "#3d1700", pointerEvents: "none" }}>After</span>
-      </div>
+      <BeforeAfterSlider beforeUrl={before.previewUrl} afterUrl={after.previewUrl} aspectRatio="4 / 3" />
 
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginTop: 8, gap: 8 }}>
         <div style={{ cursor: "pointer" }} onClick={onOpenOrder}>

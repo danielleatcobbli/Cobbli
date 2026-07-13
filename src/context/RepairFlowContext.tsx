@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { BagService } from "@/context/BagContext";
 
 type PaintConsentMap = Record<string, "yes" | "no">;
 type SoleMaterialMap = Record<string, "Leather" | "Rubber">;
@@ -12,6 +13,14 @@ type RepairFlowState = {
   paintConsents: PaintConsentMap;
   /** Sole-material answers keyed by service slug; persists across the flow. */
   soleMaterials: SoleMaterialMap;
+  /** Set by the "What's going on with your shoes?" recommendation flow right
+   *  before navigating to the pick-a-pair page — a ready-to-add list of bag
+   *  line items (a package, individual services, or both) that don't map to
+   *  a single service/bundle query param the way the older flows do.
+   *  StartRepairPick.tsx reads and clears this on confirm. Deliberately kept
+   *  separate from selectedServiceSlugs, since setSelectedPairId() resets
+   *  that array and this needs to survive picking a pair. */
+  pendingRecommendedItems: BagService[] | null;
   setSelectedPairId: (id: string | null) => void;
   setSelectedServiceSlugs: (slugs: string[]) => void;
   setActiveCategory: (c: string) => void;
@@ -19,6 +28,7 @@ type RepairFlowState = {
   removeService: (slug: string) => void;
   setPaintConsent: (slug: string, consent: "yes" | "no") => void;
   setSoleMaterial: (slug: string, material: "Leather" | "Rubber") => void;
+  setPendingRecommendedItems: (items: BagService[] | null) => void;
   reset: () => void;
 };
 
@@ -31,6 +41,7 @@ type Persisted = {
   activeCategory: string;
   paintConsents: PaintConsentMap;
   soleMaterials: SoleMaterialMap;
+  pendingRecommendedItems: BagService[] | null;
 };
 
 const DEFAULTS: Persisted = {
@@ -39,6 +50,7 @@ const DEFAULTS: Persisted = {
   activeCategory: "All services",
   paintConsents: {},
   soleMaterials: {},
+  pendingRecommendedItems: null,
 };
 
 const read = (): Persisted => {
@@ -110,6 +122,10 @@ export const RepairFlowProvider = ({ children }: { children: ReactNode }) => {
       setState((s) => ({ ...s, soleMaterials: { ...s.soleMaterials, [slug]: material } })),
     [],
   );
+  const setPendingRecommendedItems = useCallback(
+    (items: BagService[] | null) => setState((s) => ({ ...s, pendingRecommendedItems: items })),
+    [],
+  );
   const reset = useCallback(() => setState(DEFAULTS), []);
 
   const value = useMemo<RepairFlowState>(
@@ -122,9 +138,10 @@ export const RepairFlowProvider = ({ children }: { children: ReactNode }) => {
       removeService,
       setPaintConsent,
       setSoleMaterial,
+      setPendingRecommendedItems,
       reset,
     }),
-    [state, setSelectedPairId, setSelectedServiceSlugs, setActiveCategory, addService, removeService, setPaintConsent, setSoleMaterial, reset],
+    [state, setSelectedPairId, setSelectedServiceSlugs, setActiveCategory, addService, removeService, setPaintConsent, setSoleMaterial, setPendingRecommendedItems, reset],
   );
   return <RepairFlowContext.Provider value={value}>{children}</RepairFlowContext.Provider>;
 };

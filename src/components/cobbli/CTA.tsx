@@ -14,7 +14,7 @@ const CTA = () => {
             Book your professional repair today — free pick up across Manhattan.
           </p>
         </div>
-        <Link to="/services" onClick={() => trackEvent("start_repair", { source: "cta_section" })}>
+        <Link to="/start-repair" onClick={() => trackEvent("start_repair", { source: "cta_section" })}>
           <Button size="lg" variant="hero" className="shrink-0">
             Start a repair
           </Button>

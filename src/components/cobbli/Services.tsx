@@ -1,134 +1,27 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import CategoryFilterBar, {
   ALL_CATEGORIES_LABEL,
   type CategoryFilter,
 } from "@/components/cobbli/CategoryFilterBar";
 import ServiceCard from "@/components/cobbli/ServiceCard";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
-import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
-import SoleMaterialDialog, { SOLE_MATERIAL_SLUGS } from "@/components/cobbli/SoleMaterialDialog";
 import { type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
-import { useRepairFlow } from "@/context/RepairFlowContext";
-import { trackEvent } from "@/lib/analytics";
+import { BUNDLES, type Bundle } from "@/data/bundles";
+import { POPULAR_SERVICE_SLUGS, sortServices } from "@/data/serviceOrder";
 
 // ---------------------------------------------------------------------------
-// Bundle data — homepage display order (popular first)
+// Bundle card (homepage) — same data as pages/Services.tsx (src/data/bundles.ts),
+// just sized/laid out for the homepage's horizontal-scroll row instead of a grid.
+// No "Add to repair" button (Danielle's call, matching pages/Services.tsx) —
+// the card is click-through only to the package detail page, which has its
+// own "Start a repair" button.
 // ---------------------------------------------------------------------------
 
-type HomepageBundle = {
-  name: string;
-  popular: boolean;
-  bestFor: string;
-  price: string;
-};
-
-const HOMEPAGE_BUNDLES: HomepageBundle[] = [
-  {
-    name: "Sole & Surface",
-    popular: true,
-    bestFor: "shoes with day-to-day wear on the surface and sole",
-    price: "$125",
-  },
-  {
-    name: "Sole",
-    popular: true,
-    bestFor: "shoes with a worn down or separated sole",
-    price: "$85",
-  },
-  {
-    name: "Surface",
-    popular: true,
-    bestFor: "shoes with surface damage, dullness, or discoloration",
-    price: "$100",
-  },
-  {
-    name: "Just a Shine",
-    popular: true,
-    bestFor: "shoes that need a quick polish and shine",
-    price: "$20",
-  },
-  {
-    name: "Sole, Surface & Interior",
-    popular: false,
-    bestFor: "shoes showing day-to-day wear on the surface, sole, and inside",
-    price: "$200",
-  },
-  {
-    name: "Full Service",
-    popular: false,
-    bestFor: "shoes that need a full revamp or are experiencing damage beyond everyday wear",
-    price: "$250",
-  },
-  {
-    name: "Interior",
-    popular: false,
-    bestFor: "shoes that are worn or uncomfortable on the inside",
-    price: "$100",
-  },
-  {
-    name: "Preventative Care",
-    popular: false,
-    bestFor: "protecting shoes you want to last",
-    price: "$60",
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Service display order — popular first
-// ---------------------------------------------------------------------------
-
-const POPULAR_SERVICE_SLUGS = new Set([
-  "full-resole",
-  "color-restoration",
-  "leather-or-suede-conditioning",
-  "insole-replacement",
-  "lining-repair",
-  "shoe-shine",
-]);
-
-const ORDERED_SERVICE_SLUGS: string[] = [
-  // Popular
-  "full-resole",
-  "color-restoration",
-  "leather-or-suede-conditioning",
-  "insole-replacement",
-  "lining-repair",
-  "shoe-shine",
-  // Non-popular
-  "protective-full-sole",
-  "waterproofing",
-  "high-heel-tip-replacement",
-  "heel-reattachment",
-  "seam-repair",
-  "strap-repair",
-  "hardware-repair",
-  "zipper-replacement",
-  "zipper-slider-replacement",
-  "deodorizing-treatment",
-];
-
-const slugOrder = (slug: string) => {
-  const idx = ORDERED_SERVICE_SLUGS.indexOf(slug);
-  return idx === -1 ? ORDERED_SERVICE_SLUGS.length : idx;
-};
-
-const sortServices = (list: Service[]) =>
-  [...list].sort((a, b) => slugOrder(a.slug) - slugOrder(b.slug) || a.rank - b.rank);
-
-// ---------------------------------------------------------------------------
-// Bundle card (homepage)
-// ---------------------------------------------------------------------------
-
-const HomepageBundleCard = ({
-  bundle,
-  onAddToRepair,
-}: {
-  bundle: HomepageBundle;
-  onAddToRepair: () => void;
-}) => (
-  <div
+const HomepageBundleCard = ({ bundle }: { bundle: Bundle }) => (
+  <Link
+    to={`/packages/${bundle.slug}`}
     className="shrink-0 rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col"
     style={{ width: 200 }}
   >
@@ -156,17 +49,7 @@ const HomepageBundleCard = ({
         {bundle.price}
       </p>
     </div>
-    <div className="px-3 pb-3">
-      <button
-        type="button"
-        onClick={onAddToRepair}
-        className="w-full rounded-md py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-        style={{ backgroundColor: "#3d1700" }}
-      >
-        Add to repair
-      </button>
-    </div>
-  </div>
+  </Link>
 );
 
 // ---------------------------------------------------------------------------
@@ -174,31 +57,8 @@ const HomepageBundleCard = ({
 // ---------------------------------------------------------------------------
 
 const Services = () => {
-  const navigate = useNavigate();
   const [active, setActive] = useState<CategoryFilter>(ALL_CATEGORIES_LABEL);
   const { data: services, isLoading } = useServices();
-  const { setPaintConsent, setSoleMaterial } = useRepairFlow();
-  const [pendingSlug, setPendingSlug] = useState<string | null>(null);
-  const [consentOpen, setConsentOpen] = useState(false);
-  const [soleOpen, setSoleOpen] = useState(false);
-
-  const goToPick = (slug: string) =>
-    navigate(`/start-repair/pick?service=${encodeURIComponent(slug)}`);
-
-  const handleAddToRepair = (slug: string) => {
-    trackEvent("service_added", { service_slug: slug, source: "home_services" });
-    if (PAINT_CONSENT_SLUGS.has(slug)) {
-      setPendingSlug(slug);
-      setConsentOpen(true);
-      return;
-    }
-    if (SOLE_MATERIAL_SLUGS.has(slug)) {
-      setPendingSlug(slug);
-      setSoleOpen(true);
-      return;
-    }
-    goToPick(slug);
-  };
 
   const visibleServices = useMemo(() => {
     const list = (services ?? []).filter((s) => !s.isComingSoon);
@@ -223,7 +83,7 @@ const Services = () => {
         {/* ── Section 1: experiences ── */}
         <div className="flex items-baseline justify-between gap-4 mb-1">
           <h2 className="text-2xl md:text-3xl font-display text-primary">
-            Choose your repair package
+            Packages
           </h2>
           <Link
             to="/services"
@@ -243,15 +103,8 @@ const Services = () => {
         </a>
 
         <div className="flex gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1">
-          {HOMEPAGE_BUNDLES.map((bundle) => (
-            <HomepageBundleCard
-              key={bundle.name}
-              bundle={bundle}
-              onAddToRepair={() => {
-                trackEvent("service_added", { bundle: bundle.name, source: "home_bundle" });
-                navigate("/start-repair/pick");
-              }}
-            />
+          {BUNDLES.map((bundle) => (
+            <HomepageBundleCard key={bundle.slug} bundle={bundle} />
           ))}
         </div>
 
@@ -264,7 +117,7 @@ const Services = () => {
         {/* ── Section 2: individual services ── */}
         <div id="individual-services-home" className="flex items-baseline justify-between gap-4 mb-4 scroll-mt-20">
           <h2 className="text-2xl md:text-3xl font-display text-primary">
-            Choose individual services
+            Individual services
           </h2>
           <Link
             to={viewAllServicesHref}
@@ -296,7 +149,6 @@ const Services = () => {
                 <ServiceCard
                   s={s}
                   isPopular={POPULAR_SERVICE_SLUGS.has(s.slug)}
-                  onAddToRepair={handleAddToRepair}
                 />
               </div>
             ))}
@@ -304,25 +156,6 @@ const Services = () => {
         )}
 
       </div>
-
-      <PaintConsentDialog
-        open={consentOpen}
-        onOpenChange={(v) => { if (!v) { setConsentOpen(false); setPendingSlug(null); } }}
-        onConfirm={(consent) => {
-          if (pendingSlug) { setPaintConsent(pendingSlug, consent); goToPick(pendingSlug); }
-          setPendingSlug(null);
-          setConsentOpen(false);
-        }}
-      />
-      <SoleMaterialDialog
-        open={soleOpen}
-        onOpenChange={(v) => { if (!v) { setSoleOpen(false); setPendingSlug(null); } }}
-        onConfirm={(material) => {
-          if (pendingSlug) { setSoleMaterial(pendingSlug, material); goToPick(pendingSlug); }
-          setPendingSlug(null);
-          setSoleOpen(false);
-        }}
-      />
     </section>
   );
 };

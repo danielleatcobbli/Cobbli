@@ -472,7 +472,14 @@ const StartRepair = () => {
   const preselectedBundle = searchParams.get("bundle");
   const preselectedBundlePrice = searchParams.get("bundlePrice");
   const { pairs, deletePair, getPair } = usePairs();
-  const { selectedPairId, setSelectedPairId, setSelectedServiceSlugs, paintConsents } = useRepairFlow();
+  const {
+    selectedPairId,
+    setSelectedPairId,
+    setSelectedServiceSlugs,
+    paintConsents,
+    pendingRecommendedItems,
+    setPendingRecommendedItems,
+  } = useRepairFlow();
   const { findByPairId, addPair: addPairToBag } = useBag();
   const { data: services } = useServices();
   const { user } = useAuth();
@@ -571,6 +578,29 @@ const StartRepair = () => {
     if (!pair) return;
 
     trackEvent("pair_confirmed", { shoe_type: pair.shoeType });
+
+    // Recommendation-flow path — one or more items (a package, individual
+    // services, or both) handed off from the "What's going on with your
+    // shoes?" checklist (StartRepair.tsx). Checked first since it can carry
+    // multiple line items at once, unlike the single service/bundle query
+    // params below.
+    if (pendingRecommendedItems && pendingRecommendedItems.length > 0) {
+      addPairToBag(pendingRecommendedItems, pair.id, formatPairLabel(pair), pair.shoeType);
+      trackEvent("repair_added_to_bag", {
+        value: pendingRecommendedItems.reduce((sum, s) => sum + s.price, 0) / 100,
+        currency: "USD",
+        service_count: pendingRecommendedItems.length,
+      });
+      setSelectedServiceSlugs(pendingRecommendedItems.map((s) => s.id));
+      setAddedServiceName(
+        pendingRecommendedItems.length === 1
+          ? pendingRecommendedItems[0].name
+          : pendingRecommendedItems.map((s) => s.name).join(", "),
+      );
+      setPendingRecommendedItems(null);
+      setConfirmOpen(true);
+      return;
+    }
 
     // If a specific service was pre-selected (from "Add to repair" on a card),
     // add it to the bag directly and show the upsell modal.

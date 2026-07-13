@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronLeft, ChevronUp } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
 import SoleMaterialDialog, { SOLE_MATERIAL_SLUGS } from "@/components/cobbli/SoleMaterialDialog";
 import ComingSoonVoteButton from "@/components/cobbli/ComingSoonVoteButton";
+import UnsupportedBrandsAccordion from "@/components/cobbli/UnsupportedBrandsAccordion";
 import { useService } from "@/hooks/useServices";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import { trackEvent } from "@/lib/analytics";
@@ -285,45 +286,5 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
     </main>
   );
 };
-
-// ---------------------------------------------------------------------------
-// Unsupported brands accordion
-// ---------------------------------------------------------------------------
-
-type AccordionProps = {
-  brands: string[];
-  open: boolean;
-  onToggle: () => void;
-};
-
-const UnsupportedBrandsAccordion = ({ brands, open, onToggle }: AccordionProps) => (
-  <div>
-    <button
-      type="button"
-      onClick={onToggle}
-      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-    >
-      Brands not currently supported
-      {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-    </button>
-    {open && (
-      <div className="mt-2 space-y-2">
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          {brands.join(", ")}.
-        </p>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          These brands use signature materials, finishes, and techniques that require specialist
-          handling and sourcing to repair correctly. We're working toward supporting them.
-        </p>
-        <button
-          type="button"
-          className="text-xs text-muted-foreground underline hover:text-primary"
-        >
-          👍 Vote to add support for these brands
-        </button>
-      </div>
-    )}
-  </div>
-);
 
 export default ServiceDetail;

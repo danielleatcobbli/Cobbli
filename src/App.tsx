@@ -36,6 +36,7 @@ import BlogPost from "./pages/BlogPost";
 import SelectServices from "./pages/SelectServices";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
+import PackageDetail from "./pages/PackageDetail";
 import Bag from "./pages/Bag";
 import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
@@ -91,7 +92,7 @@ const App = () => (
                         <Route path="/signup" element={<SignUp />} />
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/link-expired" element={<LinkExpired />} />
-                        <Route path="/start-repair" element={<Navigate to="/services" replace />} />
+                        <Route path="/start-repair" element={<StartRepair />} />
                         <Route path="/start-repair/pick" element={<StartRepairPick />} />
                         <Route path="/start-repair/assessment" element={<AssessmentUpload />} />
                         <Route path="/start-repair/assessment/details" element={<AssessmentDetails />} />
@@ -119,6 +120,7 @@ const App = () => (
                         <Route path="/services/zipper-reattachment" element={<Navigate to="/services#zipper" replace />} />
                         <Route path="/start-repair/services/zipper-reattachment" element={<Navigate to="/start-repair/services" replace />} />
                         <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
+                        <Route path="/packages/:slug" element={<PackageDetail />} />
                         <Route path="/bag" element={<Bag />} />
                         <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
                         <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />

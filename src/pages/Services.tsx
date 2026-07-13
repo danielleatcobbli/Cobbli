@@ -1,142 +1,40 @@
 import { useMemo, useState, useEffect } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
-import { Camera } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import ComingSoonSection from "@/components/cobbli/ComingSoonSection";
+import { Button } from "@/components/ui/button";
 import CategoryFilterBar, {
   ALL_CATEGORIES_LABEL,
   FILTER_BAR_CATEGORIES,
   type CategoryFilter,
 } from "@/components/cobbli/CategoryFilterBar";
-import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
-import SoleMaterialDialog, { SOLE_MATERIAL_SLUGS } from "@/components/cobbli/SoleMaterialDialog";
 import { type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
-import { useRepairFlow } from "@/context/RepairFlowContext";
 import ServiceCard from "@/components/cobbli/ServiceCard";
 import { trackEvent } from "@/lib/analytics";
+import { BUNDLES, type Bundle } from "@/data/bundles";
+import { POPULAR_SERVICE_SLUGS, sortServices } from "@/data/serviceOrder";
 
 const ALL = ALL_CATEGORIES_LABEL;
 const categories = FILTER_BAR_CATEGORIES;
 
 // ---------------------------------------------------------------------------
-// Bundle / experience data
+// Bundle card — no "Add to repair" button (Danielle's call: card click-through
+// to the package detail page is the only action here now, matching how
+// Shopify-style catalog pages work; "Start a repair" lives on the detail
+// page instead, and the Starter repair checklist flow is the promoted path
+// for anyone who doesn't already know exactly what they want).
 // ---------------------------------------------------------------------------
 
-type Bundle = {
-  name: string;
-  popular: boolean;
-  bestFor: string;
-  price: string;
-};
-
-const BUNDLES: Bundle[] = [
-  {
-    name: "Full Service",
-    popular: false,
-    bestFor: "Shoes that need a full revamp or are experiencing damage beyond everyday wear",
-    price: "$250",
-  },
-  {
-    name: "Sole, Surface & Interior",
-    popular: false,
-    bestFor: "Shoes showing day-to-day wear on the surface, sole, and inside",
-    price: "$200",
-  },
-  {
-    name: "Sole & Surface",
-    popular: true,
-    bestFor: "Shoes with day-to-day wear on the surface and sole",
-    price: "$125",
-  },
-  {
-    name: "Surface",
-    popular: true,
-    bestFor: "Shoes with surface damage, dullness, or discoloration",
-    price: "$100",
-  },
-  {
-    name: "Interior",
-    popular: false,
-    bestFor: "Shoes that are worn or uncomfortable on the inside",
-    price: "$100",
-  },
-  {
-    name: "Sole",
-    popular: true,
-    bestFor: "Shoes with a worn down or separated sole",
-    price: "$85",
-  },
-  {
-    name: "Preventative Care",
-    popular: false,
-    bestFor: "Protecting shoes you want to last or preventing more costly repairs",
-    price: "$60",
-  },
-  {
-    name: "Just a Shine",
-    popular: true,
-    bestFor: "Shoes that need a quick polish and shine",
-    price: "$20",
-  },
-];
-
-/** "$250" -> 25000 (cents) — bundles are flat-priced, not yet backed by real
- * catalog services, so this is the only price source for a bundle bag item. */
-const bundlePriceToCents = (price: string): number => Math.round(parseFloat(price.replace(/[^0-9.]/g, "")) * 100);
-
-// ---------------------------------------------------------------------------
-// Popular service slugs + display order
-// ---------------------------------------------------------------------------
-
-const POPULAR_SERVICE_SLUGS = new Set([
-  "full-resole",
-  "color-restoration",
-  "leather-or-suede-conditioning",
-  "insole-replacement",
-  "lining-repair",
-  "shoe-shine",
-]);
-
-const ORDERED_SERVICE_SLUGS: string[] = [
-  // Popular
-  "full-resole",
-  "color-restoration",
-  "leather-or-suede-conditioning",
-  "insole-replacement",
-  "lining-repair",
-  "shoe-shine",
-  // Non-popular
-  "protective-full-sole",
-  "waterproofing",
-  "high-heel-tip-replacement",
-  "heel-reattachment",
-  "seam-repair",
-  "strap-repair",
-  "hardware-repair",
-  "zipper-replacement",
-  "zipper-slider-replacement",
-  "deodorizing-treatment",
-];
-
-const slugOrder = (slug: string) => {
-  const idx = ORDERED_SERVICE_SLUGS.indexOf(slug);
-  return idx === -1 ? ORDERED_SERVICE_SLUGS.length : idx;
-};
-
-const sortServices = (services: Service[]) =>
-  [...services].sort((a, b) => slugOrder(a.slug) - slugOrder(b.slug) || a.rank - b.rank);
-
-// ---------------------------------------------------------------------------
-// Bundle card
-// ---------------------------------------------------------------------------
-
-const BundleCard = ({ bundle, onAddToRepair }: { bundle: Bundle; onAddToRepair: () => void }) => (
-  <div className="rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col">
+const BundleCard = ({ bundle }: { bundle: Bundle }) => (
+  <Link
+    to={`/packages/${bundle.slug}`}
+    className="rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col"
+  >
     <div className="aspect-[4/5] relative" style={{ backgroundColor: "#3d1700" }}>
       {bundle.popular && (
         <span
@@ -161,17 +59,7 @@ const BundleCard = ({ bundle, onAddToRepair }: { bundle: Bundle; onAddToRepair: 
         {bundle.price}
       </p>
     </div>
-    <div className="px-4 pb-4">
-      <button
-        type="button"
-        onClick={onAddToRepair}
-        className="w-full rounded-md py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-        style={{ backgroundColor: "#3d1700" }}
-      >
-        Add to repair
-      </button>
-    </div>
-  </div>
+  </Link>
 );
 
 // ---------------------------------------------------------------------------
@@ -179,7 +67,6 @@ const BundleCard = ({ bundle, onAddToRepair }: { bundle: Bundle; onAddToRepair: 
 // ---------------------------------------------------------------------------
 
 const Services = () => {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const categoryParam = searchParams.get("category");
   const initialActive =
@@ -188,28 +75,6 @@ const Services = () => {
       : ALL;
   const [active, setActive] = useState<(typeof categories)[number]>(initialActive);
   const { data: services, isLoading, isError } = useServices();
-  const { setPaintConsent, setSoleMaterial } = useRepairFlow();
-  const [pendingSlug, setPendingSlug] = useState<string | null>(null);
-  const [consentOpen, setConsentOpen] = useState(false);
-  const [soleOpen, setSoleOpen] = useState(false);
-
-  const goToPick = (slug: string) =>
-    navigate(`/start-repair/pick?service=${encodeURIComponent(slug)}`);
-
-  const handleAddToRepair = (slug: string) => {
-    trackEvent("service_added", { service_slug: slug, source: "services_page" });
-    if (PAINT_CONSENT_SLUGS.has(slug)) {
-      setPendingSlug(slug);
-      setConsentOpen(true);
-      return;
-    }
-    if (SOLE_MATERIAL_SLUGS.has(slug)) {
-      setPendingSlug(slug);
-      setSoleOpen(true);
-      return;
-    }
-    goToPick(slug);
-  };
 
   useEffect(() => {
     const category = searchParams.get("category");
@@ -261,55 +126,33 @@ const Services = () => {
       <section className="flex-1 py-16 md:py-20">
         <div className="container">
 
-          {/* Section 1 — Choose your repair package */}
-          <div className="flex items-baseline justify-between gap-4 flex-wrap mb-6">
-            <h1 className="text-3xl md:text-4xl font-display text-primary">
-              Choose your repair package
-            </h1>
-            <a
-              href="#individual-services"
-              className="text-sm underline font-medium"
-              style={{ color: "#7a5c40" }}
-            >
-              Or choose individual services ↓
-            </a>
-          </div>
-
-          {/* Photo assessment banner */}
-          <Link
-            to="/start-repair/assessment"
-            className="flex items-center gap-3 px-4 py-3 rounded-[10px] mb-8 border hover:shadow-sm transition-shadow"
-            style={{ backgroundColor: "#fff5cc", borderColor: "#fdb600" }}
-          >
-            <div
-              className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
-              style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
-            >
-              <Camera size={16} />
+          {/* Section 1 — Packages. No callout banner here anymore — Danielle
+              wants Starter repair promoted via a visible button up top
+              instead of a competing banner, with the "individual services"
+              jump link demoted to a small line under the "Packages" title. */}
+          <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-display text-primary">
+                Packages
+              </h1>
+              <a
+                href="#individual-services"
+                className="mt-1 inline-block text-sm underline font-medium"
+                style={{ color: "#7a5c40" }}
+              >
+                Or choose individual services ↓
+              </a>
             </div>
-            <p className="text-sm flex-1" style={{ color: "#3d1700" }}>
-              Not sure what your shoes need? Upload a photo and we'll recommend the right services.
-            </p>
-            <span
-              className="text-sm whitespace-nowrap underline font-medium shrink-0"
-              style={{ color: "#3d1700" }}
-            >
-              Get a recommendation →
-            </span>
-          </Link>
+            <Button asChild size="lg" className="shrink-0">
+              <Link to="/start-repair" onClick={() => trackEvent("start_repair", { source: "services_header" })}>
+                Start a repair
+              </Link>
+            </Button>
+          </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5 md:gap-6">
             {BUNDLES.map((bundle) => (
-              <BundleCard
-                key={bundle.name}
-                bundle={bundle}
-                onAddToRepair={() => {
-                  trackEvent("service_added", { bundle: bundle.name, source: "services_page_bundle" });
-                  navigate(
-                    `/start-repair/pick?bundle=${encodeURIComponent(bundle.name)}&bundlePrice=${bundlePriceToCents(bundle.price)}`,
-                  );
-                }}
-              />
+              <BundleCard key={bundle.name} bundle={bundle} />
             ))}
           </div>
 
@@ -319,7 +162,7 @@ const Services = () => {
           {/* Section 2 — Individual services */}
           <div id="individual-services" className="scroll-mt-20">
             <h2 className="text-3xl md:text-4xl font-display text-primary mb-6">
-              Or choose individual services
+              Individual services
             </h2>
 
             <CategoryFilterBar active={active} onChange={setActive} className="mb-10" />
@@ -362,7 +205,6 @@ const Services = () => {
                         s={s}
                         fromCategory={active}
                         isPopular={POPULAR_SERVICE_SLUGS.has(s.slug)}
-                        onAddToRepair={handleAddToRepair}
                       />
                     ))}
                   </div>
@@ -380,25 +222,6 @@ const Services = () => {
       </section>
 
       <Footer />
-
-      <PaintConsentDialog
-        open={consentOpen}
-        onOpenChange={(v) => { if (!v) { setConsentOpen(false); setPendingSlug(null); } }}
-        onConfirm={(consent) => {
-          if (pendingSlug) { setPaintConsent(pendingSlug, consent); goToPick(pendingSlug); }
-          setPendingSlug(null);
-          setConsentOpen(false);
-        }}
-      />
-      <SoleMaterialDialog
-        open={soleOpen}
-        onOpenChange={(v) => { if (!v) { setSoleOpen(false); setPendingSlug(null); } }}
-        onConfirm={(material) => {
-          if (pendingSlug) { setSoleMaterial(pendingSlug, material); goToPick(pendingSlug); }
-          setPendingSlug(null);
-          setSoleOpen(false);
-        }}
-      />
     </main>
   );
 };

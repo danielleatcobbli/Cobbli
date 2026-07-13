@@ -35,6 +35,7 @@ import {
   PickupScheduler,
   type PickupWindow,
 } from "@/components/cobbli/PickupScheduler";
+import { calculateTaxCents } from "@/lib/tax";
 
 type Step = "contact" | "address" | "pickup" | "payment";
 
@@ -64,7 +65,6 @@ const Checkout = () => {
   });
 
   const courierFee = subtotal >= pricing.fee("free_courier_threshold_cents") ? 0 : pricing.fee("courier_fee_cents");
-  const orderSubtotal = subtotal + courierFee;
 
   // Stripe returns user here with ?session_id=...&order_id=...
   const returningSessionId = searchParams.get("session_id");
@@ -107,6 +107,15 @@ const Checkout = () => {
   const showAddrForm = addingAddr || editingAddrId !== null;
   const addressDone = !showAddrForm && !!selectedAddrId;
   const selectedAddress = addresses.find((a) => a.id === selectedAddrId);
+
+  // Taxes depend on the delivery address's state, so this can only be
+  // computed once an address is selected (or being entered). Currently
+  // always $0 — Cobbli only services NY, where repair labor is tax-exempt —
+  // but folding it into orderSubtotal now means nothing needs to change here
+  // when a taxed state is added later. See src/lib/tax.ts.
+  const taxState = selectedAddress?.state ?? (showAddrForm ? addrForm.state : null);
+  const taxCents = calculateTaxCents(taxState, subtotal);
+  const orderSubtotal = subtotal + courierFee + taxCents;
 
   // ---------- Pickup ----------
   const [selectedWindow, setSelectedWindow] = useState<PickupWindow | null>(null);
@@ -900,6 +909,10 @@ const Checkout = () => {
                     <dt className="text-muted-foreground">Delivery &amp; Pickup Service</dt>
                     <dd>{courierFee === 0 ? "Free" : formatPrice(courierFee)}</dd>
                   </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Taxes</dt>
+                    <dd>{taxCents === 0 ? "Free" : formatPrice(taxCents)}</dd>
+                  </div>
                   <div className="border-t border-border pt-3 flex justify-between font-semibold text-base">
                     <dt>Subtotal</dt>
                     <dd>{formatPrice(orderSubtotal)}</dd>
@@ -907,9 +920,6 @@ const Checkout = () => {
                 </dl>
                 <p className="mt-3 text-xs text-muted-foreground">
                   Free courier service on orders over $100
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  No NY sales tax on repair services
                 </p>
                 {!showStripe && (
                   <Button

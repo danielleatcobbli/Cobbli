@@ -21,7 +21,8 @@ export const SHOE_TYPES: ShoeType[] = [
 ];
 
 export type ServiceCategory =
-  | "Bottom of shoe & heel"
+  | "Sole"
+  | "Heel"
   | "Cleaning"
   | "Color, scuffs, & shine"
   | "Inside of shoe"
@@ -32,7 +33,8 @@ export type ServiceCategory =
   | "Fit";
 
 export const CATEGORIES_ORDERED: ServiceCategory[] = [
-  "Bottom of shoe & heel",
+  "Sole",
+  "Heel",
   "Cleaning",
   "Color, scuffs, & shine",
   "Inside of shoe",

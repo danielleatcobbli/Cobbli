@@ -165,6 +165,10 @@ const Bag = () => {
                       <dt className="text-muted-foreground">Delivery &amp; Pickup Service</dt>
                       <dd>{courierFee === 0 ? "Free" : formatPrice(courierFee)}</dd>
                     </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Taxes</dt>
+                      <dd className="text-muted-foreground">Calculated at checkout</dd>
+                    </div>
                     <div className="border-t border-border pt-3 flex justify-between font-semibold text-base">
                       <dt>Subtotal</dt>
                       <dd>{formatPrice(orderSubtotal)}</dd>
@@ -182,9 +186,6 @@ const Bag = () => {
                   >
                     Checkout
                   </Button>
-                  <p className="mt-3 text-xs text-muted-foreground text-center">
-                    No NY sales tax on repair services.
-                  </p>
                 </div>
               </aside>
             </div>
@@ -243,7 +244,7 @@ const EmptyBag = () => (
       You haven't added any repairs yet. Start a repair to get your shoes looking their best.
     </p>
     <Button asChild variant="hero" size="lg">
-      <Link to="/services" onClick={() => trackEvent("start_repair", { source: "empty_bag" })}>
+      <Link to="/start-repair" onClick={() => trackEvent("start_repair", { source: "empty_bag" })}>
         Start a repair
       </Link>
     </Button>
