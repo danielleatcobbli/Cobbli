@@ -33,8 +33,13 @@ import BeforeAfterSlider from "@/components/cobbli/BeforeAfterSlider";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type OrderStatus =
+  // Standard checkout / proposal-approval path
+  | "placed"
+  | "pending_payment"
+  // Proposal / assessment path
   | "proposal-awaiting-our-response"
   | "proposal-awaiting-customer-response"
+  // Logistics
   | "pickup-scheduled"
   | "picked-up"
   | "at-the-workshop"
@@ -43,6 +48,7 @@ export type OrderStatus =
   | "return-scheduled"
   | "returned"
   | "completed"
+  // Rework sub-flow
   | "rework-request-pending"
   | "rework-request-approved"
   | "rework-request-denied";
@@ -89,6 +95,8 @@ const PERSPECTIVE_LABEL: Record<Perspective, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
+  "placed":                              { label: "Order placed",                          bg: "#dbeafe", fg: "#1e40af" },
+  "pending_payment":                     { label: "Pending payment",                       bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-our-response":      { label: "Proposal — awaiting our response",     bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-customer-response": { label: "Proposal — awaiting customer response", bg: "#dcfce7", fg: "#166534" },
   "pickup-scheduled":                    { label: "Pickup scheduled",                      bg: "#dbeafe", fg: "#1e40af" },
@@ -478,15 +486,19 @@ function ActionBtn({ label }: { label: string }) {
 
 /**
  * Shown in the Action column for any order with status "rework-request-pending".
- * Calls approve_rework / deny_rework RPCs, then triggers a full list refetch
- * so the row's new status appears immediately.
  *
- * The RPCs expect the reworks.id (not the order's id), so we do a lightweight
- * lookup on click. There is at most one open rework per order at any time, so
- * .limit(1) is safe here.
+ * Approve: calls approve_rework RPC (triggers a transactional email automatically).
+ * Deny: opens an inline confirmation panel requiring staff to check a box
+ *   confirming they've sent a manual explanation email to the customer.
+ *   On confirm: calls deny_rework RPC AND stamps reworks.manual_email_sent_at.
+ *
+ * RPCs expect reworks.id (not orders.id), so we do a lightweight lookup on
+ * click — at most one open rework per order, so .limit(1) is safe.
  */
 function ReworkActionButtons({ orderId, refetch }: { orderId: string; refetch?: () => void }) {
   const [loading, setLoading] = useState<"approve" | "deny" | null>(null);
+  const [confirmingDeny, setConfirmingDeny] = useState(false);
+  const [emailChecked, setEmailChecked] = useState(false);
   const busy = loading !== null;
 
   const getReworkId = async () => {
@@ -516,21 +528,51 @@ function ReworkActionButtons({ orderId, refetch }: { orderId: string; refetch?: 
     }
   };
 
-  const deny = async () => {
-    if (!window.confirm("Deny this rework request? This action can't be undone.")) return;
+  const confirmDeny = async () => {
     setLoading("deny");
     try {
       const reworkId = await getReworkId();
       const { error } = await supabase.rpc("deny_rework", { _rework_id: reworkId });
       if (error) throw error;
+      // Staff confirmed they sent the manual email — stamp the timestamp.
+      await supabase.from("reworks").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", reworkId);
       toast({ title: "Rework request denied." });
       refetch?.();
     } catch (err) {
       toast({ title: "Couldn't deny rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
     } finally {
       setLoading(null);
+      setConfirmingDeny(false);
+      setEmailChecked(false);
     }
   };
+
+  if (confirmingDeny) {
+    return (
+      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 7, padding: "8px 10px", maxWidth: 280 }}>
+        <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, color: "#9a3412" }}>Deny this rework? This can't be undone.</p>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer", fontSize: 11, color: "#374151", lineHeight: 1.4, marginBottom: 10 }}>
+          <input
+            type="checkbox"
+            checked={emailChecked}
+            onChange={e => setEmailChecked(e.target.checked)}
+            style={{ marginTop: 1, flexShrink: 0, accentColor: "#3d1700" }}
+          />
+          I've sent the customer a manual email explaining this decision
+        </label>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button type="button" onClick={() => { setConfirmingDeny(false); setEmailChecked(false); }}
+            style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151" }}>
+            Cancel
+          </button>
+          <button type="button" disabled={!emailChecked || busy} onClick={confirmDeny}
+            style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 600 }}>
+            {loading === "deny" ? "Denying…" : "Confirm — deny"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const btnBase: React.CSSProperties = { border: "none", borderRadius: 6, padding: "4px 9px", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1 };
   return (
@@ -538,8 +580,8 @@ function ReworkActionButtons({ orderId, refetch }: { orderId: string; refetch?: 
       <button type="button" disabled={busy} onClick={approve} style={{ ...btnBase, backgroundColor: "#dcfce7", color: "#166534" }}>
         {loading === "approve" ? "…" : "Approve"}
       </button>
-      <button type="button" disabled={busy} onClick={deny} style={{ ...btnBase, backgroundColor: "#fee2e2", color: "#991b1b" }}>
-        {loading === "deny" ? "…" : "Deny"}
+      <button type="button" disabled={busy} onClick={() => setConfirmingDeny(true)} style={{ ...btnBase, backgroundColor: "#fee2e2", color: "#991b1b" }}>
+        Deny
       </button>
     </div>
   );
@@ -551,28 +593,33 @@ function ReworkActionButtons({ orderId, refetch }: { orderId: string; refetch?: 
 
 /**
  * Shown for "proposal-awaiting-our-response" orders.
- * assessmentId — the ID passed to the RPCs as _assessment_id.  Where the
- * dashboard surfaces assessments with their assessments.id as the Order's id
- * (i.e. fetchOrders pulls assessment rows), this is already correct.  If the
- * mapping is different in your schema, swap the column here — the RPC
- * signatures are the same either way.
+ *
+ * Mark ready: calls mark_quote_ready RPC (triggers transactional email automatically).
+ * Need info: calls request_more_info RPC, then flags the row as needing a
+ *   manual reach-out via onNeedsManualReachOut() — the parent swaps the action
+ *   cell to a "Manual reach out required" tag + "Mark emailed" button.
+ * Decline: opens an inline confirmation panel requiring staff to check a box
+ *   confirming they've sent a manual explanation email. On confirm: calls
+ *   decline_proposal RPC AND stamps assessments.manual_email_sent_at.
+ *
+ * assessmentId — the _assessment_id arg passed to every proposal RPC.
  */
-function ProposalActionButtons({ assessmentId, refetch }: { assessmentId: string; refetch?: () => void }) {
+function ProposalActionButtons({ assessmentId, refetch, onNeedsManualReachOut }: {
+  assessmentId: string;
+  refetch?: () => void;
+  onNeedsManualReachOut?: () => void;
+}) {
   const [loading, setLoading] = useState<string | null>(null);
+  const [confirmingDecline, setConfirmingDecline] = useState(false);
+  const [emailChecked, setEmailChecked] = useState(false);
   const busy = loading !== null;
 
-  const call = async (
-    fn: "mark_quote_ready" | "decline_proposal" | "request_more_info",
-    confirmMsg?: string,
-    successTitle = "Done.",
-    successDescription?: string,
-  ) => {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
-    setLoading(fn);
+  const markReady = async () => {
+    setLoading("mark_quote_ready");
     try {
-      const { error } = await supabase.rpc(fn, { _assessment_id: assessmentId });
+      const { error } = await supabase.rpc("mark_quote_ready", { _assessment_id: assessmentId });
       if (error) throw error;
-      toast({ title: successTitle, ...(successDescription ? { description: successDescription } : {}) });
+      toast({ title: "Quote ready — customer notified.", description: "An email has been sent automatically." });
       refetch?.();
     } catch (err) {
       toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
@@ -581,17 +628,107 @@ function ProposalActionButtons({ assessmentId, refetch }: { assessmentId: string
     }
   };
 
+  const requestMoreInfo = async () => {
+    setLoading("request_more_info");
+    try {
+      const { error } = await supabase.rpc("request_more_info", { _assessment_id: assessmentId });
+      if (error) throw error;
+      toast({ title: "More info requested." });
+      refetch?.();
+      // Flag the row as needing a manual reach-out — no transactional email
+      // fires for this action, so the dashboard surfaces it as an open task.
+      onNeedsManualReachOut?.();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const confirmDecline = async () => {
+    setLoading("decline_proposal");
+    try {
+      const { error } = await supabase.rpc("decline_proposal", { _assessment_id: assessmentId });
+      if (error) throw error;
+      // Staff confirmed they sent the manual email — stamp the timestamp.
+      await supabase.from("assessments").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", assessmentId);
+      toast({ title: "Proposal declined." });
+      refetch?.();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+      setConfirmingDecline(false);
+      setEmailChecked(false);
+    }
+  };
+
+  if (confirmingDecline) {
+    return (
+      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 7, padding: "8px 10px", maxWidth: 280 }}>
+        <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, color: "#9a3412" }}>Decline this proposal? This can't be undone.</p>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer", fontSize: 11, color: "#374151", lineHeight: 1.4, marginBottom: 10 }}>
+          <input
+            type="checkbox"
+            checked={emailChecked}
+            onChange={e => setEmailChecked(e.target.checked)}
+            style={{ marginTop: 1, flexShrink: 0, accentColor: "#3d1700" }}
+          />
+          I've sent the customer a manual email explaining this decision
+        </label>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button type="button" onClick={() => { setConfirmingDecline(false); setEmailChecked(false); }}
+            style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151" }}>
+            Cancel
+          </button>
+          <button type="button" disabled={!emailChecked || busy} onClick={confirmDecline}
+            style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 600 }}>
+            {loading === "decline_proposal" ? "Declining…" : "Confirm — decline"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const btnBase: React.CSSProperties = { border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1 };
   return (
     <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-      <button type="button" disabled={busy} onClick={() => call("mark_quote_ready", undefined, "Quote ready — customer notified.", "An email has been sent automatically.")} style={{ ...btnBase, backgroundColor: "#dcfce7", color: "#166534" }}>
+      <button type="button" disabled={busy} onClick={markReady} style={{ ...btnBase, backgroundColor: "#dcfce7", color: "#166534" }}>
         {loading === "mark_quote_ready" ? "…" : "Mark ready"}
       </button>
-      <button type="button" disabled={busy} onClick={() => call("request_more_info", undefined, "More info requested.")} style={{ ...btnBase, backgroundColor: "#fef3c7", color: "#92400e" }}>
+      <button type="button" disabled={busy} onClick={requestMoreInfo} style={{ ...btnBase, backgroundColor: "#fef3c7", color: "#92400e" }}>
         {loading === "request_more_info" ? "…" : "Need info"}
       </button>
-      <button type="button" disabled={busy} onClick={() => call("decline_proposal", "Decline this proposal? This action can't be undone.", "Proposal declined.")} style={{ ...btnBase, backgroundColor: "#fee2e2", color: "#991b1b" }}>
-        {loading === "decline_proposal" ? "…" : "Decline"}
+      <button type="button" disabled={busy} onClick={() => setConfirmingDecline(true)} style={{ ...btnBase, backgroundColor: "#fee2e2", color: "#991b1b" }}>
+        Decline
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "Manual reach out required" tag + Mark emailed button
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Replaces the ProposalActionButtons cell after request_more_info succeeds.
+ * Styled to match the ACTION_OWNER_LABEL / ACTION_OWNER_COLOR visual language.
+ * onMarkEmailed: stamps assessments.manual_email_sent_at and clears the tag.
+ */
+function ManualReachOutTag({ onMarkEmailed }: { onMarkEmailed: () => void }) {
+  const [marking, setMarking] = useState(false);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <span style={{ backgroundColor: "#fef3c7", color: "#92400e", fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+        Action required: Manual reach out
+      </span>
+      <button
+        type="button"
+        disabled={marking}
+        onClick={() => { setMarking(true); onMarkEmailed(); }}
+        style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, border: "1px solid #e0d8cc", backgroundColor: "#fff", color: "#374151", cursor: marking ? "not-allowed" : "pointer", opacity: marking ? 0.55 : 1, whiteSpace: "nowrap" }}
+      >
+        {marking ? "…" : "Mark emailed"}
       </button>
     </div>
   );
@@ -775,7 +912,15 @@ function EmptyState({ message = "No orders match the current filters." }: { mess
 const TH: React.CSSProperties = { padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" };
 const TD: React.CSSProperties = { padding: "11px 14px", verticalAlign: "middle" };
 
-function WorkshopTable({ orders, actionFn = workshopAction, onRowClick, refetch }: { orders: Order[]; actionFn?: (s: OrderStatus) => string | null; onRowClick?: (id: string) => void; refetch?: () => void }) {
+function WorkshopTable({ orders, actionFn = workshopAction, onRowClick, refetch, pendingManualReachOut, onNeedsManualReachOut, onMarkEmailed }: {
+  orders: Order[];
+  actionFn?: (s: OrderStatus) => string | null;
+  onRowClick?: (id: string) => void;
+  refetch?: () => void;
+  pendingManualReachOut?: Set<string>;
+  onNeedsManualReachOut?: (orderId: string) => void;
+  onMarkEmailed?: (orderId: string) => void;
+}) {
   if (orders.length === 0) return <EmptyState />;
   return (
     <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, overflow: "hidden" }}>
@@ -816,10 +961,12 @@ function WorkshopTable({ orders, actionFn = workshopAction, onRowClick, refetch 
                 <td style={{ ...TD, color: "#6b7280", fontSize: 12 }}>{fmtDate(o.datePlaced)}</td>
                 <td style={TD}><DueCell dateStr={o.actionRequiredBy} /></td>
                 <td style={TD} onClick={e => e.stopPropagation()}>
-                  {o.status === "rework-request-pending"
+                  {pendingManualReachOut?.has(o.id)
+                    ? <ManualReachOutTag onMarkEmailed={() => onMarkEmailed?.(o.id)} />
+                    : o.status === "rework-request-pending"
                     ? <ReworkActionButtons orderId={o.id} refetch={refetch} />
                     : o.status === "proposal-awaiting-our-response"
-                    ? <ProposalActionButtons assessmentId={o.id} refetch={refetch} />
+                    ? <ProposalActionButtons assessmentId={o.id} refetch={refetch} onNeedsManualReachOut={() => onNeedsManualReachOut?.(o.id)} />
                     : action
                     ? <ActionBtn label={action} />
                     : <span style={{ color: "#d1d5db" }}>—</span>}
@@ -838,7 +985,14 @@ function WorkshopTable({ orders, actionFn = workshopAction, onRowClick, refetch 
 // Workshop view
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WorkshopView({ orders, perspective, refetch }: { orders: Order[]; perspective: Perspective; refetch?: () => void }) {
+function WorkshopView({ orders, perspective, refetch, pendingManualReachOut = new Set<string>(), onNeedsManualReachOut, onMarkEmailed }: {
+  orders: Order[];
+  perspective: Perspective;
+  refetch?: () => void;
+  pendingManualReachOut?: Set<string>;
+  onNeedsManualReachOut?: (id: string) => void;
+  onMarkEmailed?: (id: string) => void;
+}) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<WorkshopTab>("action-required");
 
@@ -865,8 +1019,15 @@ function WorkshopView({ orders, perspective, refetch }: { orders: Order[]; persp
   // Orders scoped to the selected tab
   const tabOrders = useMemo((): Order[] => {
     switch (tab) {
-      case "action-required":
-        return workshopActionOrdersFor(orders, perspective);
+      case "action-required": {
+        const base = workshopActionOrdersFor(orders, perspective);
+        if (pendingManualReachOut.size === 0) return base;
+        const baseIds = new Set(base.map(o => o.id));
+        // Orders flagged as needing a manual reach-out appear in Action required
+        // even if their status alone wouldn't put them there.
+        const extras = orders.filter(o => pendingManualReachOut.has(o.id) && !baseIds.has(o.id));
+        return [...base, ...extras];
+      }
       case "awaiting-repair":
         return orders.filter(o => o.status === "at-the-workshop");
       case "in-repair":
@@ -895,7 +1056,9 @@ function WorkshopView({ orders, perspective, refetch }: { orders: Order[]; persp
     return sortByDue(r);
   }, [tabOrders, filters]);
 
-  const actionCount = workshopActionOrdersFor(orders, perspective).length;
+  // Include manual-reach-out tagged orders that aren't already in the base action set.
+  const actionCount = workshopActionOrdersFor(orders, perspective).length
+    + orders.filter(o => pendingManualReachOut.has(o.id) && workshopAction(o.status) === null).length;
   // Badges count only the actionable subset — Proposals/Reworks tabs show
   // every sub-status once opened, but the badge mirrors "how many need my
   // response right now" (same totals-vs-our-turn split as the summary tiles).
@@ -930,7 +1093,14 @@ function WorkshopView({ orders, perspective, refetch }: { orders: Order[]; persp
         onChange={patch => setFilters(f => ({ ...f, ...patch }))}
         statusOptions={statusOptionsByTab[tab]}
       />
-      <WorkshopTable orders={displayed} onRowClick={id => navigate(`/admin/order/${id}?view=workshop`)} refetch={refetch} />
+      <WorkshopTable
+        orders={displayed}
+        onRowClick={id => navigate(`/admin/order/${id}?view=workshop`)}
+        refetch={refetch}
+        pendingManualReachOut={pendingManualReachOut}
+        onNeedsManualReachOut={onNeedsManualReachOut}
+        onMarkEmailed={onMarkEmailed}
+      />
     </div>
   );
 }
@@ -1666,6 +1836,37 @@ export default function AdminDashboard() {
       .catch(err => toast({ title: "Couldn't refresh orders", description: err instanceof Error ? err.message : String(err), variant: "destructive" }));
   }, []);
 
+  // Tracks order IDs that need a manual reach-out email (after request_more_info).
+  // Lives here (top level) so WorkshopView's "Action required" tab badge and
+  // row filtering both see the same Set. Reset naturally on a full page reload;
+  // the DB timestamp (manual_email_sent_at) persists independently.
+  const [pendingManualReachOut, setPendingManualReachOut] = useState<Set<string>>(new Set());
+
+  const addManualReachOut = useCallback(
+    (id: string) => setPendingManualReachOut(prev => new Set([...prev, id])),
+    [],
+  );
+  const removeManualReachOut = useCallback(
+    (id: string) => setPendingManualReachOut(prev => { const n = new Set(prev); n.delete(id); return n; }),
+    [],
+  );
+
+  /** Called when "Mark emailed" is clicked — stamps assessments.manual_email_sent_at,
+   * clears the row from the manual-reach-out queue, and re-syncs the order list. */
+  const handleMarkEmailed = useCallback(async (orderId: string) => {
+    try {
+      const { error } = await supabase
+        .from("assessments")
+        .update({ manual_email_sent_at: new Date().toISOString() })
+        .eq("id", orderId);
+      if (error) throw error;
+      removeManualReachOut(orderId);
+      loadOrders();
+    } catch (err) {
+      toast({ title: "Couldn't record email sent", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    }
+  }, [removeManualReachOut, loadOrders]);
+
   useEffect(() => {
     let cancelled = false;
     setOrdersLoading(true);
@@ -1775,7 +1976,7 @@ export default function AdminDashboard() {
 
         {/* View panel */}
         <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, padding: "20px 20px 24px" }}>
-          {view === "workshop" && <WorkshopView orders={orders} perspective={perspective} refetch={loadOrders} />}
+          {view === "workshop" && <WorkshopView orders={orders} perspective={perspective} refetch={loadOrders} pendingManualReachOut={pendingManualReachOut} onNeedsManualReachOut={addManualReachOut} onMarkEmailed={handleMarkEmailed} />}
           {view === "dispatch" && <DispatchView orders={orders} perspective={perspective} refetch={loadOrders} />}
           {view === "photos"   && <PhotosView />}
           {view === "kpis"     && <KPIsView />}

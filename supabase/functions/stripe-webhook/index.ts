@@ -23,11 +23,56 @@ interface CartPayload {
   repairs_subtotal_cents: number;
   courier_fee_cents: number;
   total_cents: number;
+  /** Set by Checkout.tsx when the customer selected a pickup window.
+   * start/end are ISO 8601 UTC strings (the raw Calendly slot times). */
+  pickup_window?: {
+    start: string;
+    end: string;
+    calendly_event_uri?: string;
+  };
   items: Array<{
     pair_snapshot: unknown;
     service_snapshot: { id: string; name: string };
     price_cents: number;
   }>;
+}
+
+// ─── Pickup-window helpers ────────────────────────────────────────────────────
+
+const NY_TZ = "America/New_York";
+
+/** Converts a UTC ISO string to YYYY-MM-DD in New York local time.
+ * en-CA locale produces the ISO date format naturally. */
+function toNyDateKey(isoUtc: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: NY_TZ }).format(
+    new Date(isoUtc),
+  );
+}
+
+/** Formats a start/end UTC ISO pair as a human time range in New York time.
+ * Mirrors PickupScheduler.tsx's formatTimeRange() exactly:
+ *   same period → "9:00 – 10:30 AM"
+ *   cross period → "11:30 AM – 1:00 PM" */
+function formatNyTimeRange(startIso: string, endIso: string): string {
+  const fmt = (iso: string) =>
+    new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: NY_TZ,
+    }).format(new Date(iso));
+
+  const startStr = fmt(startIso); // e.g. "9:00 AM"
+  const endStr = fmt(endIso);     // e.g. "10:30 AM"
+
+  const startPeriod = startStr.slice(-2); // "AM" | "PM"
+  const endPeriod = endStr.slice(-2);
+
+  // Compress shared AM/PM: "9:00 – 10:30 AM"
+  if (startPeriod === endPeriod) {
+    return `${startStr.slice(0, -3)} – ${endStr}`;
+  }
+  return `${startStr} – ${endStr}`;
 }
 
 function reassembleCart(meta: Record<string, string>): CartPayload | null {
@@ -80,6 +125,15 @@ async function createOrderFromCart(
 
   const nowIso = new Date().toISOString();
 
+  // Derive pickup columns from the window the customer selected at checkout.
+  // Both are null when no window was selected (older orders, walk-up, etc.).
+  const pickupDate = payload.pickup_window
+    ? toNyDateKey(payload.pickup_window.start)
+    : null;
+  const pickupTimeLabel = payload.pickup_window
+    ? formatNyTimeRange(payload.pickup_window.start, payload.pickup_window.end)
+    : null;
+
   // Plain INSERT — the partial unique indexes on stripe_payment_intent_id and
   // stripe_session_id will reject duplicates from concurrent webhook deliveries
   // (checkout.session.completed + payment_intent.succeeded). On unique
@@ -102,6 +156,8 @@ async function createOrderFromCart(
       paid_at: nowIso,
       stripe_session_id: sessionId,
       stripe_payment_intent_id: paymentIntentId,
+      pickup_date: pickupDate,
+      pickup_time_label: pickupTimeLabel,
     })
     .select("id")
     .maybeSingle();

@@ -114,6 +114,16 @@ const App = () => (
                             </ProtectedRoute>
                           }
                         />
+                        {/* Public proposal route — no login required to view.
+                            Looks up the assessment by proposal_token column so
+                            the URL is safe to put in a customer email.
+                            The proposal_token is the access credential; the
+                            customer is prompted to sign in only when they
+                            click "Approve" (so we have a user_id for the order). */}
+                        <Route
+                          path="/proposal/t/:token"
+                          element={<AssessmentProposal />}
+                        />
                         <Route path="/start-repair/services" element={<SelectServices />} />
                         <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
                         <Route path="/services" element={<Services />} />

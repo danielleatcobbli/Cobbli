@@ -33,8 +33,13 @@ import { REQUIRED_PHOTO_ANGLES } from "./AdminOrderDetail";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const KNOWN_STATUSES = new Set<OrderStatus>([
+  // Standard checkout path
+  "placed",
+  "pending_payment",
+  // Proposal / assessment path
   "proposal-awaiting-our-response",
   "proposal-awaiting-customer-response",
+  // Logistics
   "pickup-scheduled",
   "picked-up",
   "at-the-workshop",
@@ -43,6 +48,7 @@ const KNOWN_STATUSES = new Set<OrderStatus>([
   "return-scheduled",
   "returned",
   "completed",
+  // Rework sub-flow
   "rework-request-pending",
   "rework-request-approved",
   "rework-request-denied",
@@ -190,6 +196,7 @@ export async function fetchOrders(): Promise<Order[]> {
 
 type OrderDetailRow = OrderRow & {
   contact_email: string;
+  assessment_id: string | null;
 };
 
 type OrderPairRow = {
@@ -265,7 +272,7 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
   const { data: orderRow, error: orderErr } = await supabase
     .from("orders")
     .select(
-      "id, user_id, order_number, status, placed_at, delivery_address, contact_phone, contact_email, workshop_assignee, dispatch_assignee, action_required_by, last_contacted_at, pickup_date, pickup_time_label, return_date, return_time_label, notes",
+      "id, user_id, order_number, status, placed_at, delivery_address, contact_phone, contact_email, workshop_assignee, dispatch_assignee, action_required_by, last_contacted_at, pickup_date, pickup_time_label, return_date, return_time_label, notes, assessment_id",
     )
     .eq("id", id)
     .maybeSingle();
@@ -341,6 +348,48 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
     });
   }
 
+  // If this order was created from a proposal approval, fetch the assessment
+  // snapshot (photos + proposed services) for traceability in the detail page.
+  let assessmentRef: OrderDetail["assessmentRef"] | undefined;
+  if (order.assessment_id) {
+    try {
+      const { data: aRow } = await supabase
+        .from("assessments")
+        .select("id, pairs, proposed_services")
+        .eq("id", order.assessment_id)
+        .maybeSingle();
+
+      if (aRow) {
+        type AssessmentPair = { photoPaths?: string[] };
+        type AssessmentService = { name: string; price_cents: number; tier: string };
+        const aPairs = (aRow.pairs as unknown as AssessmentPair[]) ?? [];
+        const aServices = (aRow.proposed_services as unknown as AssessmentService[]) ?? [];
+
+        // Build signed URLs for the first pair's first 4 photos.
+        const photoUrls: string[] = [];
+        const paths = (aPairs[0]?.photoPaths ?? []).slice(0, 4);
+        for (const path of paths) {
+          const { data: su } = await supabase.storage
+            .from("assessment-uploads")
+            .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+          if (su?.signedUrl) photoUrls.push(su.signedUrl);
+        }
+
+        assessmentRef = {
+          id: aRow.id as string,
+          photoUrls,
+          services: aServices.map(s => ({
+            name: s.name,
+            priceCents: s.price_cents,
+            tier: (s.tier === "essential" || s.tier === "recommended") ? s.tier : "essential",
+          })),
+        };
+      }
+    } catch {
+      // Non-fatal: assessment lookup failing shouldn't break the order detail page.
+    }
+  }
+
   return {
     id: order.id,
     orderNumber: order.order_number,
@@ -375,6 +424,7 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
       text: n.body,
     })),
     notes: order.notes ?? undefined,
+    assessmentRef,
   };
 }
 

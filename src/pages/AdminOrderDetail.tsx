@@ -183,6 +183,19 @@ export type OrderDetail = {
   /** Order-level operational note (e.g. rework context) — distinct from a
    * pair's customerNotes, which is what the customer wrote at checkout. */
   notes?: string;
+  /** Present when this order was created from an approved proposal via
+   * AssessmentProposal.tsx. Contains the assessment ID plus a read-only
+   * snapshot of the original proposal for traceability. */
+  assessmentRef?: {
+    id: string;
+    /** Up to 4 signed photo URLs from the customer's first submitted pair. */
+    photoUrls: string[];
+    services: {
+      name: string;
+      priceCents: number;
+      tier: "essential" | "recommended";
+    }[];
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,6 +203,8 @@ export type OrderDetail = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
+  "placed":                              { label: "Order placed",                          bg: "#dbeafe", fg: "#1e40af" },
+  "pending_payment":                     { label: "Pending payment",                       bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-our-response":      { label: "Proposal — awaiting our response",     bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-customer-response": { label: "Proposal — awaiting customer response", bg: "#dcfce7", fg: "#166534" },
   "pickup-scheduled":                    { label: "Pickup scheduled",                      bg: "#dbeafe", fg: "#1e40af" },
@@ -2299,6 +2314,97 @@ function CommentsCard({ order }: { order: OrderDetail }) {
 }
 
 /** Compact sidebar card — shows condensed shoe/services/intake info for Dispatch view */
+// ─────────────────────────────────────────────────────────────────────────────
+// Proposal reference — shown when this order was created from an assessment
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compact read-only block linking an order back to its source assessment.
+ * Displayed in the Workshop primary column (before shoe pairs) and in the
+ * Dispatch sidebar — so both roles can trace what the cobbler originally
+ * proposed and see the photos the customer submitted.
+ *
+ * "compact" prop: when true, collapses photos into a single row of thumbnails
+ * and omits the tier labels — used in the Dispatch sidebar where vertical
+ * space is more precious.
+ */
+function ProposalReferenceCard({ assessmentRef, compact = false }: {
+  assessmentRef: NonNullable<OrderDetail["assessmentRef"]>;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(!compact);
+  const shortId = assessmentRef.id.slice(0, 8);
+
+  const essential = assessmentRef.services.filter(s => s.tier === "essential");
+  const recommended = assessmentRef.services.filter(s => s.tier === "recommended");
+
+  return (
+    <div style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, marginBottom: 14, overflow: "hidden" }}>
+      {/* Header row */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#92400e" }}>
+            Source proposal
+          </span>
+          <span style={{ fontSize: 11, color: "#b45309", backgroundColor: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "1px 6px", fontFamily: "monospace" }}>
+            #{shortId}…
+          </span>
+        </div>
+        <span style={{ fontSize: 13, color: "#b45309" }}>{open ? "▴" : "▾"}</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 14px 14px" }}>
+          {/* Customer-submitted photos */}
+          {assessmentRef.photoUrls.length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {assessmentRef.photoUrls.map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noreferrer" title="Open full size">
+                  <img
+                    src={url}
+                    alt={`Assessment photo ${i + 1}`}
+                    style={{ width: compact ? 52 : 72, height: compact ? 52 : 72, objectFit: "cover", borderRadius: 6, border: "1px solid #fde68a" }}
+                  />
+                </a>
+              ))}
+            </div>
+          )}
+
+          {/* Proposed services */}
+          {assessmentRef.services.length === 0 ? (
+            <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>No services on record.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {!compact && essential.length > 0 && (
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 2px" }}>Essential</p>
+              )}
+              {essential.map((s, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#374151" }}>
+                  <span>{s.name}</span>
+                  <span style={{ fontWeight: 600 }}>${(s.priceCents / 100).toFixed(0)}</span>
+                </div>
+              ))}
+              {!compact && recommended.length > 0 && (
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#b45309", textTransform: "uppercase", letterSpacing: "0.05em", margin: "6px 0 2px" }}>Recommended (optional)</p>
+              )}
+              {recommended.map((s, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6b7280" }}>
+                  <span>{s.name}</span>
+                  <span style={{ fontWeight: 600 }}>${(s.priceCents / 100).toFixed(0)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkshopSummaryCard({ order }: { order: OrderDetail }) {
   return (
     <Card title="Repair summary">
@@ -2397,6 +2503,8 @@ function CustomerSidebarCard({ order }: { order: OrderDetail }) {
  */
 function ReworkActions({ orderId, onRefetch }: { orderId: string; onRefetch: () => void }) {
   const [loading, setLoading] = useState<"approve" | "deny" | null>(null);
+  const [confirmingDeny, setConfirmingDeny] = useState(false);
+  const [emailChecked, setEmailChecked] = useState(false);
   const busy = loading !== null;
 
   const getReworkId = async () => {
@@ -2426,59 +2534,90 @@ function ReworkActions({ orderId, onRefetch }: { orderId: string; onRefetch: () 
     }
   };
 
-  const deny = async () => {
-    if (!window.confirm("Deny this rework request? This action can't be undone.")) return;
+  const confirmDeny = async () => {
     setLoading("deny");
     try {
       const reworkId = await getReworkId();
       const { error } = await supabase.rpc("deny_rework", { _rework_id: reworkId });
       if (error) throw error;
+      // Staff confirmed they've sent a manual email — stamp the timestamp.
+      await supabase.from("reworks").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", reworkId);
       toast({ title: "Rework request denied." });
       onRefetch();
     } catch (err) {
       toast({ title: "Couldn't deny rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
     } finally {
       setLoading(null);
+      setConfirmingDeny(false);
+      setEmailChecked(false);
     }
   };
 
-  const btn = (label: string, onClick: () => void, style: React.CSSProperties): React.ReactNode => (
-    <button type="button" disabled={busy} onClick={onClick}
-      style={{ padding: "7px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1, whiteSpace: "nowrap", fontFamily: "inherit", ...style }}>
-      {label}
-    </button>
-  );
+  const btnStyle = (extra: React.CSSProperties): React.CSSProperties => ({
+    padding: "7px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700,
+    cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1,
+    whiteSpace: "nowrap", fontFamily: "inherit", ...extra,
+  });
+
+  if (confirmingDeny) {
+    return (
+      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 9, padding: "12px 14px", maxWidth: 340 }}>
+        <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#9a3412" }}>Deny this rework? This can't be undone.</p>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 13, color: "#374151", lineHeight: 1.45, marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={emailChecked}
+            onChange={e => setEmailChecked(e.target.checked)}
+            style={{ marginTop: 2, flexShrink: 0, accentColor: "#3d1700", width: 15, height: 15 }}
+          />
+          I've sent the customer a manual email explaining this decision
+        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={() => { setConfirmingDeny(false); setEmailChecked(false); }}
+            style={{ fontSize: 13, padding: "6px 14px", borderRadius: 7, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151", fontFamily: "inherit" }}>
+            Cancel
+          </button>
+          <button type="button" disabled={!emailChecked || busy} onClick={confirmDeny}
+            style={{ fontSize: 13, padding: "6px 16px", borderRadius: 7, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 700, fontFamily: "inherit" }}>
+            {loading === "deny" ? "Denying…" : "Confirm — deny rework"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", gap: 8 }}>
-      {btn(loading === "approve" ? "Approving…" : "Approve", approve, { backgroundColor: "#dcfce7", color: "#166534" })}
-      {btn(loading === "deny" ? "Denying…" : "Deny", deny, { backgroundColor: "#fee2e2", color: "#991b1b" })}
+      <button type="button" disabled={busy} onClick={approve} style={btnStyle({ backgroundColor: "#dcfce7", color: "#166534" })}>
+        {loading === "approve" ? "Approving…" : "Approve"}
+      </button>
+      <button type="button" disabled={busy} onClick={() => setConfirmingDeny(true)} style={btnStyle({ backgroundColor: "#fee2e2", color: "#991b1b" })}>
+        Deny
+      </button>
     </div>
   );
 }
 
 /**
  * Mark Quote Ready / Need More Info / Decline buttons for
- * "proposal-awaiting-our-response" orders (which represent assessment records
- * that are pending our response). The assessmentId is the order's id when the
- * dashboard surfaces assessment rows using their assessments.id.
+ * "proposal-awaiting-our-response" orders. The assessmentId is the order's id
+ * when the dashboard surfaces assessment rows using their assessments.id.
+ *
+ * Decline requires an inline checkbox confirmation that staff has sent a
+ * manual explanation email (no transactional email fires for this action).
  */
 function ProposalActions({ assessmentId, onRefetch }: { assessmentId: string; onRefetch: () => void }) {
   const [loading, setLoading] = useState<string | null>(null);
+  const [confirmingDecline, setConfirmingDecline] = useState(false);
+  const [emailChecked, setEmailChecked] = useState(false);
   const busy = loading !== null;
 
-  const call = async (
-    fn: "mark_quote_ready" | "decline_proposal" | "request_more_info",
-    confirmMsg?: string,
-    successTitle = "Done.",
-    successDescription?: string,
-  ) => {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
-    setLoading(fn);
+  const markReady = async () => {
+    setLoading("mark_quote_ready");
     try {
-      const { error } = await supabase.rpc(fn, { _assessment_id: assessmentId });
+      const { error } = await supabase.rpc("mark_quote_ready", { _assessment_id: assessmentId });
       if (error) throw error;
-      toast({ title: successTitle, ...(successDescription ? { description: successDescription } : {}) });
+      toast({ title: "Quote ready — customer notified.", description: "An email has been sent automatically." });
       onRefetch();
     } catch (err) {
       toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
@@ -2487,30 +2626,82 @@ function ProposalActions({ assessmentId, onRefetch }: { assessmentId: string; on
     }
   };
 
-  const btn = (label: string, onClick: () => void, style: React.CSSProperties): React.ReactNode => (
-    <button type="button" disabled={busy} onClick={onClick}
-      style={{ padding: "7px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1, whiteSpace: "nowrap", fontFamily: "inherit", ...style }}>
-      {label}
-    </button>
-  );
+  const requestMoreInfo = async () => {
+    setLoading("request_more_info");
+    try {
+      const { error } = await supabase.rpc("request_more_info", { _assessment_id: assessmentId });
+      if (error) throw error;
+      toast({ title: "More info requested.", description: "Remember to contact the customer directly — no automated email is sent for this action." });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const confirmDecline = async () => {
+    setLoading("decline_proposal");
+    try {
+      const { error } = await supabase.rpc("decline_proposal", { _assessment_id: assessmentId });
+      if (error) throw error;
+      // Staff confirmed they've sent a manual email — stamp the timestamp.
+      await supabase.from("assessments").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", assessmentId);
+      toast({ title: "Proposal declined." });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+      setConfirmingDecline(false);
+      setEmailChecked(false);
+    }
+  };
+
+  const btnStyle = (extra: React.CSSProperties): React.CSSProperties => ({
+    padding: "7px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700,
+    cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1,
+    whiteSpace: "nowrap", fontFamily: "inherit", ...extra,
+  });
+
+  if (confirmingDecline) {
+    return (
+      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 9, padding: "12px 14px", maxWidth: 340 }}>
+        <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#9a3412" }}>Decline this proposal? This can't be undone.</p>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 13, color: "#374151", lineHeight: 1.45, marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={emailChecked}
+            onChange={e => setEmailChecked(e.target.checked)}
+            style={{ marginTop: 2, flexShrink: 0, accentColor: "#3d1700", width: 15, height: 15 }}
+          />
+          I've sent the customer a manual email explaining this decision
+        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={() => { setConfirmingDecline(false); setEmailChecked(false); }}
+            style={{ fontSize: 13, padding: "6px 14px", borderRadius: 7, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151", fontFamily: "inherit" }}>
+            Cancel
+          </button>
+          <button type="button" disabled={!emailChecked || busy} onClick={confirmDecline}
+            style={{ fontSize: 13, padding: "6px 16px", borderRadius: 7, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 700, fontFamily: "inherit" }}>
+            {loading === "decline_proposal" ? "Declining…" : "Confirm — decline"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      {btn(
-        loading === "mark_quote_ready" ? "Sending…" : "Mark quote ready",
-        () => call("mark_quote_ready", undefined, "Quote ready — customer notified.", "An email has been sent automatically."),
-        { backgroundColor: "#dcfce7", color: "#166534" },
-      )}
-      {btn(
-        loading === "request_more_info" ? "Sending…" : "Request more info",
-        () => call("request_more_info", undefined, "More info requested."),
-        { backgroundColor: "#fef3c7", color: "#92400e" },
-      )}
-      {btn(
-        loading === "decline_proposal" ? "Declining…" : "Decline",
-        () => call("decline_proposal", "Decline this proposal? This action can't be undone.", "Proposal declined."),
-        { backgroundColor: "#fee2e2", color: "#991b1b" },
-      )}
+      <button type="button" disabled={busy} onClick={markReady} style={btnStyle({ backgroundColor: "#dcfce7", color: "#166534" })}>
+        {loading === "mark_quote_ready" ? "Sending…" : "Mark quote ready"}
+      </button>
+      <button type="button" disabled={busy} onClick={requestMoreInfo} style={btnStyle({ backgroundColor: "#fef3c7", color: "#92400e" })}>
+        {loading === "request_more_info" ? "Sending…" : "Request more info"}
+      </button>
+      <button type="button" disabled={busy} onClick={() => setConfirmingDecline(true)} style={btnStyle({ backgroundColor: "#fee2e2", color: "#991b1b" })}>
+        Decline
+      </button>
     </div>
   );
 }
@@ -2720,10 +2911,12 @@ export default function AdminOrderDetail() {
 
           {detailView === "workshop" ? (
             <>
-              {/* Primary column — workshop: one card per pair of shoes (shoe
-                  details, notes, photos, services checklist, intake/outtake),
-                  then internal comments shared across the whole order. */}
+              {/* Primary column — workshop: source proposal ref (if any), then
+                  one card per pair of shoes, then internal comments. */}
               <div>
+                {order.assessmentRef && (
+                  <ProposalReferenceCard assessmentRef={order.assessmentRef} />
+                )}
                 {order.pairs.length === 0 ? (
                   <Card title="Shoe &amp; services">
                     <p style={{ color: "#9ca3af", fontSize: 13, margin: 0 }}>No shoe pairs recorded yet.</p>
@@ -2747,9 +2940,12 @@ export default function AdminOrderDetail() {
                 <CustomerLogisticsCard order={order} expanded />
                 <CommentsCard order={order} />
               </div>
-              {/* Sidebar — condensed repair summary (not critical for dispatch, kept for reference) */}
+              {/* Sidebar — condensed repair summary + proposal ref if applicable */}
               <div>
                 <WorkshopSummaryCard order={order} />
+                {order.assessmentRef && (
+                  <ProposalReferenceCard assessmentRef={order.assessmentRef} compact />
+                )}
               </div>
             </>
           )}
