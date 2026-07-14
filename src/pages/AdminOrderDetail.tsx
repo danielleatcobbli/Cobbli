@@ -17,6 +17,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, Circle, Clock, FileText, MapPin, MessageSquare, Phone, User, XCircle } from "lucide-react";
 import { fetchOrderDetail, uploadPairPhoto, removePairPhoto } from "./adminData";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types  (mirrors AdminDashboard — will share a module once wired to live data)
@@ -2388,7 +2390,132 @@ function CustomerSidebarCard({ order }: { order: OrderDetail }) {
 // Header
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PageHeader({ order }: { order: OrderDetail }) {
+/**
+ * Approve/Deny buttons for "rework-request-pending" orders.
+ * Looks up reworks.id from the order_id, then calls the matching RPC.
+ * Calls onRefetch on success so the page data reflects the new status.
+ */
+function ReworkActions({ orderId, onRefetch }: { orderId: string; onRefetch: () => void }) {
+  const [loading, setLoading] = useState<"approve" | "deny" | null>(null);
+  const busy = loading !== null;
+
+  const getReworkId = async () => {
+    const { data, error } = await supabase
+      .from("reworks")
+      .select("id")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) throw error ?? new Error("Rework record not found for this order.");
+    return data.id as string;
+  };
+
+  const approve = async () => {
+    setLoading("approve");
+    try {
+      const reworkId = await getReworkId();
+      const { error } = await supabase.rpc("approve_rework", { _rework_id: reworkId });
+      if (error) throw error;
+      toast({ title: "Rework approved", description: "Customer notified automatically." });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Couldn't approve rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const deny = async () => {
+    if (!window.confirm("Deny this rework request? This action can't be undone.")) return;
+    setLoading("deny");
+    try {
+      const reworkId = await getReworkId();
+      const { error } = await supabase.rpc("deny_rework", { _rework_id: reworkId });
+      if (error) throw error;
+      toast({ title: "Rework request denied." });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Couldn't deny rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const btn = (label: string, onClick: () => void, style: React.CSSProperties): React.ReactNode => (
+    <button type="button" disabled={busy} onClick={onClick}
+      style={{ padding: "7px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1, whiteSpace: "nowrap", fontFamily: "inherit", ...style }}>
+      {label}
+    </button>
+  );
+
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      {btn(loading === "approve" ? "Approving…" : "Approve", approve, { backgroundColor: "#dcfce7", color: "#166534" })}
+      {btn(loading === "deny" ? "Denying…" : "Deny", deny, { backgroundColor: "#fee2e2", color: "#991b1b" })}
+    </div>
+  );
+}
+
+/**
+ * Mark Quote Ready / Need More Info / Decline buttons for
+ * "proposal-awaiting-our-response" orders (which represent assessment records
+ * that are pending our response). The assessmentId is the order's id when the
+ * dashboard surfaces assessment rows using their assessments.id.
+ */
+function ProposalActions({ assessmentId, onRefetch }: { assessmentId: string; onRefetch: () => void }) {
+  const [loading, setLoading] = useState<string | null>(null);
+  const busy = loading !== null;
+
+  const call = async (
+    fn: "mark_quote_ready" | "decline_proposal" | "request_more_info",
+    confirmMsg?: string,
+    successTitle = "Done.",
+    successDescription?: string,
+  ) => {
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    setLoading(fn);
+    try {
+      const { error } = await supabase.rpc(fn, { _assessment_id: assessmentId });
+      if (error) throw error;
+      toast({ title: successTitle, ...(successDescription ? { description: successDescription } : {}) });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const btn = (label: string, onClick: () => void, style: React.CSSProperties): React.ReactNode => (
+    <button type="button" disabled={busy} onClick={onClick}
+      style={{ padding: "7px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1, whiteSpace: "nowrap", fontFamily: "inherit", ...style }}>
+      {label}
+    </button>
+  );
+
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {btn(
+        loading === "mark_quote_ready" ? "Sending…" : "Mark quote ready",
+        () => call("mark_quote_ready", undefined, "Quote ready — customer notified.", "An email has been sent automatically."),
+        { backgroundColor: "#dcfce7", color: "#166534" },
+      )}
+      {btn(
+        loading === "request_more_info" ? "Sending…" : "Request more info",
+        () => call("request_more_info", undefined, "More info requested."),
+        { backgroundColor: "#fef3c7", color: "#92400e" },
+      )}
+      {btn(
+        loading === "decline_proposal" ? "Declining…" : "Decline",
+        () => call("decline_proposal", "Decline this proposal? This action can't be undone.", "Proposal declined."),
+        { backgroundColor: "#fee2e2", color: "#991b1b" },
+      )}
+    </div>
+  );
+}
+
+function PageHeader({ order, onRefetch }: { order: OrderDetail; onRefetch: () => void }) {
   const navigate = useNavigate();
   const timing = dueTiming(order.actionRequiredBy);
   const quickAction = QUICK_ACTION[order.status];
@@ -2402,6 +2529,28 @@ function PageHeader({ order }: { order: OrderDetail }) {
     }
     if (timing === "today") return <span style={{ color: "#d97706", fontWeight: 600 }}>Due today</span>;
     return <span style={{ color: "#6b7280" }}>Due {fmtDate(order.actionRequiredBy)}</span>;
+  })();
+
+  /** For statuses that have dedicated multi-button action UIs, show those
+   * instead of the single generic quick-action button. */
+  const actionBlock = (() => {
+    if (order.status === "rework-request-pending") {
+      return <ReworkActions orderId={order.id} onRefetch={onRefetch} />;
+    }
+    if (order.status === "proposal-awaiting-our-response") {
+      return <ProposalActions assessmentId={order.id} onRefetch={onRefetch} />;
+    }
+    if (quickAction) {
+      return (
+        <button
+          type="button"
+          style={{ padding: "7px 16px", backgroundColor: "#fee2e2", color: "#991b1b", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+        >
+          {quickAction}
+        </button>
+      );
+    }
+    return null;
   })();
 
   return (
@@ -2425,27 +2574,14 @@ function PageHeader({ order }: { order: OrderDetail }) {
           )}
         </div>
 
-        {/* Everything about the current action — who owns it, what it is, and
-         * how overdue it is — lives in one block on the far right, so opening
-         * the details page doesn't scatter that context across the header
-         * the way "Workshop action" / the button / "3 days overdue" used to.
-         * The action button itself is colored the same red used for
-         * "Action required" badges on the dashboard tables, rather than the
-         * page's standard brown CTA color — same visual language for "this
-         * needs doing" everywhere in the admin views. */}
-        {quickAction && (
+        {actionBlock && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
             {actionOwner && (
               <span style={{ fontSize: 10, fontWeight: 700, color: ACTION_OWNER_COLOR[actionOwner], textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 {ACTION_OWNER_LABEL[actionOwner]}
               </span>
             )}
-            <button
-              type="button"
-              style={{ padding: "7px 16px", backgroundColor: "#fee2e2", color: "#991b1b", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
-            >
-              {quickAction}
-            </button>
+            {actionBlock}
             {dueLabel && <span style={{ fontSize: 12 }}>{dueLabel}</span>}
           </div>
         )}
@@ -2535,6 +2671,14 @@ export default function AdminOrderDetail() {
     return () => { cancelled = true; };
   }, [id]);
 
+  /** Re-fetch the order after a status-changing RPC so the header reflects
+   * the new status immediately without a full page reload. */
+  const refetchOrder = () => {
+    fetchOrderDetail(id)
+      .then(result => { if (result) setOrder(result); })
+      .catch(err => toast({ title: "Couldn't refresh order", description: err instanceof Error ? err.message : String(err), variant: "destructive" }));
+  };
+
   if (orderLoading || !order) {
     if (orderError) {
       return (
@@ -2567,7 +2711,7 @@ export default function AdminOrderDetail() {
 
       {/* ── Page content ── */}
       <main style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 20px" }}>
-        <PageHeader order={order} />
+        <PageHeader order={order} onRefetch={refetchOrder} />
 
         <DetailTabBar active={detailView} onSelect={handleTabSelect} />
 

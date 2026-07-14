@@ -15,9 +15,11 @@
  * the real `staff_team` field drives this instead.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, ChevronDown, Star, Download } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import {
   REQUIRED_PHOTO_ANGLES,
   type RequiredPhotoAngle,
@@ -470,6 +472,131 @@ function ActionBtn({ label }: { label: string }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RPC action buttons — reworks
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Shown in the Action column for any order with status "rework-request-pending".
+ * Calls approve_rework / deny_rework RPCs, then triggers a full list refetch
+ * so the row's new status appears immediately.
+ *
+ * The RPCs expect the reworks.id (not the order's id), so we do a lightweight
+ * lookup on click. There is at most one open rework per order at any time, so
+ * .limit(1) is safe here.
+ */
+function ReworkActionButtons({ orderId, refetch }: { orderId: string; refetch?: () => void }) {
+  const [loading, setLoading] = useState<"approve" | "deny" | null>(null);
+  const busy = loading !== null;
+
+  const getReworkId = async () => {
+    const { data, error } = await supabase
+      .from("reworks")
+      .select("id")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) throw error ?? new Error("Rework record not found for this order.");
+    return data.id as string;
+  };
+
+  const approve = async () => {
+    setLoading("approve");
+    try {
+      const reworkId = await getReworkId();
+      const { error } = await supabase.rpc("approve_rework", { _rework_id: reworkId });
+      if (error) throw error;
+      toast({ title: "Rework approved", description: "Customer notified automatically." });
+      refetch?.();
+    } catch (err) {
+      toast({ title: "Couldn't approve rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const deny = async () => {
+    if (!window.confirm("Deny this rework request? This action can't be undone.")) return;
+    setLoading("deny");
+    try {
+      const reworkId = await getReworkId();
+      const { error } = await supabase.rpc("deny_rework", { _rework_id: reworkId });
+      if (error) throw error;
+      toast({ title: "Rework request denied." });
+      refetch?.();
+    } catch (err) {
+      toast({ title: "Couldn't deny rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const btnBase: React.CSSProperties = { border: "none", borderRadius: 6, padding: "4px 9px", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1 };
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      <button type="button" disabled={busy} onClick={approve} style={{ ...btnBase, backgroundColor: "#dcfce7", color: "#166534" }}>
+        {loading === "approve" ? "…" : "Approve"}
+      </button>
+      <button type="button" disabled={busy} onClick={deny} style={{ ...btnBase, backgroundColor: "#fee2e2", color: "#991b1b" }}>
+        {loading === "deny" ? "…" : "Deny"}
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RPC action buttons — proposals / quote assessments
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Shown for "proposal-awaiting-our-response" orders.
+ * assessmentId — the ID passed to the RPCs as _assessment_id.  Where the
+ * dashboard surfaces assessments with their assessments.id as the Order's id
+ * (i.e. fetchOrders pulls assessment rows), this is already correct.  If the
+ * mapping is different in your schema, swap the column here — the RPC
+ * signatures are the same either way.
+ */
+function ProposalActionButtons({ assessmentId, refetch }: { assessmentId: string; refetch?: () => void }) {
+  const [loading, setLoading] = useState<string | null>(null);
+  const busy = loading !== null;
+
+  const call = async (
+    fn: "mark_quote_ready" | "decline_proposal" | "request_more_info",
+    confirmMsg?: string,
+    successTitle = "Done.",
+    successDescription?: string,
+  ) => {
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    setLoading(fn);
+    try {
+      const { error } = await supabase.rpc(fn, { _assessment_id: assessmentId });
+      if (error) throw error;
+      toast({ title: successTitle, ...(successDescription ? { description: successDescription } : {}) });
+      refetch?.();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const btnBase: React.CSSProperties = { border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1 };
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      <button type="button" disabled={busy} onClick={() => call("mark_quote_ready", undefined, "Quote ready — customer notified.", "An email has been sent automatically.")} style={{ ...btnBase, backgroundColor: "#dcfce7", color: "#166534" }}>
+        {loading === "mark_quote_ready" ? "…" : "Mark ready"}
+      </button>
+      <button type="button" disabled={busy} onClick={() => call("request_more_info", undefined, "More info requested.")} style={{ ...btnBase, backgroundColor: "#fef3c7", color: "#92400e" }}>
+        {loading === "request_more_info" ? "…" : "Need info"}
+      </button>
+      <button type="button" disabled={busy} onClick={() => call("decline_proposal", "Decline this proposal? This action can't be undone.", "Proposal declined.")} style={{ ...btnBase, backgroundColor: "#fee2e2", color: "#991b1b" }}>
+        {loading === "decline_proposal" ? "…" : "Decline"}
+      </button>
+    </div>
+  );
+}
+
 function DueCell({ dateStr }: { dateStr: string | null }) {
   const t = dueTiming(dateStr);
   if (!t || !dateStr) return <span style={{ color: "#d1d5db" }}>—</span>;
@@ -648,7 +775,7 @@ function EmptyState({ message = "No orders match the current filters." }: { mess
 const TH: React.CSSProperties = { padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" };
 const TD: React.CSSProperties = { padding: "11px 14px", verticalAlign: "middle" };
 
-function WorkshopTable({ orders, actionFn = workshopAction, onRowClick }: { orders: Order[]; actionFn?: (s: OrderStatus) => string | null; onRowClick?: (id: string) => void }) {
+function WorkshopTable({ orders, actionFn = workshopAction, onRowClick, refetch }: { orders: Order[]; actionFn?: (s: OrderStatus) => string | null; onRowClick?: (id: string) => void; refetch?: () => void }) {
   if (orders.length === 0) return <EmptyState />;
   return (
     <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, overflow: "hidden" }}>
@@ -689,7 +816,13 @@ function WorkshopTable({ orders, actionFn = workshopAction, onRowClick }: { orde
                 <td style={{ ...TD, color: "#6b7280", fontSize: 12 }}>{fmtDate(o.datePlaced)}</td>
                 <td style={TD}><DueCell dateStr={o.actionRequiredBy} /></td>
                 <td style={TD} onClick={e => e.stopPropagation()}>
-                  {action ? <ActionBtn label={action} /> : <span style={{ color: "#d1d5db" }}>—</span>}
+                  {o.status === "rework-request-pending"
+                    ? <ReworkActionButtons orderId={o.id} refetch={refetch} />
+                    : o.status === "proposal-awaiting-our-response"
+                    ? <ProposalActionButtons assessmentId={o.id} refetch={refetch} />
+                    : action
+                    ? <ActionBtn label={action} />
+                    : <span style={{ color: "#d1d5db" }}>—</span>}
                 </td>
                 <td style={{ ...TD, color: "#9ca3af", fontSize: 12, fontWeight: 500 }}>{o.workshopAssignee}</td>
               </tr>
@@ -705,7 +838,7 @@ function WorkshopTable({ orders, actionFn = workshopAction, onRowClick }: { orde
 // Workshop view
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WorkshopView({ orders, perspective }: { orders: Order[]; perspective: Perspective }) {
+function WorkshopView({ orders, perspective, refetch }: { orders: Order[]; perspective: Perspective; refetch?: () => void }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<WorkshopTab>("action-required");
 
@@ -797,7 +930,7 @@ function WorkshopView({ orders, perspective }: { orders: Order[]; perspective: P
         onChange={patch => setFilters(f => ({ ...f, ...patch }))}
         statusOptions={statusOptionsByTab[tab]}
       />
-      <WorkshopTable orders={displayed} onRowClick={id => navigate(`/admin/order/${id}?view=workshop`)} />
+      <WorkshopTable orders={displayed} onRowClick={id => navigate(`/admin/order/${id}?view=workshop`)} refetch={refetch} />
     </div>
   );
 }
@@ -1008,7 +1141,7 @@ function AllScheduledTable({ orders, onRowClick }: { orders: Order[]; onRowClick
 // Dispatch view
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DispatchView({ orders, perspective }: { orders: Order[]; perspective: Perspective }) {
+function DispatchView({ orders, perspective, refetch }: { orders: Order[]; perspective: Perspective; refetch?: () => void }) {
   const navigate = useNavigate();
   const goToOrder = (id: string) => navigate(`/admin/order/${id}?view=dispatch`);
   const [tab, setTab] = useState<DispatchTab>("action-required");
@@ -1117,7 +1250,7 @@ function DispatchView({ orders, perspective }: { orders: Order[]; perspective: P
             statusOptions={statusOptionsByTab["all-orders"]}
           />
           {/* Reuse WorkshopTable with dispatch assignee filtering already applied */}
-          <WorkshopTable orders={allOrdersScoped} onRowClick={goToOrder} />
+          <WorkshopTable orders={allOrdersScoped} onRowClick={goToOrder} refetch={refetch} />
         </>
       )}
     </div>
@@ -1527,6 +1660,12 @@ export default function AdminDashboard() {
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState<string | null>(null);
 
+  const loadOrders = useCallback(() => {
+    fetchOrders()
+      .then(rows => setOrders(rows))
+      .catch(err => toast({ title: "Couldn't refresh orders", description: err instanceof Error ? err.message : String(err), variant: "destructive" }));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setOrdersLoading(true);
@@ -1636,8 +1775,8 @@ export default function AdminDashboard() {
 
         {/* View panel */}
         <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, padding: "20px 20px 24px" }}>
-          {view === "workshop" && <WorkshopView orders={orders} perspective={perspective} />}
-          {view === "dispatch" && <DispatchView orders={orders} perspective={perspective} />}
+          {view === "workshop" && <WorkshopView orders={orders} perspective={perspective} refetch={loadOrders} />}
+          {view === "dispatch" && <DispatchView orders={orders} perspective={perspective} refetch={loadOrders} />}
           {view === "photos"   && <PhotosView />}
           {view === "kpis"     && <KPIsView />}
         </div>
