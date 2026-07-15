@@ -4,7 +4,7 @@
  * Shows available pickup windows pulled live from Calendly.
  * – 90-minute windows; the full time range (start → end) is displayed.
  * – Date tabs: up to 7 days; only dates that have at least one window.
- * – Window data comes from the `calendly-availability` Supabase edge function.
+ * – Window data comes from the `cal-availability` Supabase edge function.
  * – Selecting a window is a local UI state change only — no re-fetch occurs
  *   until the parent explicitly calls refresh (e.g. at checkout confirm).
  */
@@ -151,7 +151,7 @@ export function PickupScheduler({
       );
 
       const { data, error: fnError } = await supabase.functions.invoke(
-        "calendly-availability",
+        "cal-availability",
         {
           body: {
             start_time: now.toISOString(),

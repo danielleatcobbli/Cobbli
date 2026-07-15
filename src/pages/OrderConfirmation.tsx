@@ -267,7 +267,7 @@ const OrderConfirmation = () => {
 
       let cancelWarning: string | null = null;
       if (existingUri) {
-        const { data: cancelData, error: cancelError } = await supabase.functions.invoke("calendly-cancel", {
+        const { data: cancelData, error: cancelError } = await supabase.functions.invoke("cal-cancel", {
           body: { event_uri: existingUri },
         });
         if (cancelError) {

@@ -310,7 +310,7 @@ const Checkout = () => {
     setPlacing(true);
     setPaymentError(null);
     try {
-      // --- Re-validate the pickup window against live Calendly availability ---
+      // --- Re-validate the pickup window against live Cal.com availability ---
       // This guards against the race condition where two customers select the
       // same window simultaneously. We re-fetch and confirm the slot is still
       // listed before proceeding to payment.
@@ -318,7 +318,7 @@ const Checkout = () => {
         const now = new Date();
         const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         const { data: availData, error: availErr } =
-          await supabase.functions.invoke("calendly-availability", {
+          await supabase.functions.invoke("cal-availability", {
             body: {
               start_time: now.toISOString(),
               end_time: endDate.toISOString(),
@@ -347,9 +347,9 @@ const Checkout = () => {
         }
       }
 
-      // --- Create the Calendly booking with pre-populated customer data ---
+      // --- Create the Cal.com booking with pre-populated customer data ---
       // We pass name/phone/email/address so the customer never has to fill in
-      // a separate Calendly form.
+      // a separate Cal.com booking form.
       let pickupEventUri: string | undefined;
       if (selectedWindow) {
         const pickupAddress = [
@@ -363,7 +363,7 @@ const Checkout = () => {
           .join(", ");
 
         const { data: bookData, error: bookErr } =
-          await supabase.functions.invoke("calendly-book", {
+          await supabase.functions.invoke("cal-book", {
             body: {
               start_time: selectedWindow.start_time,
               name: user.name || authUser.email?.split("@")[0] || "Customer",
@@ -374,7 +374,7 @@ const Checkout = () => {
           });
 
         if (bookErr || bookData?.error) {
-          console.error("Calendly booking error:", bookErr ?? bookData?.error);
+          console.error("Cal.com booking error:", bookErr ?? bookData?.error);
           toast({
             title: "Pickup scheduling issue",
             description:
