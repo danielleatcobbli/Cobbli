@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useParams } from "react-router-dom";
-import { CheckCircle2, MessageSquare, Loader2 } from "lucide-react";
+import { Calendar, CheckCircle2, Clock, Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 
 import Header from "@/components/cobbli/Header";
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import PickupScheduler, { type PickupWindow } from "@/components/cobbli/PickupScheduler";
 import { useAccount } from "@/context/AccountContext";
 import { formatPrice } from "@/context/BagContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +51,18 @@ type DbOrderItem = {
   pair_snapshot: { id?: string; label?: string } | null;
   service_snapshot: { id?: string; name?: string; paint_consent?: "yes" | "no" } | null;
   price_cents: number;
+};
+
+// Live pickup/return scheduling data — fetched separately so it stays fresh
+// even when the main order details come from the in-memory AccountContext.
+type PickupInfo = {
+  pickup_date: string | null;
+  pickup_time_label: string | null;
+  return_date: string | null;
+  return_time_label: string | null;
+  pickup_calendly_event_uri: string | null;
+  return_calendly_event_uri: string | null;
+  contact_phone: string | null;
 };
 
 type DbOrder = {
@@ -92,9 +105,64 @@ const mapDbOrder = (o: DbOrder): LoadedOrder => {
   };
 };
 
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+const NY_TZ = "America/New_York";
+
+/** YYYY-MM-DD in New York local time from a UTC ISO string. */
+function toNyDateKey(isoUtc: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: NY_TZ }).format(new Date(isoUtc));
+}
+
+/** "9:00 – 10:30 AM" or "11:30 AM – 1:00 PM" from two UTC ISO strings.
+ *  Mirrors PickupScheduler.tsx formatTimeRange() and the stripe-webhook helper. */
+function formatNyTimeRange(startIso: string, endIso: string): string {
+  const fmt = (iso: string) =>
+    new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: NY_TZ })
+      .format(new Date(iso));
+  const startStr = fmt(startIso);
+  const endStr = fmt(endIso);
+  const startPeriod = startStr.slice(-2);
+  const endPeriod = endStr.slice(-2);
+  return startPeriod === endPeriod ? `${startStr.slice(0, -3)} – ${endStr}` : `${startStr} – ${endStr}`;
+}
+
+/** "Mon Jul 14" from a YYYY-MM-DD date key. */
+function fmtDateKey(dateKey: string): string {
+  return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" })
+    .format(new Date(`${dateKey}T12:00:00`));
+}
+
+/** Returns true when the scheduled window is within 2 hours (or already past),
+ *  locking out customer self-service reschedules.
+ *  Uses the browser's local time as an approximation — acceptable for a
+ *  customer-facing cutoff where a few minutes of drift is not material. */
+function isWithin2Hours(dateKey: string | null, timeLabel: string | null): boolean {
+  if (!dateKey || !timeLabel) return false;
+  const dashIdx = timeLabel.indexOf(" – ");
+  if (dashIdx === -1) return false;
+  const startToken = timeLabel.slice(0, dashIdx).trim();      // "9:00" or "11:30 AM"
+  const endToken = timeLabel.slice(dashIdx + 3).trim();        // "10:30 AM" or "1:00 PM"
+  const startFull = /[AP]M$/i.test(startToken) ? startToken : `${startToken} ${endToken.slice(-2)}`;
+  // Parse start time into hours/minutes
+  const [timePart, period] = startFull.split(" ");
+  const [h, m] = timePart.split(":").map(Number);
+  let hour24 = h;
+  if (period === "PM" && h !== 12) hour24 = h + 12;
+  if (period === "AM" && h === 12) hour24 = 0;
+  // Build approximate start Date in local time (fine for a 2-hour cutoff check)
+  const startDt = new Date(
+    `${dateKey}T${String(hour24).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}:00`,
+  );
+  if (isNaN(startDt.getTime())) return false;
+  return Date.now() > startDt.getTime() - 2 * 60 * 60 * 1000;
+}
+
+// ─── component ───────────────────────────────────────────────────────────────
+
 const OrderConfirmation = () => {
   const { id } = useParams();
-  const { orders } = useAccount();
+  const { orders, user: accountUser } = useAccount();
   const { user } = useAuth();
   const localOrder = orders.find((o) => o.id === id);
 
@@ -103,6 +171,12 @@ const OrderConfirmation = () => {
   const [reworkOpen, setReworkOpen] = useState(false);
   const [reworkDesc, setReworkDesc] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Pickup / return scheduling state — fetched separately (always live from DB)
+  const [pickupInfo, setPickupInfo] = useState<PickupInfo | null>(null);
+  const [rescheduleSlot, setRescheduleSlot] = useState<"pickup" | "return" | null>(null);
+  const [newWindow, setNewWindow] = useState<PickupWindow | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
 
   usePageMeta({
     title: "Order details — Cobbli",
@@ -134,6 +208,27 @@ const OrderConfirmation = () => {
     };
   }, [id, localOrder, user]);
 
+  // Always fetch pickup/return scheduling fields live from the DB, even for
+  // fresh (just-placed) orders where the main order data comes from the
+  // in-memory AccountContext. This ensures the real pickup date/time shows
+  // immediately on the confirmation page and stays fresh after a reschedule.
+  useEffect(() => {
+    if (!id || !user) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("orders")
+        .select(
+          "pickup_date,pickup_time_label,return_date,return_time_label,pickup_calendly_event_uri,return_calendly_event_uri,contact_phone",
+        )
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!cancelled && data) setPickupInfo(data as PickupInfo);
+    })();
+    return () => { cancelled = true; };
+  }, [id, user]);
+
   const order: LoadedOrder | null = useMemo(() => {
     if (localOrder) {
       return {
@@ -160,6 +255,85 @@ const OrderConfirmation = () => {
     const names = order.pairs.flatMap((p) => p.services.map((s) => s.name));
     return Array.from(new Set(names));
   }, [order]);
+
+  const doReschedule = useCallback(async () => {
+    if (!newWindow || !rescheduleSlot || !order || !user) return;
+    setRescheduling(true);
+    try {
+      // Step 1 — cancel the existing Calendly event (if one was stored).
+      const existingUri = rescheduleSlot === "pickup"
+        ? (pickupInfo?.pickup_calendly_event_uri ?? null)
+        : (pickupInfo?.return_calendly_event_uri ?? null);
+
+      let cancelWarning: string | null = null;
+      if (existingUri) {
+        const { data: cancelData, error: cancelError } = await supabase.functions.invoke("calendly-cancel", {
+          body: { event_uri: existingUri },
+        });
+        if (cancelError) {
+          // Non-fatal: warn but continue so the new booking still proceeds.
+          cancelWarning = "The previous booking couldn't be cancelled automatically — please cancel it in Calendly directly.";
+        } else if (cancelData?.skipped) {
+          cancelWarning = cancelData.reason ?? "The previous booking couldn't be cancelled automatically — please cancel it in Calendly directly.";
+        }
+      }
+
+      // Step 2 — book the new slot.
+      const addrParts = [
+        order.address.street,
+        order.address.street2,
+        `${order.address.city}, ${order.address.state} ${order.address.zip}`,
+      ].filter(Boolean);
+
+      const { data: bookData, error: bookError } = await supabase.functions.invoke("calendly-book", {
+        body: {
+          start_time: newWindow.start_time,
+          name: accountUser?.name || user.email,
+          email: order.email || user.email,
+          phone: pickupInfo?.contact_phone || "",
+          address: addrParts.join(", "),
+          notes: `${rescheduleSlot === "pickup" ? "Pickup" : "Return"} reschedule — Order #${order.number}`,
+        },
+      });
+      if (bookError) throw new Error(bookError.message);
+      if (bookData?.error) throw new Error(bookData.error);
+
+      // Step 3 — derive the human-readable label + store.
+      const newDate = toNyDateKey(newWindow.start_time);
+      const newLabel = formatNyTimeRange(newWindow.start_time, newWindow.end_time);
+      const newEventUri: string | null = bookData?.event_uri ?? null;
+
+      const updateFields: Record<string, string | null> = rescheduleSlot === "pickup"
+        ? { pickup_date: newDate, pickup_time_label: newLabel, pickup_calendly_event_uri: newEventUri }
+        : { return_date: newDate, return_time_label: newLabel, return_calendly_event_uri: newEventUri };
+
+      const { error: updateError } = await supabase
+        .from("orders")
+        .update(updateFields)
+        .eq("id", order.id)
+        .eq("user_id", user.id);
+      if (updateError) throw new Error(updateError.message);
+
+      // Step 4 — update local state so the UI reflects the new time immediately.
+      setPickupInfo(prev => prev ? { ...prev, ...updateFields } : prev);
+
+      setRescheduleSlot(null);
+      setNewWindow(null);
+
+      if (cancelWarning) {
+        toast.warning(cancelWarning);
+      }
+      if (bookData?.fallback) {
+        toast.info("Your new pickup time is saved. Complete the Calendly booking via the link in your email.");
+      } else {
+        toast.success(`${rescheduleSlot === "pickup" ? "Pickup" : "Return"} rescheduled!`);
+      }
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : null) ?? "Could not reschedule. Please try again.");
+    } finally {
+      setRescheduling(false);
+    }
+  }, [newWindow, rescheduleSlot, order, user, pickupInfo, accountUser]);
 
   const submitRework = async () => {
     if (!order || !user || !reworkDesc.trim()) return;
@@ -247,7 +421,9 @@ const OrderConfirmation = () => {
           {/* Pickup & Return Details */}
           <section className="rounded-lg border border-border bg-card p-6 shadow-soft mb-6">
             <h2 className="text-lg font-semibold mb-4">Pickup &amp; Return Details</h2>
-            <div className="text-sm space-y-1 mb-4">
+
+            {/* Delivery address */}
+            <div className="text-sm space-y-1 mb-5">
               <p className="font-medium">Delivery address</p>
               <p className="text-foreground/80">
                 {a.street}
@@ -256,10 +432,81 @@ const OrderConfirmation = () => {
                 {a.city}, {a.state} {a.zip}
               </p>
             </div>
-            <div className="rounded-md bg-accent/30 border border-border p-3 flex items-start gap-2 text-sm">
-              <MessageSquare size={16} className="mt-0.5 shrink-0 text-primary" />
-              <span>We'll text you to coordinate your pickup and return windows.</span>
-            </div>
+
+            {/* Pickup window */}
+            {(() => {
+              const pd = pickupInfo?.pickup_date ?? null;
+              const pl = pickupInfo?.pickup_time_label ?? null;
+              const locked = isWithin2Hours(pd, pl);
+              return (
+                <div className="mb-4">
+                  <p className="text-sm font-medium mb-1">Pickup</p>
+                  {pd && pl ? (
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2 text-sm text-foreground/80">
+                        <Calendar size={14} className="shrink-0 text-primary" />
+                        <span>{fmtDateKey(pd)}</span>
+                        <Clock size={14} className="shrink-0 text-primary" />
+                        <span>{pl}</span>
+                      </div>
+                      {locked ? (
+                        <span className="text-xs text-muted-foreground italic">
+                          Within 2 hours — contact us to reschedule
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => { setRescheduleSlot("pickup"); setNewWindow(null); }}
+                        >
+                          Reschedule pickup
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-md bg-accent/30 border border-border p-3 flex items-start gap-2 text-sm">
+                      <MessageSquare size={15} className="mt-0.5 shrink-0 text-primary" />
+                      <span>We'll contact you to schedule your pickup window.</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Return window — only shown once staff has scheduled it */}
+            {pickupInfo?.return_date && pickupInfo?.return_time_label && (() => {
+              const rd = pickupInfo.return_date!;
+              const rl = pickupInfo.return_time_label!;
+              const locked = isWithin2Hours(rd, rl);
+              return (
+                <div>
+                  <p className="text-sm font-medium mb-1">Return</p>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 text-sm text-foreground/80">
+                      <Calendar size={14} className="shrink-0 text-primary" />
+                      <span>{fmtDateKey(rd)}</span>
+                      <Clock size={14} className="shrink-0 text-primary" />
+                      <span>{rl}</span>
+                    </div>
+                    {locked ? (
+                      <span className="text-xs text-muted-foreground italic">
+                        Within 2 hours — contact us to reschedule
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => { setRescheduleSlot("return"); setNewWindow(null); }}
+                      >
+                        Reschedule return
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </section>
 
           {/* Order summary */}
@@ -341,6 +588,41 @@ const OrderConfirmation = () => {
         </div>
       </main>
       <Footer />
+
+      {/* Reschedule dialog */}
+      <Dialog
+        open={!!rescheduleSlot}
+        onOpenChange={(open) => { if (!open) { setRescheduleSlot(null); setNewWindow(null); } }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Reschedule your {rescheduleSlot === "pickup" ? "pickup" : "return"}
+            </DialogTitle>
+            <DialogDescription>
+              Select a new window below. Your previous booking will be cancelled automatically when
+              you confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <PickupScheduler selected={newWindow} onSelect={setNewWindow} />
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              disabled={rescheduling}
+              onClick={() => { setRescheduleSlot(null); setNewWindow(null); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="hero"
+              disabled={!newWindow || rescheduling}
+              onClick={doReschedule}
+            >
+              {rescheduling ? "Rescheduling…" : "Confirm new window"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Rework modal */}
       <Dialog open={reworkOpen} onOpenChange={setReworkOpen}>

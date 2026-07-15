@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.calendly-book]
 verify_jwt = false
+
+[functions.calendly-cancel]
+verify_jwt = false

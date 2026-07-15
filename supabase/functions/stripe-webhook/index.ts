@@ -158,6 +158,10 @@ async function createOrderFromCart(
       stripe_payment_intent_id: paymentIntentId,
       pickup_date: pickupDate,
       pickup_time_label: pickupTimeLabel,
+      // Persist the Calendly event URI so the reschedule flow can cancel the
+      // old booking before creating a new one. Null when calendly-book fell back
+      // to a scheduling link (no direct-booking URI was returned).
+      pickup_calendly_event_uri: payload.pickup_window?.calendly_event_uri ?? null,
     })
     .select("id")
     .maybeSingle();
