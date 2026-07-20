@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw, Calendar, Clock } from "lucide-react";
+import { RefreshCw, Calendar, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -46,7 +46,11 @@ interface PickupSchedulerProps {
 // hardcoded one — Calendly windows are UTC on the wire, so this only
 // affects presentation.
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const LOOK_AHEAD_DAYS = 7;
+// Extended from 7 to 14 days per Danielle's call: enough range that a longer
+// lead time is never a reason someone can't book, without the date row
+// actively encouraging far-out planning. Paired with a scrollable (not
+// wrapping) date-tab row below so 14 pills stay usable.
+const LOOK_AHEAD_DAYS = 14;
 
 // ---------- helpers ----------
 
@@ -137,6 +141,14 @@ export function PickupScheduler({
   const [dateGroups, setDateGroups] = useState<DateGroup[]>([]);
   const [activeDateKey, setActiveDateKey] = useState<string | null>(null);
   const fetchCountRef = useRef(0);
+  const dateTabsRef = useRef<HTMLDivElement>(null);
+
+  const scrollDateTabs = (direction: "left" | "right") => {
+    dateTabsRef.current?.scrollBy({
+      left: direction === "left" ? -160 : 160,
+      behavior: "smooth",
+    });
+  };
 
   const fetchAvailability = useCallback(async () => {
     if (disabled) return;
@@ -146,8 +158,17 @@ export function PickupScheduler({
 
     try {
       const now = new Date();
+      // Fetch one extra day beyond LOOK_AHEAD_DAYS. Fixes a real bug: a plain
+      // "now + N*24h" window cuts off exactly N days from *this moment*, so
+      // the Nth displayed day was always truncated to whatever time-of-day
+      // the customer happened to load the page (e.g. loading at 1:30 PM
+      // meant the 7th day out only ever showed windows before 1:30 PM,
+      // even though the courier's actual availability runs to end of day).
+      // The extra day is fetched as a buffer and trimmed below so we still
+      // only ever *display* LOOK_AHEAD_DAYS days, but the last one shown is
+      // now genuinely complete.
       const endDate = new Date(
-        now.getTime() + LOOK_AHEAD_DAYS * 24 * 60 * 60 * 1000,
+        now.getTime() + (LOOK_AHEAD_DAYS + 1) * 24 * 60 * 60 * 1000,
       );
 
       const { data, error: fnError } = await supabase.functions.invoke(
@@ -164,7 +185,10 @@ export function PickupScheduler({
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
 
-      const groups = groupByDate((data?.windows ?? []) as PickupWindow[]);
+      const groups = groupByDate((data?.windows ?? []) as PickupWindow[]).slice(
+        0,
+        LOOK_AHEAD_DAYS,
+      );
       setDateGroups(groups);
 
       // Default to first available date (or stay on current if still present)
@@ -245,23 +269,56 @@ export function PickupScheduler({
 
   return (
     <div className="space-y-4">
-      {/* Date tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {dateGroups.map((g) => (
-          <button
-            key={g.key}
-            type="button"
-            onClick={() => setActiveDateKey(g.key)}
-            className={cn(
-              "px-3 py-1.5 rounded-full text-sm font-medium border transition-colors whitespace-nowrap",
-              activeDateKey === g.key
-                ? "border-primary text-primary bg-primary/5"
-                : "border-border text-foreground/70 hover:border-primary/50 hover:text-foreground",
-            )}
-          >
-            {g.label}
-          </button>
-        ))}
+      {/* Date tabs — horizontally scrollable rather than wrapping, so
+          LOOK_AHEAD_DAYS (14) stays usable without crowding the layout. */}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => scrollDateTabs("left")}
+          aria-label="Scroll to earlier dates"
+          className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full border border-border text-foreground/60 hover:border-primary/50 hover:text-foreground transition-colors"
+        >
+          <ChevronLeft size={16} />
+        </button>
+
+        <div
+          ref={dateTabsRef}
+          className="flex gap-2 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:hidden min-w-0"
+          style={{
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            // Caps the visible window to roughly 7 pills' worth of width so
+            // wide screens don't just stretch to fit all 14 at once — the
+            // whole point was a week-at-a-glance view with arrows to reach
+            // the rest, not a wider version of the old wrapping row.
+            maxWidth: "700px",
+          }}
+        >
+          {dateGroups.map((g) => (
+            <button
+              key={g.key}
+              type="button"
+              onClick={() => setActiveDateKey(g.key)}
+              className={cn(
+                "shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors whitespace-nowrap",
+                activeDateKey === g.key
+                  ? "border-primary text-primary bg-primary/5"
+                  : "border-border text-foreground/70 hover:border-primary/50 hover:text-foreground",
+              )}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => scrollDateTabs("right")}
+          aria-label="Scroll to later dates"
+          className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full border border-border text-foreground/60 hover:border-primary/50 hover:text-foreground transition-colors"
+        >
+          <ChevronRight size={16} />
+        </button>
 
         <button
           type="button"
@@ -269,7 +326,7 @@ export function PickupScheduler({
             onSelect(null);
             fetchAvailability();
           }}
-          className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="shrink-0 ml-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Refresh availability"
           title="Refresh availability"
         >

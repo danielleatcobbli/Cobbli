@@ -9,9 +9,16 @@ type Props = {
    *  card. The callback receives the service slug; the caller is responsible for
    *  handling any required modal gates before navigating. */
   onAddToRepair?: (slug: string) => void;
+  /** "Addresses: …" line from addressesLine() in starterRepairConditions.ts —
+   *  shown in place of s.description when this service maps to at least one
+   *  checklist condition, so the same service reads the same way here as it
+   *  does on the Starter repair recommendation screen. Falls back to
+   *  s.description when undefined (Cleaning/Preventative care services, which
+   *  aren't part of the checklist). */
+  addresses?: string;
 };
 
-const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair }: Props) => {
+const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair, addresses }: Props) => {
   const to =
     fromCategory && fromCategory !== "All services"
       ? `/services/${s.slug}?from=${encodeURIComponent(fromCategory)}`
@@ -41,9 +48,9 @@ const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair }: Props) => {
           <h3 className="text-[14px] font-bold leading-snug" style={{ color: "#3d1700" }}>
             {s.name}
           </h3>
-          {s.description && (
+          {(addresses ?? s.description) && (
             <p className="text-[12px] leading-snug mt-0.5" style={{ color: "#7a5c40" }}>
-              {s.description}
+              {addresses ?? s.description}
             </p>
           )}
           {s.cardPriceLabel && (

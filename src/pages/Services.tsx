@@ -18,6 +18,7 @@ import ServiceCard from "@/components/cobbli/ServiceCard";
 import { trackEvent } from "@/lib/analytics";
 import { BUNDLES, type Bundle } from "@/data/bundles";
 import { POPULAR_SERVICE_SLUGS, sortServices } from "@/data/serviceOrder";
+import { addressesLine } from "@/data/starterRepairConditions";
 
 const ALL = ALL_CATEGORIES_LABEL;
 const categories = FILTER_BAR_CATEGORIES;
@@ -126,21 +127,24 @@ const Services = () => {
       <section className="flex-1 py-16 md:py-20">
         <div className="container">
 
-          {/* Section 1 — Packages. No callout banner here anymore — Danielle
-              wants Starter repair promoted via a visible button up top
-              instead of a competing banner, with the "individual services"
-              jump link demoted to a small line under the "Packages" title. */}
+          {/* Section 1 — Individual services, promoted to the top (Danielle's
+              call, 2026-07-15): most customers arrive condition-first (the
+              Starter repair checklist or a photo assessment), not by
+              browsing bundles, so the single-service catalog — now framed by
+              the condition it addresses where one exists — is the more
+              useful first thing to see. Packages moved below as a secondary
+              "bundle and save" section rather than being removed outright. */}
           <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
             <div>
               <h1 className="text-3xl md:text-4xl font-display text-primary">
-                Packages
+                Individual services
               </h1>
               <a
-                href="#individual-services"
+                href="#packages"
                 className="mt-1 inline-block text-sm underline font-medium"
                 style={{ color: "#7a5c40" }}
               >
-                Or choose individual services ↓
+                Or see if a package saves you more ↓
               </a>
             </div>
             <Button asChild size="lg" className="shrink-0">
@@ -149,21 +153,6 @@ const Services = () => {
               </Link>
             </Button>
           </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 md:gap-6">
-            {BUNDLES.map((bundle) => (
-              <BundleCard key={bundle.name} bundle={bundle} />
-            ))}
-          </div>
-
-          {/* Divider */}
-          <hr className="my-16 border-border" />
-
-          {/* Section 2 — Individual services */}
-          <div id="individual-services" className="scroll-mt-20">
-            <h2 className="text-3xl md:text-4xl font-display text-primary mb-6">
-              Individual services
-            </h2>
 
             <CategoryFilterBar active={active} onChange={setActive} className="mb-10" />
 
@@ -205,6 +194,7 @@ const Services = () => {
                         s={s}
                         fromCategory={active}
                         isPopular={POPULAR_SERVICE_SLUGS.has(s.slug)}
+                        addresses={addressesLine(s.slug)}
                       />
                     ))}
                   </div>
@@ -216,6 +206,25 @@ const Services = () => {
                 />
               </>
             )}
+
+          {/* Section 2 — Packages, now secondary: still worth surfacing for
+              anyone who needs several services done at once (the package
+              price only ever gets recommended when it beats the itemized
+              total — see computeRecommendation in starterRepairConditions.ts),
+              just no longer the first thing on the page. */}
+          <hr className="my-16 border-border" />
+          <div id="packages" className="scroll-mt-20">
+            <h2 className="text-3xl md:text-4xl font-display text-primary mb-2">
+              Packages
+            </h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Bundle multiple repairs together and save.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-5 md:gap-6">
+              {BUNDLES.map((bundle) => (
+                <BundleCard key={bundle.name} bundle={bundle} />
+              ))}
+            </div>
           </div>
 
         </div>

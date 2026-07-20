@@ -39,7 +39,18 @@ import { CHECKLIST_GROUPS, ADDONS, computeRecommendation } from "@/data/starterR
 import { CATEGORY_ICONS } from "@/components/cobbli/CategoryFilterBar";
 import { trackEvent } from "@/lib/analytics";
 
-type CartLine = { id: string; name: string; price: number; kind: "package" | "service"; slug: string };
+type CartLine = {
+  id: string;
+  name: string;
+  price: number;
+  kind: "package" | "service";
+  slug: string;
+  /** Checked condition labels this line addresses — shown as "Addresses: …"
+   *  above the name so a recommended service/package always traces back to
+   *  the symptom(s) that produced it. Empty for lines that only came from an
+   *  add-on (e.g. waterproofing), which isn't tied to a condition. */
+  addresses: string[];
+};
 
 const LABEL_TO_SLUG = new Map<string, string>();
 CHECKLIST_GROUPS.forEach((group) => group.conditions.forEach((c) => LABEL_TO_SLUG.set(c.label, c.slug)));
@@ -54,6 +65,19 @@ const StartRepair = () => {
   const [checkedAddons, setCheckedAddons] = useState<Set<string>>(new Set());
   const [notOffered, setNotOffered] = useState<{ slug: string; name: string }[]>([]);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
+
+  // slug -> service, so each condition's checklist thumbnail can reuse the
+  // exact photo shown on that service's card/detail page on /services —
+  // Danielle's call: the same repair should look like the same repair
+  // everywhere, rather than maintaining a second, separate image per
+  // condition. Falls back to cond.imageUrl (a manual override, if ever set)
+  // then the category icon when neither the service nor the condition has a
+  // photo yet.
+  const serviceBySlug = useMemo(() => {
+    const map = new Map<string, { imageUrl?: string }>();
+    (services ?? []).forEach((s) => map.set(s.slug, s));
+    return map;
+  }, [services]);
 
   usePageMeta({
     title: "Starter repair — Cobbli",
@@ -84,9 +108,17 @@ const StartRepair = () => {
   const seeRecommendations = () => {
     if (!services || !anyChecked) return;
     const requiredSlugs = new Set<string>();
+    // slug -> every checked condition label that maps to it, so each
+    // resulting service/package line can show which symptom(s) it addresses.
+    const slugToLabels = new Map<string, string[]>();
     checkedLabels.forEach((label) => {
       const slug = LABEL_TO_SLUG.get(label);
-      if (slug) requiredSlugs.add(slug);
+      if (slug) {
+        requiredSlugs.add(slug);
+        const existing = slugToLabels.get(slug);
+        if (existing) existing.push(label);
+        else slugToLabels.set(slug, [label]);
+      }
     });
     checkedAddons.forEach((slug) => requiredSlugs.add(slug));
 
@@ -98,6 +130,12 @@ const StartRepair = () => {
       not_offered_count: result.notOffered.length,
     });
 
+    const addressesFor = (slugs: string[]): string[] => {
+      const seen = new Set<string>();
+      slugs.forEach((slug) => (slugToLabels.get(slug) ?? []).forEach((label) => seen.add(label)));
+      return Array.from(seen);
+    };
+
     const lines: CartLine[] = [];
     if (result.package) {
       lines.push({
@@ -106,10 +144,11 @@ const StartRepair = () => {
         price: Math.round(parseFloat(result.package.price.replace(/[^0-9.]/g, "")) * 100),
         kind: "package",
         slug: result.package.bundleSlug,
+        addresses: addressesFor(result.package.covers),
       });
     }
     result.individual.forEach((s) => {
-      lines.push({ id: s.slug, name: s.name, price: s.price, kind: "service", slug: s.slug });
+      lines.push({ id: s.slug, name: s.name, price: s.price, kind: "service", slug: s.slug, addresses: addressesFor([s.slug]) });
     });
 
     setNotOffered(result.notOffered);
@@ -190,10 +229,17 @@ const StartRepair = () => {
 
               {/* Two columns on desktop so the wider container above is
                   actually put to use and there's less scrolling — single
-                  column on mobile, unchanged. */}
-              <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                  column on mobile, unchanged. Uses CSS multi-column (not
+                  CSS grid) on purpose: grid's row-matching was forcing a
+                  short group like Sole to leave a big empty gap under it
+                  whenever its row-partner (e.g. Heel) had more conditions
+                  and was taller. Multi-column lets each group start right
+                  after the one before it in its own column instead, at the
+                  cost of the two columns no longer lining up card-for-card
+                  (Danielle's call — worth it to kill the dead space). */}
+              <div className="mt-8 columns-1 md:columns-2 gap-8">
                 {CHECKLIST_GROUPS.map((group) => (
-                  <div key={group.serviceCategory}>
+                  <div key={group.serviceCategory} className="break-inside-avoid mb-6">
                     <div className="flex items-center gap-2 mb-3">
                       <img
                         src={CATEGORY_ICONS[group.serviceCategory]}
@@ -204,16 +250,26 @@ const StartRepair = () => {
                       <h2 className="text-base font-semibold text-primary">{group.serviceCategory}</h2>
                     </div>
                     <div className="rounded-xl border border-border p-4">
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-3">
                         {group.conditions.map((cond, idx) => {
                           const id = `cond-${group.serviceCategory}-${cond.slug}-${idx}`;
                           return (
-                            <label key={id} htmlFor={id} className="flex items-start gap-2 text-sm text-primary/90 cursor-pointer">
+                            <label key={id} htmlFor={id} className="flex items-center gap-3 text-sm text-primary/90 cursor-pointer">
+                              <img
+                                src={
+                                  serviceBySlug.get(cond.slug)?.imageUrl ??
+                                  cond.imageUrl ??
+                                  CATEGORY_ICONS[group.serviceCategory]
+                                }
+                                alt=""
+                                aria-hidden="true"
+                                className="h-16 w-16 rounded-lg object-cover shrink-0"
+                                style={{ backgroundColor: "#f5f0e8" }}
+                              />
                               <Checkbox
                                 id={id}
                                 checked={checkedLabels.has(cond.label)}
                                 onCheckedChange={() => toggleCondition(cond.label)}
-                                className="mt-0.5"
                               />
                               {cond.label}
                             </label>
@@ -294,6 +350,11 @@ const StartRepair = () => {
                   cartLines.map((line) => (
                     <div key={line.id} className="rounded-lg border border-border p-4 flex items-start justify-between gap-4">
                       <div className="min-w-0">
+                        {line.addresses.length > 0 && (
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Addresses: {line.addresses.join(", ").toLowerCase()}
+                          </p>
+                        )}
                         <p className="font-medium text-primary">
                           {line.name}
                           {line.kind === "package" && <span className="ml-2 text-xs font-medium text-muted-foreground">(package)</span>}

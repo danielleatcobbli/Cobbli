@@ -316,7 +316,12 @@ const Checkout = () => {
       // listed before proceeding to payment.
       if (selectedWindow) {
         const now = new Date();
-        const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        // Must cover the same range PickupScheduler.tsx now offers (14 days,
+        // +1 day buffer — see that file for why the buffer exists). Falling
+        // short here would make this re-check falsely report "no longer
+        // available" for a perfectly valid window the customer picked
+        // anywhere in the back half of that 14-day range.
+        const endDate = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
         const { data: availData, error: availErr } =
           await supabase.functions.invoke("cal-availability", {
             body: {
@@ -347,50 +352,34 @@ const Checkout = () => {
         }
       }
 
-      // --- Create the Cal.com booking with pre-populated customer data ---
-      // We pass name/phone/email/address so the customer never has to fill in
-      // a separate Cal.com booking form.
-      let pickupEventUri: string | undefined;
-      if (selectedWindow) {
-        const pickupAddress = [
-          selectedAddress.street,
-          selectedAddress.street2,
-          selectedAddress.city,
-          selectedAddress.state,
-          selectedAddress.zip,
-        ]
-          .filter(Boolean)
-          .join(", ");
+      // --- No Cal.com booking is created here anymore ---
+      // Previously this called cal-book the moment the customer opened the
+      // Payment step, which meant a real booking existed on Danielle's
+      // calendar before checkout was ever completed. If the customer then
+      // went back and changed their pickup window, the earlier booking was
+      // never updated or cancelled — the Cal.com invite and the eventual
+      // order could end up showing two different times. Booking creation now
+      // happens server-side in the stripe-webhook function, only once
+      // payment actually succeeds, so there's exactly one source of truth
+      // and nothing gets scheduled until the customer has genuinely checked
+      // out with that window.
+      const pickupAddress = [
+        selectedAddress.street,
+        selectedAddress.street2,
+        selectedAddress.city,
+        selectedAddress.state,
+        selectedAddress.zip,
+      ]
+        .filter(Boolean)
+        .join(", ");
 
-        const { data: bookData, error: bookErr } =
-          await supabase.functions.invoke("cal-book", {
-            body: {
-              start_time: selectedWindow.start_time,
-              name: user.name || authUser.email?.split("@")[0] || "Customer",
-              email,
-              phone,
-              address: pickupAddress,
-            },
-          });
-
-        if (bookErr || bookData?.error) {
-          console.error("Cal.com booking error:", bookErr ?? bookData?.error);
-          toast({
-            title: "Pickup scheduling issue",
-            description:
-              "We couldn't confirm your pickup window with our scheduling system. " +
-              "Your order will still be placed and we'll contact you to arrange pickup.",
-          });
-        } else {
-          pickupEventUri = bookData?.event_uri as string | undefined;
-        }
-      }
-
-      // --- Build the cart payload (no DB write here — order row is created by
-      //     the Stripe webhook after payment is confirmed) ---
+      // --- Build the cart payload (no DB write here — order row, and the
+      //     Cal.com booking, are both created by the Stripe webhook after
+      //     payment is confirmed) ---
       const payload = {
         contact_email: email,
         contact_phone: phone,
+        contact_name: user.name || authUser.email?.split("@")[0] || "Customer",
         delivery_address: selectedAddress,
         repairs_subtotal_cents: subtotal,
         courier_fee_cents: courierFee,
@@ -399,7 +388,7 @@ const Checkout = () => {
           pickup_window: {
             start: selectedWindow.start_time,
             end: selectedWindow.end_time,
-            ...(pickupEventUri && { calendly_event_uri: pickupEventUri }),
+            address: pickupAddress,
           },
         }),
         items: pairs.flatMap((p) =>
@@ -435,9 +424,22 @@ const Checkout = () => {
   // earlier field it depends on (address, chosen card option) is filled in —
   // no separate "Continue to payment" click required. Resets whenever the
   // user navigates away from the step so re-opening it tries again fresh.
+  //
+  // Bug fix: this comment always said "resets ... so re-opening it tries
+  // again fresh," but only attemptedPaymentPrepRef was actually being reset —
+  // showStripe (the flag that gates whether placeOrder() runs again) was
+  // never cleared. That meant if a customer went back to Step 3 and picked a
+  // different pickup window, the Stripe session and cartPayload from the
+  // FIRST window silently stuck around: the order they'd end up paying for
+  // (and the pickup_date/time eventually written to it) would still reflect
+  // the abandoned first window, not the one currently shown as selected.
+  // Resetting showStripe here means leaving the Payment step always forces a
+  // fresh placeOrder() (fresh cartPayload, fresh Stripe session) next time
+  // Payment is reopened.
   useEffect(() => {
     if (openStep !== "payment") {
       attemptedPaymentPrepRef.current = false;
+      setShowStripe(false);
       return;
     }
     if (showStripe || placing || attemptedPaymentPrepRef.current) return;

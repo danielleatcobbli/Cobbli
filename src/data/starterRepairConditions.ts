@@ -25,7 +25,17 @@
 import { minPrice, type Service, type ServiceCategory } from "@/types/service";
 import { BUNDLES, bundleBySlug, type IncludedCategoryKey } from "@/data/bundles";
 
-export type Condition = { label: string; slug: string };
+export type Condition = {
+  label: string;
+  slug: string;
+  /** Optional photo/illustration for this specific condition, shown next to
+   *  the checkbox on the "What's going on with your shoes?" checklist. Falls
+   *  back to the category icon (CATEGORY_ICONS in CategoryFilterBar.tsx) when
+   *  not set — no real per-condition photography exists yet, so every
+   *  condition renders with its category's icon until real images are added
+   *  here one at a time. */
+  imageUrl?: string;
+};
 
 /**
  * A single display group on the "What's going on with your shoes?" checklist.
@@ -44,28 +54,28 @@ export type Condition = { label: string; slug: string };
  */
 export type ChecklistGroup = { serviceCategory: ServiceCategory; conditions: Condition[] };
 
+// Group order (2026-07-15, Danielle's call): Sole, Color/scuffs/shine, Heel,
+// Inside of shoe, Tears & holes, Zipper, Straps/buckles/hardware — meant to
+// track what's actually most commonly wrong with a customer's shoes, not the
+// CATEGORIES_ORDERED sequence used by the Services page filter bar (which is
+// unchanged and still lists Straps/buckles/hardware before Tears & holes).
+// That divergence between this checklist and the Services page is intentional
+// and low-risk — flagged once here rather than re-flagged per group below.
 export const CHECKLIST_GROUPS: ChecklistGroup[] = [
   { serviceCategory: "Sole", conditions: [
-    { label: "Worn or damaged sole", slug: "full-resole" },
-    { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement" } ] },
-  { serviceCategory: "Heel", conditions: [
-    { label: "Loose or separated heel", slug: "heel-reattachment" },
-    { label: "Broken heel", slug: "heel-replacement" },
+    { label: "Worn, damaged, or separating sole", slug: "full-resole" },
     { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement" } ] },
   { serviceCategory: "Color, scuffs, & shine", conditions: [
     { label: "Surface scuffs or scratches", slug: "color-restoration" },
     { label: "Faded or streaky color", slug: "color-restoration" },
     { label: "Dull or dry material", slug: "color-restoration" } ] },
+  { serviceCategory: "Heel", conditions: [
+    { label: "Loose or separated heel", slug: "heel-reattachment" },
+    { label: "Broken heel", slug: "heel-replacement" },
+    { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement" } ] },
   { serviceCategory: "Inside of shoe", conditions: [
     { label: "Worn or damaged insole", slug: "insole-replacement" },
     { label: "Holes inside of shoe", slug: "lining-repair" } ] },
-  { serviceCategory: "Straps, buckles, & hardware", conditions: [
-    { label: "Loose or detached strap", slug: "strap-repair" },
-    { label: "Broken or missing strap", slug: "strap-replacement" },
-    { label: "Loose or detached hardware", slug: "hardware-repair" },
-    { label: "Broken or missing hardware", slug: "hardware-replacement" },
-    { label: "Loose or detached buckle", slug: "buckle-repair" },
-    { label: "Broken or missing buckle", slug: "buckle-replacement" } ] },
   { serviceCategory: "Tears & holes", conditions: [
     { label: "Loose stitching", slug: "seam-repair" },
     { label: "Loose or detached strap", slug: "strap-repair" },
@@ -74,7 +84,49 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
   { serviceCategory: "Zipper", conditions: [
     { label: "Broken or detached zipper", slug: "zipper-reattachment" },
     { label: "Broken or detached zipper slider", slug: "zipper-slider-replacement" } ] },
+  { serviceCategory: "Straps, buckles, & hardware", conditions: [
+    { label: "Loose or detached strap", slug: "strap-repair" },
+    { label: "Broken or missing strap", slug: "strap-replacement" },
+    { label: "Loose or detached hardware", slug: "hardware-repair" },
+    { label: "Broken or missing hardware", slug: "hardware-replacement" },
+    { label: "Loose or detached buckle", slug: "buckle-repair" },
+    { label: "Broken or missing buckle", slug: "buckle-replacement" } ] },
 ];
+
+/** slug -> every distinct checklist condition label that maps to it. Shared
+ *  by the checklist's own recommendation screen ("Addresses: …") and by the
+ *  Services page/ServiceCard, so a service is described the same way — by
+ *  the condition it fixes — everywhere it shows up, not just in the
+ *  Starter repair flow. Services with no checklist mapping at all (Cleaning,
+ *  Preventative care) simply aren't in this map; callers fall back to the
+ *  service's own catalog description in that case. */
+export const SLUG_TO_CONDITION_LABELS: Map<string, string[]> = (() => {
+  const map = new Map<string, string[]>();
+  CHECKLIST_GROUPS.forEach((group) =>
+    group.conditions.forEach((c) => {
+      const existing = map.get(c.slug);
+      if (existing) {
+        if (!existing.includes(c.label)) existing.push(c.label);
+      } else {
+        map.set(c.slug, [c.label]);
+      }
+    }),
+  );
+  return map;
+})();
+
+/** "Addresses: worn, damaged, or separating sole" — or undefined when this
+ *  slug isn't part of the checklist at all. Deliberately no "For a …"
+ *  article-based phrasing here: some labels are singular shoe parts ("a
+ *  broken heel") and some are plural/uncountable ("surface scuffs or
+ *  scratches"), so a single template can't get the grammar right for both.
+ *  The colon-prefixed form already reads fine either way and matches the
+ *  phrasing already shipped on the recommendation screen. */
+export function addressesLine(slug: string): string | undefined {
+  const labels = SLUG_TO_CONDITION_LABELS.get(slug);
+  if (!labels || labels.length === 0) return undefined;
+  return `Addresses: ${labels.join(", ").toLowerCase()}`;
+}
 
 /** Canonical slug -> package category mapping, used only for the
  *  package-vs-individual-services recommendation logic below. Kept separate

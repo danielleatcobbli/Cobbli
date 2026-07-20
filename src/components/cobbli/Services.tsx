@@ -10,6 +10,7 @@ import { type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
 import { BUNDLES, type Bundle } from "@/data/bundles";
 import { POPULAR_SERVICE_SLUGS, sortServices } from "@/data/serviceOrder";
+import { addressesLine } from "@/data/starterRepairConditions";
 
 // ---------------------------------------------------------------------------
 // Bundle card (homepage) — same data as pages/Services.tsx (src/data/bundles.ts),
@@ -149,6 +150,7 @@ const Services = () => {
                 <ServiceCard
                   s={s}
                   isPopular={POPULAR_SERVICE_SLUGS.has(s.slug)}
+                  addresses={addressesLine(s.slug)}
                 />
               </div>
             ))}
