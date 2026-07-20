@@ -17,7 +17,7 @@ import ResetPassword from "./pages/ResetPassword";
 import LinkExpired from "./pages/LinkExpired";
 import Account from "./pages/Account";
 import StartRepair from "./pages/StartRepair";
-import StartRepairPick from "./pages/StartRepairPick";
+import PairFlowDialog from "./components/cobbli/PairFlowDialog";
 import AssessmentUpload from "./pages/AssessmentUpload";
 import AssessmentDetails from "./pages/AssessmentDetails";
 import AssessmentDeposit from "./pages/AssessmentDeposit";
@@ -93,7 +93,6 @@ const App = () => (
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/link-expired" element={<LinkExpired />} />
                         <Route path="/start-repair" element={<StartRepair />} />
-                        <Route path="/start-repair/pick" element={<StartRepairPick />} />
                         <Route path="/start-repair/assessment" element={<AssessmentUpload />} />
                         <Route path="/start-repair/assessment/details" element={<AssessmentDetails />} />
                         <Route path="/start-repair/assessment/deposit" element={<AssessmentDeposit />} />
@@ -203,6 +202,7 @@ const App = () => (
                         />
                         <Route path="*" element={<NotFound />} />
                       </Routes>
+                      <PairFlowDialog />
                       <CookieConsent />
                     </AssessmentProvider>
                   </RepairFlowProvider>

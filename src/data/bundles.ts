@@ -1,13 +1,15 @@
 /**
- * Repair packages ("bundles") shown at the top of the Services page and on
- * their own detail pages (/packages/:slug).
+ * Repair packages ("bundles") shown near the bottom of the Services page
+ * (secondary to individual services — see Services.tsx) and on their own
+ * detail pages (/packages/:slug).
  *
  * Not backed by real catalog services yet — each package is a flat, hand-set
  * price rather than a sum of underlying service line items. `includedCategories`
  * exists purely to drive the "what's included" comparison table on
  * PackageDetail.tsx; it doesn't affect pricing or what actually gets booked
  * (that's still just the flat bundle price, added to the bag as one line item
- * — see StartRepairPick.tsx's bundle path).
+ * — see PackageDetail.tsx's goToPick, which opens PairFlowDialog.tsx directly
+ * rather than navigating anywhere).
  *
  * Shared between Services.tsx (the grid of cards) and PackageDetail.tsx (the
  * page a card's image/title link into), so renaming or re-pricing a package
@@ -62,6 +64,15 @@ export type Bundle = {
   /** Brands Cobbli can't currently service under this package. Empty when
    *  the package doesn't touch anything those brands restrict. */
   unsupportedBrands: string[];
+  /** True hides this package from the browsable grid (Services.tsx, the
+   *  homepage strip) and from other packages' comparison tables, without
+   *  deleting it — Danielle's call (2026-07-15): now that packages are
+   *  framed purely as "bundle multiple repairs and save," single-category
+   *  packages priced the same as their one underlying service (Sole repair,
+   *  Just a Shine) don't fit that pitch. Kept in BUNDLES/still reachable at
+   *  /packages/:slug in case she wants to reintroduce them, e.g. once
+   *  package contents get a more explicit "what's included" treatment. */
+  hidden?: boolean;
 };
 
 export const BUNDLES: Bundle[] = [
@@ -136,6 +147,7 @@ export const BUNDLES: Bundle[] = [
     includedCategories: ["sole"],
     requiresPaintConsent: false,
     unsupportedBrands: [],
+    hidden: true,
   },
   {
     slug: "preventative-care",
@@ -160,6 +172,7 @@ export const BUNDLES: Bundle[] = [
     includesJustAShine: true,
     requiresPaintConsent: false,
     unsupportedBrands: [],
+    hidden: true,
   },
 ];
 

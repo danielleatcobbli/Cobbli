@@ -28,7 +28,7 @@
 
 import { useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { ChevronLeft, Check } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -59,7 +59,7 @@ const COMPARISON_ROWS: { key: IncludedCategoryKey; label: string }[] = INCLUDED_
   label: c.label,
 }));
 
-const COMPARISON_BUNDLES = BUNDLES.filter((b) => !b.includesJustAShine);
+const COMPARISON_BUNDLES = BUNDLES.filter((b) => !b.includesJustAShine && !b.hidden);
 
 const ComparisonTable = ({ activeSlug }: { activeSlug: string }) => {
   const labelWidth = 20;
@@ -123,9 +123,8 @@ const ComparisonTable = ({ activeSlug }: { activeSlug: string }) => {
 
 const PackageDetail = () => {
   const { slug = "" } = useParams();
-  const navigate = useNavigate();
   const bundle = bundleBySlug(slug);
-  const { setPaintConsent } = useRepairFlow();
+  const { setPaintConsent, openPairFlow } = useRepairFlow();
   const [consentOpen, setConsentOpen] = useState(false);
   const [brandsOpen, setBrandsOpen] = useState(false);
 
@@ -140,8 +139,13 @@ const PackageDetail = () => {
 
   const included = INCLUDED_CATEGORIES.filter((c) => bundle.includedCategories.includes(c.key));
 
-  const goToPick = () =>
-    navigate(`/start-repair/pick?bundle=${encodeURIComponent(bundle.name)}&bundlePrice=${bundlePriceToCents(bundle.price)}`);
+  // Opens the shared pair popup (PairFlowDialog, mounted in App.tsx) with
+  // this bundle as a single flat-priced line item, instead of navigating to
+  // a separate page — same change as ServiceDetail.tsx's goToPick.
+  const goToPick = () => {
+    const bundleSlug = `bundle-${bundle.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+    openPairFlow([{ id: bundleSlug, name: bundle.name, price: bundlePriceToCents(bundle.price) }]);
+  };
 
   const onStart = () => {
     trackEvent("service_added", { bundle: bundle.name, source: "package_detail" });

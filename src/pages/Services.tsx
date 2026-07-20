@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import CategoryFilterBar, {
   ALL_CATEGORIES_LABEL,
   FILTER_BAR_CATEGORIES,
+  categoryMatches,
   type CategoryFilter,
 } from "@/components/cobbli/CategoryFilterBar";
-import { type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
 import ServiceCard from "@/components/cobbli/ServiceCard";
 import { trackEvent } from "@/lib/analytics";
@@ -94,23 +94,13 @@ const Services = () => {
 
   const activeServices = useMemo(() => {
     const filtered = list.filter((s) => !s.isComingSoon);
-    const byCat =
-      active === ALL
-        ? filtered
-        : filtered.filter((s) =>
-            s.categories.includes(active as Service["categories"][number]),
-          );
+    const byCat = filtered.filter((s) => categoryMatches(s.categories, active));
     return sortServices(byCat);
   }, [list, active]);
 
   const comingSoonServices = useMemo(() => {
     const filtered = list.filter((s) => s.isComingSoon);
-    const byCat =
-      active === ALL
-        ? filtered
-        : filtered.filter((s) =>
-            s.categories.includes(active as Service["categories"][number]),
-          );
+    const byCat = filtered.filter((s) => categoryMatches(s.categories, active));
     return [...byCat].sort((a, b) => a.rank - b.rank);
   }, [list, active]);
 
@@ -221,7 +211,7 @@ const Services = () => {
               Bundle multiple repairs together and save.
             </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-5 md:gap-6">
-              {BUNDLES.map((bundle) => (
+              {BUNDLES.filter((bundle) => !bundle.hidden).map((bundle) => (
                 <BundleCard key={bundle.name} bundle={bundle} />
               ))}
             </div>

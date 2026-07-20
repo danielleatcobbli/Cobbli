@@ -23,6 +23,13 @@ export const SHOE_TYPES: ShoeType[] = [
 export type ServiceCategory =
   | "Sole"
   | "Heel"
+  // UI-only grouping for the Services page filter bar (CategoryFilterBar.tsx)
+  // — Danielle's call (2026-07-15): Sole and Heel "naturally go together," so
+  // they're shown as one combined filter button there. Real services are
+  // still individually tagged "Sole" and/or "Heel" in the catalog; nothing
+  // is ever assigned this value directly. See categoryMatches() in
+  // CategoryFilterBar.tsx for the OR-match this implies.
+  | "Sole & Heel"
   | "Cleaning"
   | "Color, scuffs, & shine"
   | "Inside of shoe"
@@ -30,11 +37,16 @@ export type ServiceCategory =
   | "Straps, buckles, & hardware"
   | "Tears & holes"
   | "Zipper"
-  | "Fit";
+  | "Fit"
+  // Checklist-only, like "Sole & Heel" above (2026-07-16, Danielle's call) —
+  // deodorizing-treatment is tagged "Cleaning" in the catalog, not "Odor", so
+  // this deliberately isn't in CATEGORIES_ORDERED / the Services page filter
+  // bar (adding it there would create a filter button matching zero
+  // services). Used only as a ChecklistGroup.serviceCategory value.
+  | "Odor";
 
 export const CATEGORIES_ORDERED: ServiceCategory[] = [
-  "Sole",
-  "Heel",
+  "Sole & Heel",
   "Cleaning",
   "Color, scuffs, & shine",
   "Inside of shoe",
