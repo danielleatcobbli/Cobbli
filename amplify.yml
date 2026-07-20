@@ -15,12 +15,19 @@
 #   VITE_SUPABASE_PUBLISHABLE_KEY <anon/publishable key — public>
 #   VITE_API_URL                  <deployed FastAPI base URL, or "" if unset>
 #   VITE_GA_MEASUREMENT_ID        <GA4 id, optional>
-#   VITE_COMING_SOON              "true" for the pre-launch placeholder at "/"
-#                                  (ComingSoon.tsx + waitlist signup instead of
-#                                  the real homepage), "false" or unset once
-#                                  ready to launch. See src/App.tsx. Set this
-#                                  to "true" on the cobbli.com production
-#                                  branch until launch day — 2026-07-20.
+#   VITE_COMING_SOON              "true" gates EVERY route behind the
+#                                  pre-launch placeholder (ComingSoon.tsx +
+#                                  waitlist signup) instead of the real site,
+#                                  "false" or unset once ready to launch. See
+#                                  PreviewGate in src/App.tsx. Set this to
+#                                  "true" on the cobbli.com production branch
+#                                  until launch day — 2026-07-20.
+#   VITE_PREVIEW_KEY               Secret string. Visiting any URL with
+#                                  ?preview=<this value> lets Danielle alone
+#                                  see the real site while VITE_COMING_SOON is
+#                                  on. Generate with `openssl rand -hex 12` —
+#                                  treat it like a password, don't reuse the
+#                                  value from .env.example.
 #
 # After first deploy, add the Amplify domain(s) to Supabase Auth redirect URLs
 # (Auth > URL Configuration): https://cobbli.com and any staging domain.
