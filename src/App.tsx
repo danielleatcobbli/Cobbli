@@ -53,6 +53,15 @@ import RoleRoute from "./components/RoleRoute";
 
 const queryClient = new QueryClient();
 
+// Pre-launch mode: while true, cobbli.com's homepage shows the "coming soon"
+// waitlist page (ComingSoon.tsx) instead of the real site — everything else
+// still builds and deploys normally underneath, just not linked from "/".
+// To go live, flip VITE_COMING_SOON to "false" (or remove it) in the
+// hosting environment's build settings and redeploy — no code change needed.
+// Danielle's call, 2026-07-20: this needs to be a zero-developer flip once
+// her AWS contractor's engagement ends July 31st.
+const SHOW_COMING_SOON = import.meta.env.VITE_COMING_SOON === "true";
+
 // Fires a GA4 page_view on every client-side route change. gtag is only defined
 // after cookie consent is accepted (see src/lib/consent.ts), so this no-ops
 // until the visitor opts in.
@@ -83,7 +92,7 @@ const App = () => (
                   <RepairFlowProvider>
                     <AssessmentProvider>
                       <Routes>
-                        <Route path="/" element={<Index />} />
+                        <Route path="/" element={SHOW_COMING_SOON ? <ComingSoon /> : <Index />} />
                         <Route path="/coming-soon" element={<ComingSoon />} />
                         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                         <Route path="/cookie-policy" element={<CookiePolicy />} />
