@@ -196,7 +196,6 @@ export async function fetchOrders(): Promise<Order[]> {
 
 type OrderDetailRow = OrderRow & {
   contact_email: string;
-  assessment_id: string | null;
 };
 
 type OrderPairRow = {
@@ -272,7 +271,7 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
   const { data: orderRow, error: orderErr } = await supabase
     .from("orders")
     .select(
-      "id, user_id, order_number, status, placed_at, delivery_address, contact_phone, contact_email, workshop_assignee, dispatch_assignee, action_required_by, last_contacted_at, pickup_date, pickup_time_label, return_date, return_time_label, notes, assessment_id",
+      "id, user_id, order_number, status, placed_at, delivery_address, contact_phone, contact_email, workshop_assignee, dispatch_assignee, action_required_by, last_contacted_at, pickup_date, pickup_time_label, return_date, return_time_label, notes",
     )
     .eq("id", id)
     .maybeSingle();
@@ -350,45 +349,19 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
 
   // If this order was created from a proposal approval, fetch the assessment
   // snapshot (photos + proposed services) for traceability in the detail page.
-  let assessmentRef: OrderDetail["assessmentRef"] | undefined;
-  if (order.assessment_id) {
-    try {
-      const { data: aRow } = await supabase
-        .from("assessments")
-        .select("id, pairs, proposed_services")
-        .eq("id", order.assessment_id)
-        .maybeSingle();
-
-      if (aRow) {
-        type AssessmentPair = { photoPaths?: string[] };
-        type AssessmentService = { name: string; price_cents: number; tier: string };
-        const aPairs = (aRow.pairs as unknown as AssessmentPair[]) ?? [];
-        const aServices = (aRow.proposed_services as unknown as AssessmentService[]) ?? [];
-
-        // Build signed URLs for the first pair's first 4 photos.
-        const photoUrls: string[] = [];
-        const paths = (aPairs[0]?.photoPaths ?? []).slice(0, 4);
-        for (const path of paths) {
-          const { data: su } = await supabase.storage
-            .from("assessment-uploads")
-            .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
-          if (su?.signedUrl) photoUrls.push(su.signedUrl);
-        }
-
-        assessmentRef = {
-          id: aRow.id as string,
-          photoUrls,
-          services: aServices.map(s => ({
-            name: s.name,
-            priceCents: s.price_cents,
-            tier: (s.tier === "essential" || s.tier === "recommended") ? s.tier : "essential",
-          })),
-        };
-      }
-    } catch {
-      // Non-fatal: assessment lookup failing shouldn't break the order detail page.
-    }
-  }
+  //
+  // NOT WIRED UP YET: this needs an `assessment_id` column (or equivalent
+  // link) on `orders` to know which assessment an order came from, and that
+  // column doesn't exist in the current schema (verified 2026-07-21 via a
+  // live Supabase schema check — orders has no assessment_id, and
+  // assessments has no order_id either). Selecting a nonexistent column was
+  // the root cause of "Couldn't load this order: [object Object]" surfacing
+  // the first time a real order was opened this session. Left as a flagged
+  // gap rather than guessed at — a developer needs to add the linking
+  // column (and backfill it on order creation from a proposal) before this
+  // can be wired up; ProposalReferenceCard is still in place and will pick
+  // this up automatically once assessmentRef is populated again.
+  const assessmentRef: OrderDetail["assessmentRef"] | undefined = undefined;
 
   return {
     id: order.id,

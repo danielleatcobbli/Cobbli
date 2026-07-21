@@ -19,6 +19,7 @@ import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, Circle, Clock, FileText
 import { fetchOrderDetail, uploadPairPhoto, removePairPhoto } from "./adminData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { printPairTags } from "./printPairTags";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types  (mirrors AdminDashboard — will share a module once wired to live data)
@@ -1989,7 +1990,7 @@ function OuttakeFormModal({
  * style than the previous split-into-three-cards layout). An order with
  * multiple pairs gets one of these per pair, each progressing independently —
  * outtake for a pair is blocked until that pair's own intake is complete. */
-function PairCard({ pair, index, total, orderId }: { pair: ShoePair; index: number; total: number; orderId: string }) {
+function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair; index: number; total: number; orderId: string; orderNumber: string }) {
   const [services, setServices] = useState<ServiceLine[]>(pair.services);
 
   // Intake/Outtake status now live in local state (rather than reading
@@ -2165,6 +2166,21 @@ function PairCard({ pair, index, total, orderId }: { pair: ShoePair; index: numb
             ? <span style={{ fontStyle: "italic" }}>{pair.customerNotes}</span>
             : <span style={{ color: "#9ca3af" }}>No notes provided</span>}
         </KVRow>
+        {/* Placeholder content only (2026-07-20) — the tag design itself is
+            still pending Alex's sign-off, so this reprints a plain,
+            unstyled version of this one pair's tag. Swap the markup in
+            printPairTags.ts once the design is approved; this button and
+            the one next to the order number (print all pairs at once)
+            don't need to change. */}
+        <div style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={() => printPairTags(orderNumber, [pair])}
+            style={{ padding: "5px 12px", backgroundColor: "#fff", color: "#3d1700", border: "1px solid #d9cfc0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >
+            Print tag
+          </button>
+        </div>
 
         <div style={{ marginTop: 14 }}>
           <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Photos</p>
@@ -2763,6 +2779,21 @@ function PageHeader({ order, onRefetch }: { order: OrderDetail; onRefetch: () =>
           {order.isRework && (
             <span style={{ backgroundColor: "#fef3c7", color: "#92400e", fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 5 }}>Rework</span>
           )}
+          {/* Prints one tag per pair in a single pass — the common case, so
+              nobody has to click "Print tag" separately for every pair.
+              Reprinting just one still lives on that pair's own card below
+              for when a single tag needs to be redone. Placeholder tag
+              content until Alex signs off on the real design — see
+              printPairTags.ts. */}
+          {order.pairs.length > 0 && (
+            <button
+              type="button"
+              onClick={() => printPairTags(order.orderNumber, order.pairs)}
+              style={{ padding: "5px 12px", backgroundColor: "#fff", color: "#3d1700", border: "1px solid #d9cfc0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              Print all tags{order.pairs.length > 1 ? ` (${order.pairs.length})` : ""}
+            </button>
+          )}
         </div>
 
         {actionBlock && (
@@ -2923,7 +2954,7 @@ export default function AdminOrderDetail() {
                   </Card>
                 ) : (
                   order.pairs.map((pair, i) => (
-                    <PairCard key={pair.id} pair={pair} index={i} total={order.pairs.length} orderId={order.id} />
+                    <PairCard key={pair.id} pair={pair} index={i} total={order.pairs.length} orderId={order.id} orderNumber={order.orderNumber} />
                   ))
                 )}
                 <CommentsCard order={order} />
