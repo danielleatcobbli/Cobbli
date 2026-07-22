@@ -164,7 +164,7 @@ const KpiDashboard = () => {
   }, [data, period]);
 
   if (isLoading) {
-    return <div className="text-sm text-muted-foreground py-12 text-center">Loading KPIsâ¦</div>;
+    return <div className="text-sm text-muted-foreground py-12 text-center">Loading KPIs…</div>;
   }
 
   const volumeChartData = volume.labels.map((label, i) => ({
@@ -261,7 +261,7 @@ const KpiDashboard = () => {
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{c.lbl}</div>
                 <div className="text-2xl font-bold text-foreground mt-1.5 mb-1">{fmt.money(c.val.current)}</div>
                 <div className={`text-xs font-semibold ${up ? "text-emerald-600" : "text-red-600"}`}>
-                  {up ? "â²" : "â¼"} {Math.abs(delta).toFixed(1)}% {info.prevLabel}
+                  {up ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}% {info.prevLabel}
                 </div>
               </CardContent>
             </Card>
@@ -269,13 +269,13 @@ const KpiDashboard = () => {
         })}
       </div>
 
-      {/* CUSTOMER HEALTH â ALL-TIME */}
+      {/* CUSTOMER HEALTH — ALL-TIME */}
       <Card>
         <CardHeader>
           <SectionHeader
             title="Customer Health"
             badge="ALL-TIME"
-            description="These don't respond to the filter above on purpose â lifetime-style metrics describe the whole customer relationship to date, not a period snapshot."
+            description="These don't respond to the filter above on purpose — lifetime-style metrics describe the whole customer relationship to date, not a period snapshot."
           />
         </CardHeader>
         <CardContent>
@@ -283,8 +283,8 @@ const KpiDashboard = () => {
             <StatCard
               allTime
               label="Order Conversion Rate"
-              sublabel="(all-time orders Ã· all-time visitors)"
-              value="â"
+              sublabel="(all-time orders ÷ all-time visitors)"
+              value="—"
             />
             <StatCard
               allTime
@@ -297,7 +297,7 @@ const KpiDashboard = () => {
             <StatCard
               allTime
               label="Lifetime Value (LTV)"
-              sublabel="(all-time revenue Ã· unique customers)"
+              sublabel="(all-time revenue ÷ unique customers)"
               value={fmt.money(customerHealth.ltv.value)}
               sparkline={customerHealth.ltv.sparkline}
               color={COLORS.purple}
@@ -312,7 +312,7 @@ const KpiDashboard = () => {
             />
           </div>
           <div className="mt-3">
-            <PlaceholderMetric reason="Order Conversion Rate needs visitor/traffic data, which isn't captured anywhere in this app yet (no analytics tool is wired up). Once one is, this card can compute all-time orders Ã· all-time visitors the same way the other three do." />
+            <PlaceholderMetric reason="Order Conversion Rate needs visitor/traffic data, which isn't captured anywhere in this app yet (no analytics tool is wired up). Once one is, this card can compute all-time orders ÷ all-time visitors the same way the other three do." />
           </div>
         </CardContent>
       </Card>
@@ -487,10 +487,10 @@ const KpiDashboard = () => {
             <div className="mb-2">
               <h3 className="text-sm font-bold text-foreground">Order Intake Channel</h3>
               <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-                % of orders by how the customer started them â Photo Submission, Guided Form, or Service Card.
+                % of orders by how the customer started them — Photo Submission, Guided Form, or Service Card.
               </p>
             </div>
-            <PlaceholderMetric reason="Not tracked anywhere yet â see the separate order-intake-channel requirements doc for what it'd take to start capturing it." />
+            <PlaceholderMetric reason="Not tracked anywhere yet — see the separate order-intake-channel requirements doc for what it'd take to start capturing it." />
           </div>
 
           <div className="border-t border-dashed pt-6">
@@ -498,7 +498,7 @@ const KpiDashboard = () => {
               <div>
                 <h3 className="text-sm font-bold text-foreground">Orders by Zip Code</h3>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-                  Unlike Customer Health above, this evolves with the filter â useful for spotting where recent
+                  Unlike Customer Health above, this evolves with the filter — useful for spotting where recent
                   demand is coming from. Top 15 shown in chart; full list in the export.
                 </p>
               </div>
@@ -563,7 +563,7 @@ const KpiDashboard = () => {
               <h3 className="text-sm font-bold text-foreground">On-Time Completion Rate</h3>
               <p className="text-xs text-muted-foreground mt-1 max-w-xl">
                 % of orders completed within their quoted turnaround window. Target benchmark: {ON_TIME_BENCHMARK}%
-                â industry-leading, on purpose.
+                — industry-leading, on purpose.
               </p>
             </div>
             <PlaceholderMetric reason={`Not computable yet: the schema tracks a current order status but not a history of when each status changed, so "arrival" and "completion" timestamps can't be derived accurately. Needs an order-status-history table (or per-status timestamp columns) before this can show a real number against the ${ON_TIME_BENCHMARK}% target.`} />
@@ -576,7 +576,7 @@ const KpiDashboard = () => {
                 <p className="text-xs text-muted-foreground mt-1 max-w-xl">
                   Rework rates come straight from the reworks table (request + approve/deny are native order
                   actions, not a manual log). Fulfillment and reply times need timestamps the schema doesn't have
-                  yet â see below.
+                  yet — see below.
                 </p>
               </div>
               <ExportButton
@@ -611,7 +611,7 @@ const KpiDashboard = () => {
               <div className="space-y-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground leading-snug min-h-[28px]">
                   Avg. Fulfillment Time
-                  <div className="font-normal normal-case tracking-normal mt-0.5">(arrival â completion, days)</div>
+                  <div className="font-normal normal-case tracking-normal mt-0.5">(arrival → completion, days)</div>
                 </div>
                 <PlaceholderMetric reason="Needs a status-history table to know when an order arrived vs. completed." />
               </div>
