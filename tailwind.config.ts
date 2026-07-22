@@ -14,7 +14,7 @@ export default {
       fontFamily: {
         sans: ['"Albert Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         display: ['"Frank Ruhl Libre"', 'ui-serif', 'Georgia', 'serif'],
-
+        cursive: ['"Cormorant Garamond"', 'ui-serif', 'Georgia', 'serif'],
       },
       colors: {
         border: "hsl(var(--border))",

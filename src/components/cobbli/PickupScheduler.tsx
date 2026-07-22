@@ -317,3 +317,5 @@ export function PickupScheduler({
     </div>
   );
 }
+
+export default PickupScheduler;
