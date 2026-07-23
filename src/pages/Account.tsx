@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
+import { apiFetchJson } from "@/integrations/api/client";
+import { StripeCardSetupForm } from "@/components/StripeCardSetup";
 
 type Profile = {
   first_name: string | null;
@@ -716,15 +718,6 @@ const AddAddress = () => {
   );
 };
 
-const detectBrand = (num: string) => {
-  const n = num.replace(/\D/g, "");
-  if (/^4/.test(n)) return "Visa";
-  if (/^(5[1-5]|2[2-7])/.test(n)) return "Mastercard";
-  if (/^3[47]/.test(n)) return "Amex";
-  if (/^6(?:011|5)/.test(n)) return "Discover";
-  return "Card";
-};
-
 const formatAddressOneLine = (a: Address) =>
   [a.street, a.street2, `${a.city}, ${a.state} ${a.zip}`].filter(Boolean).join(", ");
 
@@ -737,15 +730,15 @@ const AddPaymentMethod = () => {
   });
   const [form, setForm] = useState({
     cardholderName: "",
-    cardNumber: "",
-    exp: "",
-    cvv: "",
     billingAddressId: "",
     makeDefault: false,
   });
   const [existingCount, setExistingCount] = useState<number | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
-  const [submitting, setSubmitting] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!user) return;
     supabase
@@ -765,44 +758,46 @@ const AddPaymentMethod = () => {
         if (def) setForm((f) => (f.billingAddressId ? f : { ...f, billingAddressId: def.id }));
       });
   }, [user]);
-  const isFirst = existingCount === 0;
-  const digits = form.cardNumber.replace(/\D/g, "");
-  const expMatch = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(form.exp);
-  const valid =
-    form.cardholderName.trim().length > 1 &&
-    digits.length >= 13 &&
-    !!expMatch &&
-    /^\d{3,4}$/.test(form.cvv) &&
-    !!form.billingAddressId;
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!valid || !user || submitting || !expMatch) return;
-    setSubmitting(true);
-    const { error } = await supabase.from("payment_methods").insert({
-      user_id: user.id,
-      stripe_payment_method_id: `manual_${Date.now()}`,
-      cardholder_name: form.cardholderName.trim(),
-      card_brand: detectBrand(form.cardNumber),
-      card_last4: digits.slice(-4),
-      exp_month: Number(expMatch[1]),
-      exp_year: 2000 + Number(expMatch[2]),
-      billing_address_id: form.billingAddressId,
-      is_default: isFirst || form.makeDefault,
-    });
-    setSubmitting(false);
-    if (error) {
-      toast.error("Could not save payment method. Please try again.");
+  useEffect(() => {
+    apiFetchJson<{ clientSecret?: string }>("/payment-methods/setup-intent", { method: "POST" })
+      .then((data) => {
+        if (data.clientSecret) setClientSecret(data.clientSecret);
+        else setLoadError("Could not start card setup. Please try again.");
+      })
+      .catch(() => setLoadError("Could not start card setup. Please try again."));
+  }, []);
+
+  const isFirst = existingCount === 0;
+  const detailsValid = form.cardholderName.trim().length > 1 && !!form.billingAddressId;
+
+  const handleSuccess = async (setupIntentId: string) => {
+    if (!detailsValid) {
+      setFormError("Please enter a cardholder name and billing address.");
       return;
     }
-    toast.success("Payment method saved.");
-    navigate("/account/payment-methods");
+    setFormError(null);
+    try {
+      await apiFetchJson("/payment-methods/confirm", {
+        method: "POST",
+        body: JSON.stringify({
+          setupIntentId,
+          billingAddressId: form.billingAddressId,
+          cardholderName: form.cardholderName.trim(),
+          makeDefault: isFirst || form.makeDefault,
+        }),
+      });
+      toast.success("Payment method saved.");
+      navigate("/account/payment-methods");
+    } catch {
+      setFormError("Could not save payment method. Please try again.");
+    }
   };
 
   return (
     <section className="max-w-lg">
       <h1 className="text-2xl md:text-3xl font-semibold mb-6">Add payment method</h1>
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="cardholder">Cardholder name</Label>
           <Input
@@ -811,44 +806,6 @@ const AddPaymentMethod = () => {
             value={form.cardholderName}
             onChange={(e) => setForm({ ...form, cardholderName: e.target.value })}
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="card">Card number</Label>
-          <Input
-            id="card"
-            inputMode="numeric"
-            autoComplete="cc-number"
-            value={form.cardNumber}
-            onChange={(e) => setForm({ ...form, cardNumber: e.target.value.replace(/[^\d ]/g, "").slice(0, 19) })}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="exp">Expiration (MM/YY)</Label>
-            <Input
-              id="exp"
-              inputMode="numeric"
-              autoComplete="cc-exp"
-              placeholder="MM/YY"
-              value={form.exp}
-              onChange={(e) => {
-                let v = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
-                if (v.length >= 3) v = `${v.slice(0, 2)}/${v.slice(2)}`;
-                setForm({ ...form, exp: v });
-              }}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cvv">CVV</Label>
-            <Input
-              id="cvv"
-              inputMode="numeric"
-              autoComplete="cc-csc"
-              maxLength={4}
-              value={form.cvv}
-              onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, "") })}
-            />
-          </div>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="billing-address">Billing address</Label>
@@ -884,15 +841,27 @@ const AddPaymentMethod = () => {
             Set as default payment method
           </label>
         )}
-        <div className="flex gap-3 pt-2">
-          <Button type="submit" variant="hero" disabled={!valid || submitting}>
-            {submitting ? "Saving…" : "Save payment method"}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => navigate("/account/payment-methods")}>
-            Cancel
-          </Button>
+
+        <div className="space-y-1.5">
+          <Label>Card details</Label>
+          {loadError ? (
+            <p className="text-sm text-destructive">{loadError}</p>
+          ) : !clientSecret ? (
+            <BrandSpinner className="py-6" />
+          ) : (
+            <StripeCardSetupForm
+              clientSecret={clientSecret}
+              submitLabel="Save payment method"
+              disabled={!detailsValid}
+              onSuccess={handleSuccess}
+              onError={setFormError}
+              onCancel={() => navigate("/account/payment-methods")}
+            >
+              {formError && <p className="text-sm text-destructive">{formError}</p>}
+            </StripeCardSetupForm>
+          )}
         </div>
-      </form>
+      </div>
     </section>
   );
 };
@@ -1055,13 +1024,13 @@ const EditPaymentMethod = () => {
   const [existing, setExisting] = useState<{ brand: string; last4: string; isDefault: boolean } | null>(null);
   const [form, setForm] = useState({
     cardholderName: "",
-    cardNumber: "",
     exp: "",
-    cvv: "",
     replaceCard: false,
     makeDefault: false,
     billingAddressId: "",
   });
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
   const [newAddr, setNewAddr] = useState({
     street: "",
     street2: "",
@@ -1122,93 +1091,210 @@ const EditPaymentMethod = () => {
     })();
   }, [user, id]);
 
+  useEffect(() => {
+    if (!form.replaceCard || clientSecret) return;
+    apiFetchJson<{ clientSecret?: string }>("/payment-methods/setup-intent", { method: "POST" })
+      .then((data) => {
+        if (data.clientSecret) setClientSecret(data.clientSecret);
+        else setSetupError("Could not start card setup. Please try again.");
+      })
+      .catch(() => setSetupError("Could not start card setup. Please try again."));
+  }, [form.replaceCard, clientSecret]);
+
   const isOnly = otherCount === 0;
-  const digits = form.cardNumber.replace(/\D/g, "");
   const expMatch = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(form.exp);
-  const cardValid = !form.replaceCard || (digits.length >= 13 && /^\d{3,4}$/.test(form.cvv));
-  const valid =
+  const detailsValid =
     !!existing &&
-    !!expMatch &&
-    cardValid &&
     form.cardholderName.trim().length > 1 &&
     !!form.billingAddressId &&
     (!isNewAddress || newAddrValid);
+  const valid = detailsValid && !!expMatch;
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const resolveBillingAddressId = async (): Promise<string | null> => {
+    if (!isNewAddress || !user) return form.billingAddressId;
+    const { data: inserted, error: addrErr } = await supabase
+      .from("addresses")
+      .insert({
+        user_id: user.id,
+        street: newAddr.street.trim(),
+        street2: newAddr.street2.trim() || null,
+        city: newAddr.city.trim(),
+        state: newAddr.state,
+        zip: newAddr.zip,
+        is_default: newAddr.makeDefault,
+      })
+      .select("id")
+      .single();
+    if (addrErr || !inserted) {
+      toast.error("Could not save new address. Please try again.");
+      return null;
+    }
+    return inserted.id;
+  };
+
+  const handleSubmit = async () => {
     if (!valid || !user || !id || submitting || !expMatch) return;
     setSubmitting(true);
-    let billingAddressId = form.billingAddressId;
-    if (isNewAddress) {
-      const { data: inserted, error: addrErr } = await supabase
-        .from("addresses")
-        .insert({
-          user_id: user.id,
-          street: newAddr.street.trim(),
-          street2: newAddr.street2.trim() || null,
-          city: newAddr.city.trim(),
-          state: newAddr.state,
-          zip: newAddr.zip,
-          is_default: newAddr.makeDefault,
-        })
-        .select("id")
-        .single();
-      if (addrErr || !inserted) {
-        setSubmitting(false);
-        toast.error("Could not save new address. Please try again.");
-        return;
-      }
-      billingAddressId = inserted.id;
-    }
-    const newDefault = isOnly ? true : existing!.isDefault ? true : form.makeDefault;
-    const update: {
-      exp_month: number;
-      exp_year: number;
-      is_default: boolean;
-      cardholder_name: string;
-      billing_address_id: string;
-      stripe_payment_method_id?: string;
-      card_brand?: string;
-      card_last4?: string;
-    } = {
-      exp_month: Number(expMatch[1]),
-      exp_year: 2000 + Number(expMatch[2]),
-      is_default: newDefault,
-      cardholder_name: form.cardholderName.trim(),
-      billing_address_id: billingAddressId,
-    };
-    if (form.replaceCard) {
-      update.stripe_payment_method_id = `manual_${Date.now()}`;
-      update.card_brand = detectBrand(form.cardNumber);
-      update.card_last4 = digits.slice(-4);
-    }
-    const { error } = await supabase
-      .from("payment_methods")
-      .update(update)
-      .eq("id", id)
-      .eq("user_id", user.id);
-    setSubmitting(false);
-    if (error) {
-      toast.error("Could not update payment method. Please try again.");
+    const billingAddressId = await resolveBillingAddressId();
+    if (!billingAddressId) {
+      setSubmitting(false);
       return;
     }
-    toast.success("Payment method updated.");
-    navigate("/account/payment-methods");
+    const newDefault = isOnly ? true : existing!.isDefault ? true : form.makeDefault;
+    try {
+      await apiFetchJson(`/payment-methods/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          cardholderName: form.cardholderName.trim(),
+          billingAddressId,
+          makeDefault: newDefault,
+          expMonth: Number(expMatch[1]),
+          expYear: 2000 + Number(expMatch[2]),
+        }),
+      });
+      toast.success("Payment method updated.");
+      navigate("/account/payment-methods");
+    } catch {
+      toast.error("Could not update payment method. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReplaceSuccess = async (setupIntentId: string) => {
+    if (!detailsValid || !id) {
+      setSetupError("Please enter a cardholder name and billing address.");
+      return;
+    }
+    const billingAddressId = await resolveBillingAddressId();
+    if (!billingAddressId) return;
+    const newDefault = isOnly ? true : existing!.isDefault ? true : form.makeDefault;
+    try {
+      await apiFetchJson("/payment-methods/confirm", {
+        method: "POST",
+        body: JSON.stringify({
+          setupIntentId,
+          replaceId: id,
+          billingAddressId,
+          cardholderName: form.cardholderName.trim(),
+          makeDefault: newDefault,
+        }),
+      });
+      toast.success("Payment method updated.");
+      navigate("/account/payment-methods");
+    } catch {
+      setSetupError("Could not update payment method. Please try again.");
+    }
   };
 
   if (!existing) return <BrandSpinner className="py-10" />;
 
+  const billingFields = (
+    <>
+      <div className="space-y-1.5">
+        <Label htmlFor="billing-address">Billing address</Label>
+        <Select
+          value={form.billingAddressId}
+          onValueChange={(v) => setForm({ ...form, billingAddressId: v })}
+        >
+          <SelectTrigger id="billing-address">
+            <SelectValue placeholder="Select a billing address" />
+          </SelectTrigger>
+          <SelectContent>
+            {addresses.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {formatAddressOneLine(a)}
+              </SelectItem>
+            ))}
+            <SelectItem value="__new__">+ Add a new address</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {isNewAddress && (
+        <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="new-street">Street address</Label>
+            <Input
+              id="new-street"
+              value={newAddr.street}
+              onChange={(e) => setNewAddr({ ...newAddr, street: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="new-street2">Apt, suite, etc. (optional)</Label>
+            <Input
+              id="new-street2"
+              value={newAddr.street2}
+              onChange={(e) => setNewAddr({ ...newAddr, street2: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-city">City</Label>
+              <Input
+                id="new-city"
+                value={newAddr.city}
+                onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-state">State</Label>
+              <Select value={newAddr.state} onValueChange={(v) => setNewAddr({ ...newAddr, state: v })}>
+                <SelectTrigger id="new-state"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {US_STATES.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="new-zip">ZIP code</Label>
+            <Input
+              id="new-zip"
+              inputMode="numeric"
+              maxLength={5}
+              value={newAddr.zip}
+              onChange={(e) => setNewAddr({ ...newAddr, zip: e.target.value.replace(/\D/g, "") })}
+            />
+            {newAddrZipInvalid && (
+              <p className="text-sm text-destructive">We don't currently service this ZIP code.</p>
+            )}
+          </div>
+          {addresses.length > 0 && (
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={newAddr.makeDefault}
+                onCheckedChange={(c) => setNewAddr({ ...newAddr, makeDefault: c === true })}
+              />
+              Make this my default address
+            </label>
+          )}
+        </div>
+      )}
+
+      {!isOnly && !existing.isDefault && (
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
+          Set as default payment method
+        </label>
+      )}
+    </>
+  );
+
   return (
     <section className="max-w-lg">
       <h1 className="text-2xl md:text-3xl font-semibold mb-6">Edit payment method</h1>
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      <div className="space-y-4">
         <div className="rounded-lg border border-border bg-card p-4 text-sm">
           <p className="font-medium">
             {existing.brand} ending in {existing.last4}
           </p>
           <button
             type="button"
-            onClick={() => setForm({ ...form, replaceCard: !form.replaceCard, cardNumber: "", cvv: "" })}
+            onClick={() => setForm({ ...form, replaceCard: !form.replaceCard })}
             className="mt-2 text-sm text-primary underline underline-offset-4"
           >
             {form.replaceCard ? "Keep this card" : "Replace card details"}
@@ -1225,148 +1311,57 @@ const EditPaymentMethod = () => {
           />
         </div>
 
-        {form.replaceCard && (
+        {form.replaceCard ? (
+          <>
+            {billingFields}
+            <div className="space-y-1.5">
+              <Label>New card details</Label>
+              {setupError && !clientSecret && <p className="text-sm text-destructive">{setupError}</p>}
+              {!clientSecret ? (
+                !setupError && <BrandSpinner className="py-6" />
+              ) : (
+                <StripeCardSetupForm
+                  clientSecret={clientSecret}
+                  submitLabel="Save changes"
+                  disabled={!detailsValid}
+                  onSuccess={handleReplaceSuccess}
+                  onError={setSetupError}
+                  onCancel={() => navigate("/account/payment-methods")}
+                >
+                  {setupError && <p className="text-sm text-destructive">{setupError}</p>}
+                </StripeCardSetupForm>
+              )}
+            </div>
+          </>
+        ) : (
           <>
             <div className="space-y-1.5">
-              <Label htmlFor="card">New card number</Label>
+              <Label htmlFor="exp">Expiration (MM/YY)</Label>
               <Input
-                id="card"
+                id="exp"
                 inputMode="numeric"
-                autoComplete="cc-number"
-                value={form.cardNumber}
-                onChange={(e) => setForm({ ...form, cardNumber: e.target.value.replace(/[^\d ]/g, "").slice(0, 19) })}
+                autoComplete="cc-exp"
+                placeholder="MM/YY"
+                value={form.exp}
+                onChange={(e) => {
+                  let v = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+                  if (v.length >= 3) v = `${v.slice(0, 2)}/${v.slice(2)}`;
+                  setForm({ ...form, exp: v });
+                }}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cvv">CVV</Label>
-              <Input
-                id="cvv"
-                inputMode="numeric"
-                autoComplete="cc-csc"
-                maxLength={4}
-                value={form.cvv}
-                onChange={(e) => setForm({ ...form, cvv: e.target.value.replace(/\D/g, "") })}
-              />
+            {billingFields}
+            <div className="flex gap-3 pt-2">
+              <Button type="button" variant="hero" disabled={!valid || submitting} onClick={handleSubmit}>
+                {submitting ? "Saving…" : "Save changes"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => navigate("/account/payment-methods")}>
+                Cancel
+              </Button>
             </div>
           </>
         )}
-
-        <div className="space-y-1.5">
-          <Label htmlFor="exp">Expiration (MM/YY)</Label>
-          <Input
-            id="exp"
-            inputMode="numeric"
-            autoComplete="cc-exp"
-            placeholder="MM/YY"
-            value={form.exp}
-            onChange={(e) => {
-              let v = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
-              if (v.length >= 3) v = `${v.slice(0, 2)}/${v.slice(2)}`;
-              setForm({ ...form, exp: v });
-            }}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="billing-address">Billing address</Label>
-          <Select
-            value={form.billingAddressId}
-            onValueChange={(v) => setForm({ ...form, billingAddressId: v })}
-          >
-            <SelectTrigger id="billing-address">
-              <SelectValue placeholder="Select a billing address" />
-            </SelectTrigger>
-            <SelectContent>
-              {addresses.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  {formatAddressOneLine(a)}
-                </SelectItem>
-              ))}
-              <SelectItem value="__new__">+ Add a new address</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {isNewAddress && (
-          <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-street">Street address</Label>
-              <Input
-                id="new-street"
-                value={newAddr.street}
-                onChange={(e) => setNewAddr({ ...newAddr, street: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="new-street2">Apt, suite, etc. (optional)</Label>
-              <Input
-                id="new-street2"
-                value={newAddr.street2}
-                onChange={(e) => setNewAddr({ ...newAddr, street2: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="new-city">City</Label>
-                <Input
-                  id="new-city"
-                  value={newAddr.city}
-                  onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="new-state">State</Label>
-                <Select value={newAddr.state} onValueChange={(v) => setNewAddr({ ...newAddr, state: v })}>
-                  <SelectTrigger id="new-state"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {US_STATES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="new-zip">ZIP code</Label>
-              <Input
-                id="new-zip"
-                inputMode="numeric"
-                maxLength={5}
-                value={newAddr.zip}
-                onChange={(e) => setNewAddr({ ...newAddr, zip: e.target.value.replace(/\D/g, "") })}
-              />
-              {newAddrZipInvalid && (
-                <p className="text-sm text-destructive">We don't currently service this ZIP code.</p>
-              )}
-            </div>
-            {addresses.length > 0 && (
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={newAddr.makeDefault}
-                  onCheckedChange={(c) => setNewAddr({ ...newAddr, makeDefault: c === true })}
-                />
-                Make this my default address
-              </label>
-            )}
-          </div>
-        )}
-
-        {!isOnly && !existing.isDefault && (
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox checked={form.makeDefault} onCheckedChange={(c) => setForm({ ...form, makeDefault: c === true })} />
-            Set as default payment method
-          </label>
-        )}
-
-        <div className="flex gap-3 pt-2">
-          <Button type="submit" variant="hero" disabled={!valid || submitting}>
-            {submitting ? "Saving…" : "Save changes"}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => navigate("/account/payment-methods")}>
-            Cancel
-          </Button>
-        </div>
-      </form>
+      </div>
     </section>
   );
 };

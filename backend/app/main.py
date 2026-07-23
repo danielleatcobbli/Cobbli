@@ -35,6 +35,7 @@ def create_app() -> FastAPI:
         ops_blog,
         ops_profiles,
         ops_service_admin,
+        payment_methods,
         send_account_locked,
         send_order_confirmation,
         send_password_updated,
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(create_checkout.router)
+    app.include_router(payment_methods.router)
     app.include_router(stripe_webhook.router)
     app.include_router(analyze_shoe_photos.router)
     app.include_router(send_order_confirmation.router)

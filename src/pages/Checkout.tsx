@@ -53,7 +53,6 @@ const Checkout = () => {
     addresses,
     addAddress,
     updateAddress,
-    paymentMethods,
     addOrder,
   } = useAccount();
 
@@ -125,19 +124,11 @@ const Checkout = () => {
   const pickupDone = !!selectedWindow;
 
   // ---------- Payment ----------
-  // If the user has a saved payment method, let them either keep it or
-  // switch to a new card (collected via Stripe on the next step).
-  const defaultPmId = useMemo(
-    () => paymentMethods.find((p) => p.isDefault)?.id ?? paymentMethods[0]?.id ?? null,
-    [paymentMethods],
-  );
-  const [selectedPmId, setSelectedPmId] = useState<string | null>(defaultPmId);
-  const [useNewCard, setUseNewCard] = useState(paymentMethods.length === 0);
-  useEffect(() => {
-    if (!selectedPmId && defaultPmId) setSelectedPmId(defaultPmId);
-    if (paymentMethods.length === 0) setUseNewCard(true);
-  }, [defaultPmId, selectedPmId, paymentMethods.length]);
-  const paymentDone = addressDone && (useNewCard || !!selectedPmId);
+  // Card collection (including any saved cards) is handled entirely by
+  // Stripe's Embedded Checkout below — it's passed the Stripe customer id,
+  // so it automatically offers that customer's real saved cards alongside
+  // "enter a new card," with no separate picker needed here.
+  const paymentDone = addressDone;
   const allDone = contactDone && addressDone && pickupDone && paymentDone;
 
 
@@ -753,12 +744,7 @@ const Checkout = () => {
                   paymentDone && openStep !== "payment" ? (
                     <span className="text-sm text-foreground/80 inline-flex items-center gap-1.5">
                       <Lock size={12} />
-                      {!useNewCard && selectedPmId
-                        ? (() => {
-                            const pm = paymentMethods.find((p) => p.id === selectedPmId);
-                            return pm ? `${pm.brand} ending in ${pm.last4}` : "Securely collected by Stripe";
-                          })()
-                        : "Securely collected by Stripe"}
+                      Securely collected by Stripe
                     </span>
                   ) : null
                 }
@@ -766,88 +752,13 @@ const Checkout = () => {
                 <div className="space-y-4">
                   {!showStripe && (
                     <>
-                      {paymentMethods.length > 0 && (
-                        <div className="space-y-3">
-                          <ul className="space-y-2">
-                            {paymentMethods.map((pm) => (
-                              <li key={pm.id}>
-                                <label
-                                  className={cn(
-                                    "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
-                                    !useNewCard && selectedPmId === pm.id
-                                      ? "border-primary bg-accent/30"
-                                      : "border-border hover:bg-accent/20",
-                                  )}
-                                >
-                                  <input
-                                    type="radio"
-                                    name="payment"
-                                    checked={!useNewCard && selectedPmId === pm.id}
-                                    onChange={() => {
-                                      setSelectedPmId(pm.id);
-                                      setUseNewCard(false);
-                                    }}
-                                    className="mt-1"
-                                  />
-                                  <div className="flex-1 text-sm">
-                                    <div className="font-medium">
-                                      {pm.brand} ending in {pm.last4}
-                                      {pm.isDefault && (
-                                        <span className="ml-2 text-xs text-muted-foreground">(Default)</span>
-                                      )}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Expires {String(pm.expMonth).padStart(2, "0")}/{String(pm.expYear).slice(-2)}
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      setUseNewCard(true);
-                                    }}
-                                    className="text-sm text-primary underline underline-offset-4 shrink-0"
-                                  >
-                                    Change
-                                  </button>
-                                </label>
-                              </li>
-                            ))}
-                          </ul>
-                          <label
-                            className={cn(
-                              "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
-                              useNewCard ? "border-primary bg-accent/30" : "border-border hover:bg-accent/20",
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name="payment"
-                              checked={useNewCard}
-                              onChange={() => setUseNewCard(true)}
-                              className="mt-1"
-                            />
-                            <div className="flex-1 text-sm">
-                              <div className="font-medium">Use a different card</div>
-                              <div className="text-xs text-muted-foreground">
-                                Enter new card details securely on the next step.
-                              </div>
-                            </div>
-                          </label>
-                        </div>
-                      )}
-
-                      {(paymentMethods.length === 0 || useNewCard) && (
-                        <>
-                          <p className="text-sm text-foreground/80 inline-flex items-center gap-2">
-                            <Lock size={14} className="text-primary" />
-                            Your card details are entered securely on the next step, powered by Stripe.
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            We accept all major credit and debit cards. You'll review your total before confirming the payment.
-                          </p>
-                        </>
-                      )}
+                      <p className="text-sm text-foreground/80 inline-flex items-center gap-2">
+                        <Lock size={14} className="text-primary" />
+                        Your payment is collected securely on the next step, powered by Stripe — including any card you've saved to your account.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        We accept all major credit and debit cards. You'll review your total before confirming the payment.
+                      </p>
 
                       {!pickupDone && (
                         <p className="text-xs text-muted-foreground">

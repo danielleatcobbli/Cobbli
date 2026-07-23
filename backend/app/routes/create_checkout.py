@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 
 import stripe
@@ -10,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import CurrentUser
 from app.settings import get_settings
+from app.stripe_customers import resolve_or_create_customer
 from app.supabase_client import get_supabase_admin
 
 router = APIRouter(prefix="/checkout", tags=["checkout"])
@@ -17,7 +17,6 @@ router = APIRouter(prefix="/checkout", tags=["checkout"])
 DEPOSIT_AMOUNT_CENTS = 2000
 META_CHUNK_SIZE = 450
 MAX_META_CHUNKS = 30
-_USER_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 class CheckoutRequest(BaseModel):
@@ -29,34 +28,6 @@ class CheckoutRequest(BaseModel):
 
 class CheckoutResponse(BaseModel):
     clientSecret: str | None = Field(default=None)
-
-
-def _resolve_or_create_customer(*, email: str | None, user_id: str) -> str:
-    if not _USER_ID_RE.match(user_id):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid userId")
-
-    found = stripe.Customer.search(
-        query=f"metadata['userId']:'{user_id}'", limit=1
-    )
-    if getattr(found, "data", None):
-        return found.data[0].id
-
-    if email:
-        existing = stripe.Customer.list(email=email, limit=1)
-        if getattr(existing, "data", None):
-            c = existing.data[0]
-            existing_meta = getattr(c, "metadata", None) or {}
-            if existing_meta.get("userId") != user_id:
-                stripe.Customer.modify(
-                    c.id, metadata={**existing_meta, "userId": user_id}
-                )
-            return c.id
-
-    created = stripe.Customer.create(
-        **({"email": email} if email else {}),
-        metadata={"userId": user_id},
-    )
-    return created.id
 
 
 def _chunk_payload(payload: Any) -> dict[str, str]:
@@ -117,7 +88,7 @@ async def create_checkout(body: CheckoutRequest, user: CurrentUser) -> CheckoutR
     if body.kind == "cart":
         _validate_cart(body.cartPayload)
 
-    customer_id = _resolve_or_create_customer(email=user.email, user_id=user.id)
+    customer_id = resolve_or_create_customer(email=user.email, user_id=user.id)
     sb = get_supabase_admin()
 
     line_items: list[dict[str, Any]]
@@ -214,6 +185,10 @@ async def create_checkout(body: CheckoutRequest, user: CurrentUser) -> CheckoutR
         customer=customer_id,
         payment_intent_data={"description": description, "metadata": metadata},
         metadata=metadata,
+        # Redisplays this customer's cards saved with allow_redisplay="always"
+        # (see app/routes/payment_methods.py), and lets them save a new card
+        # from checkout itself for next time.
+        saved_payment_method_options={"payment_method_save": "enabled"},
     )
 
     if body.kind == "deposit":
