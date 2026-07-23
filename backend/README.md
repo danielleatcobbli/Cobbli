@@ -80,17 +80,58 @@ vercel deploy                               # preview deploy
 vercel deploy --prod                        # production
 ```
 
+## Deploy to AWS App Runner (scalable path)
+
+The container image is the portable artifact: App Runner runs it now, and the
+same image drops onto ECS Fargate later with no app changes. Supabase stays the
+data + auth plane; this service is the application backend.
+
+Artifacts (in `backend/`):
+
+- `Dockerfile` / `.dockerignore` — `python:3.12-slim`, non-root, binds `$PORT`.
+- `scripts/aws-secrets.sh` — pushes `.env.local` values into one Secrets Manager JSON secret (`cobbli/backend`). Flags any missing key.
+- `scripts/aws-roles.sh` — creates the two least-privilege IAM roles (ECR pull, secret read).
+- `scripts/aws-runtime-env.sh` — maps each env var to its key inside the secret.
+- `scripts/aws-deploy.sh` — ECR repo + build + push + create/update the App Runner service (idempotent).
+- `scripts/aws-smoke-test.sh <url>` — verifies health + auth gates post-deploy.
+
+### First-time deploy
+
+```bash
+cd backend
+aws configure                          # region us-east-1; IAM user with ECR/App Runner/IAM/SecretsManager
+cp .env.example .env.local             # fill in ALL keys, incl. SUPABASE_ANON_KEY + AI_API_KEY
+CORS_ALLOW_ORIGINS=https://cobbli.com  # set in .env.local for prod
+./scripts/aws-secrets.sh               # store secrets (reads .env.local, never CLI args)
+./scripts/aws-deploy.sh                # build locally (needs docker/colima) + deploy
+# or, no local Docker:
+BUILD=codebuild ./scripts/aws-deploy.sh
+
+# grab the URL, then:
+./scripts/aws-smoke-test.sh https://<id>.us-east-1.awsapprunner.com
+```
+
+Then set `VITE_API_URL=https://<id>.us-east-1.awsapprunner.com` (or `https://api.cobbli.com`)
+in the frontend build, and point the Stripe dashboard webhook at
+`https://<url>/stripe/webhook` with that environment's `STRIPE_WEBHOOK_SECRET`.
+
+Rotating a secret = re-run `aws-secrets.sh` then `aws-deploy.sh` (App Runner reads
+secrets at container start, so a redeploy/restart is required to pick up changes).
+
 ## Env vars
 
 See `.env.example`. Required for runtime:
 
 - `SUPABASE_URL` — new project URL.
 - `SUPABASE_SERVICE_ROLE_KEY` — service-role secret. **Server-only.**
+- `SUPABASE_ANON_KEY` — anon/publishable key. **Required in prod:** without it the
+  user-scoped client falls back to the service-role key and bypasses RLS on `/ops` routes.
 - `STRIPE_SECRET_KEY` — `sk_test_*` for previews, `sk_live_*` for prod.
 - `STRIPE_WEBHOOK_SECRET` — from Stripe dashboard webhook page (per env).
 - `BREVO_API_KEY` — Brevo transactional API key.
 - `AI_API_KEY` — replaces `LOVABLE_API_KEY` for `analyze-shoe-photos`.
-- `CORS_ALLOW_ORIGINS` — comma-separated, defaults to `*`.
+- `CORS_ALLOW_ORIGINS` — comma-separated, defaults to `*`. Prod: `https://cobbli.com`.
+- `SITE_URL` — public origin for recovery links; defaults to `https://cobbli.com`.
 
 ## Auth model — Supabase remains the source of truth
 
