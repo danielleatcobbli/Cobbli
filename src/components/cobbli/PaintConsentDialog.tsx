@@ -47,13 +47,13 @@ const PaintConsentDialog = ({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-2xl">
-            Can we use professional color-matched dye or paint on your shoes?
+            Can we use professional, color-matched dye on your shoes?
           </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Dye or paint is the only way to fully restore faded color. Without it,
-          we can improve the appearance but can't guarantee an even color
-          match.
+          If your shoe has experienced wear, scratches, or stains, dye is the
+          only way to fully restore it. Without it, we can improve the
+          appearance, but can't guarantee a complete color match.
         </p>
         <div className="mt-2 flex gap-2">
           {(["yes", "no"] as const).map((opt) => {

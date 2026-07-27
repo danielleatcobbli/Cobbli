@@ -35,6 +35,7 @@ import {
   PickupScheduler,
   type PickupWindow,
 } from "@/components/cobbli/PickupScheduler";
+import { calculateTaxCents } from "@/lib/tax";
 
 type Step = "contact" | "address" | "pickup" | "payment";
 
@@ -52,7 +53,6 @@ const Checkout = () => {
     addresses,
     addAddress,
     updateAddress,
-    paymentMethods,
     addOrder,
   } = useAccount();
 
@@ -64,7 +64,6 @@ const Checkout = () => {
   });
 
   const courierFee = subtotal >= pricing.fee("free_courier_threshold_cents") ? 0 : pricing.fee("courier_fee_cents");
-  const orderSubtotal = subtotal + courierFee;
 
   // Stripe returns user here with ?session_id=...&order_id=...
   const returningSessionId = searchParams.get("session_id");
@@ -108,6 +107,15 @@ const Checkout = () => {
   const addressDone = !showAddrForm && !!selectedAddrId;
   const selectedAddress = addresses.find((a) => a.id === selectedAddrId);
 
+  // Taxes depend on the delivery address's state, so this can only be
+  // computed once an address is selected (or being entered). Currently
+  // always $0 — Cobbli only services NY, where repair labor is tax-exempt —
+  // but folding it into orderSubtotal now means nothing needs to change here
+  // when a taxed state is added later. See src/lib/tax.ts.
+  const taxState = selectedAddress?.state ?? (showAddrForm ? addrForm.state : null);
+  const taxCents = calculateTaxCents(taxState, subtotal);
+  const orderSubtotal = subtotal + courierFee + taxCents;
+
   // ---------- Pickup ----------
   const [selectedWindow, setSelectedWindow] = useState<PickupWindow | null>(null);
   const [pickupConflict, setPickupConflict] = useState(false);
@@ -116,19 +124,11 @@ const Checkout = () => {
   const pickupDone = !!selectedWindow;
 
   // ---------- Payment ----------
-  // If the user has a saved payment method, let them either keep it or
-  // switch to a new card (collected via Stripe on the next step).
-  const defaultPmId = useMemo(
-    () => paymentMethods.find((p) => p.isDefault)?.id ?? paymentMethods[0]?.id ?? null,
-    [paymentMethods],
-  );
-  const [selectedPmId, setSelectedPmId] = useState<string | null>(defaultPmId);
-  const [useNewCard, setUseNewCard] = useState(paymentMethods.length === 0);
-  useEffect(() => {
-    if (!selectedPmId && defaultPmId) setSelectedPmId(defaultPmId);
-    if (paymentMethods.length === 0) setUseNewCard(true);
-  }, [defaultPmId, selectedPmId, paymentMethods.length]);
-  const paymentDone = addressDone && (useNewCard || !!selectedPmId);
+  // Card collection (including any saved cards) is handled entirely by
+  // Stripe's Embedded Checkout below — it's passed the Stripe customer id,
+  // so it automatically offers that customer's real saved cards alongside
+  // "enter a new card," with no separate picker needed here.
+  const paymentDone = addressDone;
   const allDone = contactDone && addressDone && pickupDone && paymentDone;
 
 
@@ -301,15 +301,20 @@ const Checkout = () => {
     setPlacing(true);
     setPaymentError(null);
     try {
-      // --- Re-validate the pickup window against live Calendly availability ---
+      // --- Re-validate the pickup window against live Cal.com availability ---
       // This guards against the race condition where two customers select the
       // same window simultaneously. We re-fetch and confirm the slot is still
       // listed before proceeding to payment.
       if (selectedWindow) {
         const now = new Date();
-        const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        // Must cover the same range PickupScheduler.tsx now offers (14 days,
+        // +1 day buffer — see that file for why the buffer exists). Falling
+        // short here would make this re-check falsely report "no longer
+        // available" for a perfectly valid window the customer picked
+        // anywhere in the back half of that 14-day range.
+        const endDate = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
         const { data: availData, error: availErr } =
-          await supabase.functions.invoke("calendly-availability", {
+          await supabase.functions.invoke("cal-availability", {
             body: {
               start_time: now.toISOString(),
               end_time: endDate.toISOString(),
@@ -338,50 +343,34 @@ const Checkout = () => {
         }
       }
 
-      // --- Create the Calendly booking with pre-populated customer data ---
-      // We pass name/phone/email/address so the customer never has to fill in
-      // a separate Calendly form.
-      let pickupEventUri: string | undefined;
-      if (selectedWindow) {
-        const pickupAddress = [
-          selectedAddress.street,
-          selectedAddress.street2,
-          selectedAddress.city,
-          selectedAddress.state,
-          selectedAddress.zip,
-        ]
-          .filter(Boolean)
-          .join(", ");
+      // --- No Cal.com booking is created here anymore ---
+      // Previously this called cal-book the moment the customer opened the
+      // Payment step, which meant a real booking existed on Danielle's
+      // calendar before checkout was ever completed. If the customer then
+      // went back and changed their pickup window, the earlier booking was
+      // never updated or cancelled — the Cal.com invite and the eventual
+      // order could end up showing two different times. Booking creation now
+      // happens server-side in the stripe-webhook function, only once
+      // payment actually succeeds, so there's exactly one source of truth
+      // and nothing gets scheduled until the customer has genuinely checked
+      // out with that window.
+      const pickupAddress = [
+        selectedAddress.street,
+        selectedAddress.street2,
+        selectedAddress.city,
+        selectedAddress.state,
+        selectedAddress.zip,
+      ]
+        .filter(Boolean)
+        .join(", ");
 
-        const { data: bookData, error: bookErr } =
-          await supabase.functions.invoke("calendly-book", {
-            body: {
-              start_time: selectedWindow.start_time,
-              name: user.name || authUser.email?.split("@")[0] || "Customer",
-              email,
-              phone,
-              address: pickupAddress,
-            },
-          });
-
-        if (bookErr || bookData?.error) {
-          console.error("Calendly booking error:", bookErr ?? bookData?.error);
-          toast({
-            title: "Pickup scheduling issue",
-            description:
-              "We couldn't confirm your pickup window with our scheduling system. " +
-              "Your order will still be placed and we'll contact you to arrange pickup.",
-          });
-        } else {
-          pickupEventUri = bookData?.event_uri as string | undefined;
-        }
-      }
-
-      // --- Build the cart payload (no DB write here — order row is created by
-      //     the Stripe webhook after payment is confirmed) ---
+      // --- Build the cart payload (no DB write here — order row, and the
+      //     Cal.com booking, are both created by the Stripe webhook after
+      //     payment is confirmed) ---
       const payload = {
         contact_email: email,
         contact_phone: phone,
+        contact_name: user.name || authUser.email?.split("@")[0] || "Customer",
         delivery_address: selectedAddress,
         repairs_subtotal_cents: subtotal,
         courier_fee_cents: courierFee,
@@ -390,7 +379,7 @@ const Checkout = () => {
           pickup_window: {
             start: selectedWindow.start_time,
             end: selectedWindow.end_time,
-            ...(pickupEventUri && { calendly_event_uri: pickupEventUri }),
+            address: pickupAddress,
           },
         }),
         items: pairs.flatMap((p) =>
@@ -426,9 +415,22 @@ const Checkout = () => {
   // earlier field it depends on (address, chosen card option) is filled in —
   // no separate "Continue to payment" click required. Resets whenever the
   // user navigates away from the step so re-opening it tries again fresh.
+  //
+  // Bug fix: this comment always said "resets ... so re-opening it tries
+  // again fresh," but only attemptedPaymentPrepRef was actually being reset —
+  // showStripe (the flag that gates whether placeOrder() runs again) was
+  // never cleared. That meant if a customer went back to Step 3 and picked a
+  // different pickup window, the Stripe session and cartPayload from the
+  // FIRST window silently stuck around: the order they'd end up paying for
+  // (and the pickup_date/time eventually written to it) would still reflect
+  // the abandoned first window, not the one currently shown as selected.
+  // Resetting showStripe here means leaving the Payment step always forces a
+  // fresh placeOrder() (fresh cartPayload, fresh Stripe session) next time
+  // Payment is reopened.
   useEffect(() => {
     if (openStep !== "payment") {
       attemptedPaymentPrepRef.current = false;
+      setShowStripe(false);
       return;
     }
     if (showStripe || placing || attemptedPaymentPrepRef.current) return;
@@ -742,12 +744,7 @@ const Checkout = () => {
                   paymentDone && openStep !== "payment" ? (
                     <span className="text-sm text-foreground/80 inline-flex items-center gap-1.5">
                       <Lock size={12} />
-                      {!useNewCard && selectedPmId
-                        ? (() => {
-                            const pm = paymentMethods.find((p) => p.id === selectedPmId);
-                            return pm ? `${pm.brand} ending in ${pm.last4}` : "Securely collected by Stripe";
-                          })()
-                        : "Securely collected by Stripe"}
+                      Securely collected by Stripe
                     </span>
                   ) : null
                 }
@@ -755,88 +752,13 @@ const Checkout = () => {
                 <div className="space-y-4">
                   {!showStripe && (
                     <>
-                      {paymentMethods.length > 0 && (
-                        <div className="space-y-3">
-                          <ul className="space-y-2">
-                            {paymentMethods.map((pm) => (
-                              <li key={pm.id}>
-                                <label
-                                  className={cn(
-                                    "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
-                                    !useNewCard && selectedPmId === pm.id
-                                      ? "border-primary bg-accent/30"
-                                      : "border-border hover:bg-accent/20",
-                                  )}
-                                >
-                                  <input
-                                    type="radio"
-                                    name="payment"
-                                    checked={!useNewCard && selectedPmId === pm.id}
-                                    onChange={() => {
-                                      setSelectedPmId(pm.id);
-                                      setUseNewCard(false);
-                                    }}
-                                    className="mt-1"
-                                  />
-                                  <div className="flex-1 text-sm">
-                                    <div className="font-medium">
-                                      {pm.brand} ending in {pm.last4}
-                                      {pm.isDefault && (
-                                        <span className="ml-2 text-xs text-muted-foreground">(Default)</span>
-                                      )}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Expires {String(pm.expMonth).padStart(2, "0")}/{String(pm.expYear).slice(-2)}
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      setUseNewCard(true);
-                                    }}
-                                    className="text-sm text-primary underline underline-offset-4 shrink-0"
-                                  >
-                                    Change
-                                  </button>
-                                </label>
-                              </li>
-                            ))}
-                          </ul>
-                          <label
-                            className={cn(
-                              "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
-                              useNewCard ? "border-primary bg-accent/30" : "border-border hover:bg-accent/20",
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name="payment"
-                              checked={useNewCard}
-                              onChange={() => setUseNewCard(true)}
-                              className="mt-1"
-                            />
-                            <div className="flex-1 text-sm">
-                              <div className="font-medium">Use a different card</div>
-                              <div className="text-xs text-muted-foreground">
-                                Enter new card details securely on the next step.
-                              </div>
-                            </div>
-                          </label>
-                        </div>
-                      )}
-
-                      {(paymentMethods.length === 0 || useNewCard) && (
-                        <>
-                          <p className="text-sm text-foreground/80 inline-flex items-center gap-2">
-                            <Lock size={14} className="text-primary" />
-                            Your card details are entered securely on the next step, powered by Stripe.
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            We accept all major credit and debit cards. You'll review your total before confirming the payment.
-                          </p>
-                        </>
-                      )}
+                      <p className="text-sm text-foreground/80 inline-flex items-center gap-2">
+                        <Lock size={14} className="text-primary" />
+                        Your payment is collected securely on the next step, powered by Stripe — including any card you've saved to your account.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        We accept all major credit and debit cards. You'll review your total before confirming the payment.
+                      </p>
 
                       {!pickupDone && (
                         <p className="text-xs text-muted-foreground">
@@ -900,6 +822,10 @@ const Checkout = () => {
                     <dt className="text-muted-foreground">Delivery &amp; Pickup Service</dt>
                     <dd>{courierFee === 0 ? "Free" : formatPrice(courierFee)}</dd>
                   </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Taxes</dt>
+                    <dd>{taxCents === 0 ? "Free" : formatPrice(taxCents)}</dd>
+                  </div>
                   <div className="border-t border-border pt-3 flex justify-between font-semibold text-base">
                     <dt>Subtotal</dt>
                     <dd>{formatPrice(orderSubtotal)}</dd>
@@ -907,9 +833,6 @@ const Checkout = () => {
                 </dl>
                 <p className="mt-3 text-xs text-muted-foreground">
                   Free courier service on orders over $100
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  No NY sales tax on repair services
                 </p>
                 {!showStripe && (
                   <Button

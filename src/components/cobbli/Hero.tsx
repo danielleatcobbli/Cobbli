@@ -29,7 +29,7 @@ const Hero = () => {
               Old-world craftsmanship, modern convenience. We pick up, repair, and return your shoes — without you leaving home.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/services" onClick={() => trackEvent("start_repair", { source: "hero" })}>
+              <Link to="/start-repair" onClick={() => trackEvent("start_repair", { source: "hero" })}>
                 <Button size="lg" variant="hero">
                   Start a repair
                 </Button>
@@ -40,15 +40,6 @@ const Hero = () => {
                 </Button>
               </Link>
             </div>
-            <p className="mt-5 text-sm md:text-base text-primary-foreground/80">
-              Not sure what your shoes need?{" "}
-              <Link
-                to="/start-repair/assessment"
-                className="underline underline-offset-4 decoration-primary-foreground/40 hover:decoration-primary-foreground hover:text-primary-foreground transition-colors"
-              >
-                Get a personalized recommendation <span aria-hidden>→</span>
-              </Link>
-            </p>
           </div>
         </div>
       </div>

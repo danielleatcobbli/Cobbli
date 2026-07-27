@@ -13,9 +13,13 @@
  * Route: /admin/order/:id?view=workshop|dispatch  (view= just sets the initial tab)
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, Circle, Clock, FileText, MapPin, MessageSquare, Phone, User, XCircle } from "lucide-react";
+import { fetchOrderDetail, uploadPairPhoto, removePairPhoto } from "./adminData";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { printPairTags } from "./printPairTags";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types  (mirrors AdminDashboard — will share a module once wired to live data)
@@ -64,14 +68,27 @@ type Comment = {
  * there at intake, or claiming a service wasn't actually done. Long-term,
  * the plan is for the condition assessment to eventually go away once the
  * AI model is trained, but this photo requirement stays permanently. */
-type RequiredPhotoAngle = "sole" | "topDown" | "leftSide" | "rightSide" | "back" | "inside";
+export type RequiredPhotoAngle = "sole" | "topDown" | "leftSide" | "rightSide" | "back" | "inside";
 
-/** One photo per required angle (boolean — exactly one photo expected each),
- * plus an uncapped set of extra close-ups for anything the six standard
+/** An actual captured photo — a real file, previewable in the browser via an
+ * object URL (client-side only; nothing uploads to a server yet, consistent
+ * with the rest of this page's dummy-data/local-state approach). */
+export type CapturedPhoto = {
+  id: string;
+  previewUrl: string;
+  fileName: string;
+  /** Full Storage path (bucket-relative), used to delete the underlying file
+   * when a photo is removed/retaken. Absent for old placeholder/dummy-data
+   * photos, which were never actually uploaded anywhere. */
+  storagePath?: string;
+};
+
+/** One photo per required angle — undefined/absent means not yet captured —
+ * plus an uncapped list of extra close-ups for anything the six standard
  * angles don't capture well (a specific scuff, a cracked buckle, etc.). */
-type PhotoSet = {
-  angles: Record<RequiredPhotoAngle, boolean>;
-  damageCloseUps: number;
+export type PhotoSet = {
+  angles: Partial<Record<RequiredPhotoAngle, CapturedPhoto>>;
+  damageCloseUps: CapturedPhoto[];
 };
 
 type PhotoGroup = {
@@ -94,7 +111,7 @@ type LogisticsLeg = { label: string; date: string; timeLabel: string };
  * from a single checkout (one bag, several pairs) — each pair has its own
  * shoe details, notes, photos, services, and its own independent intake/
  * outtake gating, rather than one combined status for the whole order. */
-type ShoePair = {
+export type ShoePair = {
   id: string;
   shoeType: string;
   shoeBrand: string;
@@ -144,7 +161,7 @@ type ConditionComponentDef = {
   options: ConditionOption[];
 };
 
-type OrderDetail = {
+export type OrderDetail = {
   id: string;
   orderNumber: string;
   status: OrderStatus;
@@ -167,6 +184,19 @@ type OrderDetail = {
   /** Order-level operational note (e.g. rework context) — distinct from a
    * pair's customerNotes, which is what the customer wrote at checkout. */
   notes?: string;
+  /** Present when this order was created from an approved proposal via
+   * AssessmentProposal.tsx. Contains the assessment ID plus a read-only
+   * snapshot of the original proposal for traceability. */
+  assessmentRef?: {
+    id: string;
+    /** Up to 4 signed photo URLs from the customer's first submitted pair. */
+    photoUrls: string[];
+    services: {
+      name: string;
+      priceCents: number;
+      tier: "essential" | "recommended";
+    }[];
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -174,6 +204,8 @@ type OrderDetail = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
+  "placed":                              { label: "Order placed",                          bg: "#dbeafe", fg: "#1e40af" },
+  "pending_payment":                     { label: "Pending payment",                       bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-our-response":      { label: "Proposal — awaiting our response",     bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-customer-response": { label: "Proposal — awaiting customer response", bg: "#dcfce7", fg: "#166534" },
   "pickup-scheduled":                    { label: "Pickup scheduled",                      bg: "#dbeafe", fg: "#1e40af" },
@@ -222,7 +254,7 @@ const ACTION_OWNER: Partial<Record<OrderStatus, "workshop" | "dispatch">> = {
  *  - Inside: the only angle that covers Insole and Inner lining at all.
  * "Damage close-ups" (see PhotoSet) is open-ended and uncapped — Danielle's
  * call, for anything localized the six standard angles don't capture well. */
-const REQUIRED_PHOTO_ANGLES: { key: RequiredPhotoAngle; label: string }[] = [
+export const REQUIRED_PHOTO_ANGLES: { key: RequiredPhotoAngle; label: string }[] = [
   { key: "sole",      label: "Sole (bottom, straight-on)" },
   { key: "topDown",   label: "Top-down" },
   { key: "leftSide",  label: "Left side" },
@@ -232,22 +264,45 @@ const REQUIRED_PHOTO_ANGLES: { key: RequiredPhotoAngle; label: string }[] = [
 ];
 
 function emptyPhotoSet(): PhotoSet {
-  return {
-    angles: { sole: false, topDown: false, leftSide: false, rightSide: false, back: false, inside: false },
-    damageCloseUps: 0,
-  };
+  return { angles: {}, damageCloseUps: [] };
 }
 
 /** Total photo count for display — six required angles (however many are
  * filled) plus however many extra damage close-ups have been added. */
 function photoSetCount(p: PhotoSet): number {
-  return Object.values(p.angles).filter(Boolean).length + p.damageCloseUps;
+  return Object.values(p.angles).filter(Boolean).length + p.damageCloseUps.length;
 }
 
 /** All six required angles filled — the gate for completing Intake/Outtake.
- * Damage close-ups don't factor in since they're uncapped/optional. */
-function photoSetComplete(p: PhotoSet): boolean {
-  return Object.values(p.angles).every(Boolean);
+ * Checked explicitly against REQUIRED_PHOTO_ANGLES (not just Object.values)
+ * since angles is a partial record — an empty object would otherwise pass
+ * an Object.values(...).every(...) check vacuously. Damage close-ups don't
+ * factor in since they're uncapped/optional. */
+export function photoSetComplete(p: PhotoSet): boolean {
+  return REQUIRED_PHOTO_ANGLES.every(a => !!p.angles[a.key]);
+}
+
+/** A simple, offline SVG placeholder used for dummy-data photos that were
+ * already "captured" before this page had a real upload UI — clearly a
+ * placeholder (not a real photo), avoiding any false impression this is
+ * production photo data. Real uploads (see PhotoAngleTile) use an actual
+ * object URL from the picked file instead of this. */
+function placeholderPhoto(label: string): CapturedPhoto {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#e0d8cc"/><text x="50%" y="50%" font-family="sans-serif" font-size="16" fill="#3d1700" text-anchor="middle" dominant-baseline="middle">${label}</text></svg>`;
+  return {
+    id: `placeholder-${label}-${Math.random().toString(36).slice(2)}`,
+    previewUrl: `data:image/svg+xml,${encodeURIComponent(svg)}`,
+    fileName: `${label}.svg`,
+  };
+}
+
+/** All six required angles pre-filled with placeholders — shorthand for
+ * dummy-data pairs whose intake/outtake is already "complete" and therefore
+ * must have every required angle present. */
+function allAnglesPlaceholder(): Partial<Record<RequiredPhotoAngle, CapturedPhoto>> {
+  const result: Partial<Record<RequiredPhotoAngle, CapturedPhoto>> = {};
+  for (const a of REQUIRED_PHOTO_ANGLES) result[a.key] = placeholderPhoto(a.label);
+  return result;
 }
 
 /**
@@ -390,6 +445,16 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
   },
 ];
 
+/** Every component must have at least one selected answer — Danielle's call:
+ * for now, while the whole point of this form is maximizing AI training
+ * data, nothing in the condition assessment is optional to *complete*
+ * intake with (only "Save & finish later" allows partial answers). This is
+ * a temporary, current-phase policy — see the requirements doc note on this
+ * form being deliberately more thorough than its long-term shape. */
+function allConditionsAnswered(answers: Record<string, string[]>): boolean {
+  return CONDITION_COMPONENTS.every(c => (answers[c.key]?.length ?? 0) > 0);
+}
+
 const ACTION_OWNER_LABEL: Record<"workshop" | "dispatch", string> = {
   workshop: "Workshop action",
   dispatch: "Dispatch action",
@@ -402,11 +467,17 @@ const ACTION_OWNER_COLOR: Record<"workshop" | "dispatch", string> = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dummy data  (one fully-populated order + fallbacks)
+//
+// No longer used to render the page (see fetchOrderDetail() in adminData.ts,
+// wired into the default export below) — kept only as a reference for the
+// shape/dummy-data conventions the rest of this file still follows, and
+// because CONDITION_COMPONENTS, REQUIRED_PHOTO_ANGLES, etc. above are still
+// live and worth having realistic examples next to.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TODAY = "2026-07-08";
 
-const ORDER_DETAILS: Record<string, OrderDetail> = {
+export const ORDER_DETAILS: Record<string, OrderDetail> = {
   // Demo order for Danielle's per-pair-of-shoes preview request. Two pairs in
   // one order — one further along (intake done, services checked, outtake in
   // progress) and one just starting — to show how pairs progress independently
@@ -440,8 +511,8 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         // in-progress → outtake photos partly captured so far (2 of 6).
         photos: {
           customerSubmitted: 2,
-          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
-          after:  { angles: { sole: true, topDown: true, leftSide: false, rightSide: false, back: false, inside: false }, damageCloseUps: 0 },
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: { sole: placeholderPhoto("Sole"), topDown: placeholderPhoto("Top-down") }, damageCloseUps: [] },
         },
         services: [
           { id: "1-p1-s1", name: "Resole",                    priceCents: 8500, tag: "original", done: true },
@@ -510,7 +581,7 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         // not started → no "after" photos yet.
         photos: {
           customerSubmitted: 3,
-          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 1 },
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [placeholderPhoto("Damage close-up")] },
           after: emptyPhotoSet(),
         },
         services: [
@@ -570,8 +641,8 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         // filled for both before and after.
         photos: {
           customerSubmitted: 2,
-          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
-          after:  { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
         },
         services: [
           { id: "5-p1-s1", name: "Seam repair", priceCents: 5000, tag: "original", done: true },
@@ -629,8 +700,8 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
         // filled for both before and after.
         photos: {
           customerSubmitted: 2,
-          before: { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
-          after:  { angles: { sole: true, topDown: true, leftSide: true, rightSide: true, back: true, inside: true }, damageCloseUps: 0 },
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
         },
         services: [
           { id: "9-p1-s1", name: "Seam repair", priceCents: 5500, tag: "original", done: true },
@@ -693,6 +764,369 @@ const ORDER_DETAILS: Record<string, OrderDetail> = {
       },
     ],
     comments: [],
+  },
+  // Orders 3, 4, 6, 7, 8, 11–14 below: these exist in AdminDashboard's dummy
+  // ORDERS list (so they show up in real dashboard tables/tabs, including
+  // Dispatch's pickup/return schedule tabs) but previously had no matching
+  // entry here — clicking into any of them fell through to buildFallback(),
+  // which returns pairs: []. That's what caused the Dispatch "Repair
+  // summary" sidebar to say "No shoe pairs recorded yet" for an order with a
+  // pickup already scheduled — Danielle's bug report: a real order should
+  // never have zero pairs, regardless of status. Filled in with lightweight
+  // but real pair/service data (matching each order's dashboard context) so
+  // Dispatch always has enough to answer a basic "what am I picking up /
+  // what's being done to it" question, without needing full Workshop-level
+  // detail (photos, condition assessment) on orders that aren't this
+  // session's main demo (ORD-2026-001).
+  "3": {
+    id: "3",
+    orderNumber: "ORD-2026-003",
+    status: "pickup-scheduled",
+    datePlaced: "2026-07-06",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Priya Nair",
+      phone: "(917) 555-0303",
+      email: "priya.nair@email.com",
+    },
+    address: "45 W 72nd St, New York, NY 10023",
+    lastContactedAt: "2026-07-06",
+    pickupSlot: { date: "2026-07-08", timeLabel: "10:00 – 11:30 AM" },
+    pairs: [
+      {
+        id: "3-p1",
+        shoeType: "Sneakers",
+        shoeBrand: "Common Projects",
+        shoeColorMaterial: "White leather",
+        customerNotes: "Please be gentle with the suede panel on the side.",
+        // Pickup hasn't happened yet — nothing captured on either side.
+        photos: {
+          customerSubmitted: 2,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
+        services: [
+          { id: "3-p1-s1", name: "Scuff, stain, & color restoration", priceCents: 8000, tag: "original", done: false },
+          { id: "3-p1-s2", name: "Cleaning & conditioning",           priceCents: 6500, tag: "original", done: false },
+        ],
+        intakeStatus: "not-started",
+        completionStatus: "not-started",
+      },
+    ],
+    comments: [],
+    notes: "Ring buzzer 3B — concierge can accept",
+  },
+  "4": {
+    id: "4",
+    orderNumber: "ORD-2026-004",
+    status: "ready-for-return",
+    datePlaced: "2026-07-02",
+    isRework: false,
+    actionRequiredBy: "2026-07-08",
+    workshopAssignee: "OB",
+    dispatchAssignee: "DO",
+    customer: {
+      name: "James O'Sullivan",
+      phone: "(212) 555-0404",
+      email: "james.osullivan@email.com",
+    },
+    address: "89 Bleecker St, New York, NY 10012",
+    lastContactedAt: "2026-07-06",
+    pickupSlot: { date: "2026-07-03", timeLabel: "9:00 – 10:30 AM" },
+    pairs: [
+      {
+        id: "4-p1",
+        shoeType: "Chukka boots",
+        shoeBrand: "Red Wing",
+        shoeColorMaterial: "Brown leather",
+        // Repair fully done, awaiting return scheduling → intake and
+        // outtake both complete, all required photos on file.
+        photos: {
+          customerSubmitted: 2,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "4-p1-s1", name: "Resole",           priceCents: 8500, tag: "original", done: true },
+          { id: "4-p1-s2", name: "Heel replacement", priceCents: 5500, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+  },
+  "6": {
+    id: "6",
+    orderNumber: "ORD-2026-006",
+    status: "rework-request-denied",
+    datePlaced: "2026-06-10",
+    isRework: true,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Luca Romano",
+      phone: "(718) 555-0606",
+      email: "luca.romano@email.com",
+    },
+    address: "55 Water St, Brooklyn, NY 11201",
+    pickupSlot: { date: "2026-06-10", timeLabel: "1:00 – 2:30 PM" },
+    returnSlot: { date: "2026-06-17", timeLabel: "3:00 – 4:30 PM" },
+    pairs: [
+      {
+        id: "6-p1",
+        shoeType: "Loafers",
+        shoeBrand: "Ferragamo",
+        shoeColorMaterial: "Black leather",
+        photos: {
+          customerSubmitted: 1,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "6-p1-s1", name: "Cleaning & conditioning", priceCents: 6500, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+    notes: "Dispute escalated to owner — see Slack thread",
+  },
+  "7": {
+    id: "7",
+    orderNumber: "ORD-2026-007",
+    status: "return-scheduled",
+    datePlaced: "2026-06-18",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "OB",
+    dispatchAssignee: "DO",
+    customer: {
+      name: "Ava Thompson",
+      phone: "(212) 555-0707",
+      email: "ava.thompson@email.com",
+    },
+    address: "1 Central Park W, New York, NY 10023",
+    lastContactedAt: "2026-07-05",
+    pickupSlot: { date: "2026-06-19", timeLabel: "11:00 AM – 12:30 PM" },
+    returnSlot: { date: "2026-07-08", timeLabel: "2:00 – 3:30 PM" },
+    pairs: [
+      {
+        id: "7-p1",
+        shoeType: "Pumps",
+        shoeBrand: "Jimmy Choo",
+        shoeColorMaterial: "Nude patent leather",
+        photos: {
+          customerSubmitted: 1,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "7-p1-s1", name: "High heel tip repair", priceCents: 3500, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+    notes: "Leave with doorman if customer unavailable",
+  },
+  "8": {
+    id: "8",
+    orderNumber: "ORD-2026-008",
+    status: "completed",
+    datePlaced: "2026-06-01",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Derek Huang",
+      phone: "(917) 555-0808",
+      email: "derek.huang@email.com",
+    },
+    address: "200 Varick St, New York, NY 10014",
+    pickupSlot: { date: "2026-06-02", timeLabel: "10:00 – 11:30 AM" },
+    returnSlot: { date: "2026-06-10", timeLabel: "1:00 – 2:30 PM" },
+    pairs: [
+      {
+        id: "8-p1",
+        shoeType: "Derby shoes",
+        shoeBrand: "Allen Edmonds",
+        shoeColorMaterial: "Oxblood leather",
+        photos: {
+          customerSubmitted: 2,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "8-p1-s1", name: "Resole", priceCents: 8500, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+  },
+  // 11 and 12 are Proposals (awaiting customer response) — no logistics yet,
+  // and the services below are *proposed*, not yet approved or performed, so
+  // nothing is checked off and intake/outtake haven't started. These will
+  // move to the (not-yet-built) Proposal details page once that's built —
+  // for now they at least stop showing up empty if clicked into.
+  "11": {
+    id: "11",
+    orderNumber: "ORD-2026-011",
+    status: "proposal-awaiting-customer-response",
+    datePlaced: "2026-07-04",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Bianca Rossi",
+      phone: "(347) 555-1111",
+      email: "bianca.rossi@email.com",
+    },
+    address: "14 Wall St, New York, NY 10005",
+    pairs: [
+      {
+        id: "11-p1",
+        shoeType: "Sandals",
+        shoeBrand: "Birkenstock",
+        shoeColorMaterial: "Tan suede",
+        photos: {
+          customerSubmitted: 2,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
+        services: [
+          { id: "11-p1-s1", name: "Strap repair", priceCents: 4500, tag: "original", done: false },
+        ],
+        intakeStatus: "not-started",
+        completionStatus: "not-started",
+      },
+    ],
+    comments: [],
+  },
+  "12": {
+    id: "12",
+    orderNumber: "ORD-2026-012",
+    status: "proposal-awaiting-customer-response",
+    datePlaced: "2026-07-03",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "OB",
+    dispatchAssignee: "DO",
+    customer: {
+      name: "Tomás Vega",
+      phone: "(646) 555-1212",
+      email: "tomas.vega@email.com",
+    },
+    address: "500 W 23rd St, New York, NY 10011",
+    pairs: [
+      {
+        id: "12-p1",
+        shoeType: "Sneakers",
+        shoeBrand: "Golden Goose",
+        shoeColorMaterial: "White / silver leather",
+        photos: {
+          customerSubmitted: 3,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
+        services: [
+          { id: "12-p1-s1", name: "Scuff, stain, & color restoration", priceCents: 8000, tag: "original", done: false },
+        ],
+        intakeStatus: "not-started",
+        completionStatus: "not-started",
+      },
+    ],
+    comments: [],
+  },
+  "13": {
+    id: "13",
+    orderNumber: "ORD-2026-013",
+    status: "pickup-scheduled",
+    datePlaced: "2026-07-08",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "DO",
+    dispatchAssignee: "DO",
+    customer: {
+      name: "Wendy Alvarez",
+      phone: "(212) 555-1313",
+      email: "wendy.alvarez@email.com",
+    },
+    address: "350 5th Ave, New York, NY 10118",
+    lastContactedAt: "2026-07-08",
+    pickupSlot: { date: "2026-07-09", timeLabel: "9:00 – 10:30 AM" },
+    pairs: [
+      {
+        id: "13-p1",
+        shoeType: "Oxfords",
+        shoeBrand: "To Boot New York",
+        shoeColorMaterial: "Burgundy leather",
+        // Pickup is tomorrow — nothing captured yet.
+        photos: {
+          customerSubmitted: 2,
+          before: emptyPhotoSet(),
+          after: emptyPhotoSet(),
+        },
+        services: [
+          { id: "13-p1-s1", name: "Resole",              priceCents: 8500, tag: "original", done: false },
+          { id: "13-p1-s2", name: "High heel tip repair", priceCents: 3500, tag: "original", done: false },
+        ],
+        intakeStatus: "not-started",
+        completionStatus: "not-started",
+      },
+    ],
+    comments: [],
+    notes: "Front desk will hold shoes at reception",
+  },
+  "14": {
+    id: "14",
+    orderNumber: "ORD-2026-014",
+    status: "return-scheduled",
+    datePlaced: "2026-06-28",
+    isRework: false,
+    actionRequiredBy: null,
+    workshopAssignee: "OB",
+    dispatchAssignee: "OB",
+    customer: {
+      name: "Felix Ono",
+      phone: "(646) 555-1414",
+      email: "felix.ono@email.com",
+    },
+    address: "20 W 34th St, New York, NY 10001",
+    lastContactedAt: "2026-07-07",
+    pickupSlot: { date: "2026-06-29", timeLabel: "10:00 – 11:30 AM" },
+    returnSlot: { date: "2026-07-11", timeLabel: "1:00 – 2:30 PM" },
+    pairs: [
+      {
+        id: "14-p1",
+        shoeType: "Derby shoes",
+        shoeBrand: "Allen Edmonds",
+        shoeColorMaterial: "Black leather",
+        photos: {
+          customerSubmitted: 1,
+          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
+        },
+        services: [
+          { id: "14-p1-s1", name: "Cleaning & conditioning", priceCents: 6500, tag: "original", done: true },
+          { id: "14-p1-s2", name: "Waterproofing",           priceCents: 3000, tag: "original", done: true },
+        ],
+        intakeStatus: "complete",
+        completionStatus: "complete",
+      },
+    ],
+    comments: [],
+    notes: "Building requires photo ID at security desk",
   },
 };
 
@@ -1056,69 +1490,162 @@ function ConditionGroup({
   );
 }
 
+/** One required-angle tile — a real file upload (not just a "mark as done"
+ * toggle, per Danielle's feedback: staff should actually attach a photo they
+ * can preview, not just tick a checkbox). Tapping an empty tile opens the
+ * device's file/camera picker; once a photo's attached, the tile shows an
+ * actual thumbnail preview with a remove ("×") button to clear and retake. */
+function PhotoAngleTile({
+  label,
+  photo,
+  onUpload,
+  onRemove,
+}: {
+  label: string;
+  photo: CapturedPhoto | undefined;
+  onUpload: (file: File) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div style={{ width: 96 }}>
+      <div style={{ position: "relative", width: 96, height: 80 }}>
+        <label
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 96, height: 80, borderRadius: 8, cursor: "pointer", overflow: "hidden",
+            border: photo ? "1px solid #166534" : "1px dashed #d1d5db",
+            backgroundColor: photo ? "#f0fdf4" : "#fafafa",
+          }}
+        >
+          {photo
+            ? <img src={photo.previewUrl} alt={label} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : <Camera size={20} style={{ color: "#9ca3af" }} />}
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) onUpload(file);
+              e.target.value = ""; // allow re-selecting the same file to retake
+            }}
+          />
+        </label>
+        {photo && (
+          <button
+            type="button"
+            onClick={onRemove}
+            title="Remove photo"
+            style={{
+              position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%",
+              backgroundColor: "#fff", border: "1px solid #e0d8cc", color: "#991b1b", fontSize: 12, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <p style={{ margin: "4px 0 0", fontSize: 10, fontWeight: 500, color: photo ? "#166534" : "#6b7280", textAlign: "center", lineHeight: 1.2 }}>
+        {label}
+      </p>
+    </div>
+  );
+}
+
+/** Damage close-ups — an uncapped, open-ended list of extra photos (unlike
+ * the six required angles, there's no fixed number expected). Each uploaded
+ * photo shows as its own removable thumbnail; the dashed tile at the end is
+ * always there to add another. */
+function DamageCloseUpRow({
+  photos,
+  onAdd,
+  onRemove,
+}: {
+  photos: CapturedPhoto[];
+  onAdd: (file: File) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
+      {photos.map(p => (
+        <div key={p.id} style={{ position: "relative", width: 72, height: 72 }}>
+          <img
+            src={p.previewUrl}
+            alt="Damage close-up"
+            style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8, border: "1px solid #166534" }}
+          />
+          <button
+            type="button"
+            onClick={() => onRemove(p.id)}
+            title="Remove photo"
+            style={{
+              position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%",
+              backgroundColor: "#fff", border: "1px solid #e0d8cc", color: "#991b1b", fontSize: 11, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <label
+        style={{
+          width: 72, height: 72, borderRadius: 8, border: "1px dashed #d1d5db", backgroundColor: "#fafafa",
+          display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
+        }}
+      >
+        <Camera size={18} style={{ color: "#9ca3af" }} />
+        <input
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) onAdd(file);
+            e.target.value = "";
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
 /** The required-photo capture UI, shared between Intake ("before") and
- * Outtake ("after") — six labeled angle tiles (tap to mark captured, tap
- * again to clear — dummy data, no real camera/upload yet) plus an
- * open-ended, uncapped set of damage close-ups. These six are a hard
- * requirement (Danielle: they're what protects Cobbli against a customer
- * claiming damage that was already there, or that a service wasn't done),
- * unlike everything else in Intake/Outtake, which stays optional. */
+ * Outtake ("after") — six labeled angle tiles, each a real upload (not a
+ * "mark as done" toggle), plus an open-ended, uncapped row of damage
+ * close-ups. These six angles are a hard requirement (Danielle: they're
+ * what protects Cobbli against a customer claiming damage that was already
+ * there, or that a service wasn't done). */
 function PhotoAngleGrid({
   photos,
-  onToggleAngle,
+  onUploadAngle,
+  onRemoveAngle,
   onAddCloseUp,
   onRemoveCloseUp,
 }: {
   photos: PhotoSet;
-  onToggleAngle: (angle: RequiredPhotoAngle) => void;
-  onAddCloseUp: () => void;
-  onRemoveCloseUp: () => void;
+  onUploadAngle: (angle: RequiredPhotoAngle, file: File) => void;
+  onRemoveAngle: (angle: RequiredPhotoAngle) => void;
+  onAddCloseUp: (file: File) => void;
+  onRemoveCloseUp: (id: string) => void;
 }) {
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {REQUIRED_PHOTO_ANGLES.map(a => {
-          const filled = photos.angles[a.key];
-          return (
-            <button
-              key={a.key}
-              type="button"
-              onClick={() => onToggleAngle(a.key)}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
-                width: 96, height: 88, borderRadius: 8, cursor: "pointer", fontFamily: "inherit", textAlign: "center",
-                border: filled ? "1px solid #166534" : "1px dashed #d1d5db",
-                backgroundColor: filled ? "#f0fdf4" : "#fafafa",
-              }}
-            >
-              {filled
-                ? <CheckCircle2 size={18} style={{ color: "#166534" }} />
-                : <Camera size={18} style={{ color: "#9ca3af" }} />}
-              <span style={{ fontSize: 10, fontWeight: 500, color: filled ? "#166534" : "#6b7280", lineHeight: 1.2, padding: "0 4px" }}>
-                {a.label}
-              </span>
-            </button>
-          );
-        })}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {REQUIRED_PHOTO_ANGLES.map(a => (
+          <PhotoAngleTile
+            key={a.key}
+            label={a.label}
+            photo={photos.angles[a.key]}
+            onUpload={file => onUploadAngle(a.key, file)}
+            onRemove={() => onRemoveAngle(a.key)}
+          />
+        ))}
       </div>
-      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 12, color: "#6b7280" }}>Damage close-ups: {photos.damageCloseUps}</span>
-        <button
-          type="button"
-          onClick={onAddCloseUp}
-          style={{ fontSize: 12, padding: "3px 9px", borderRadius: 6, border: "1px solid #e0d8cc", backgroundColor: "#fff", color: "#374151", cursor: "pointer", fontFamily: "inherit" }}
-        >
-          + Add
-        </button>
-        {photos.damageCloseUps > 0 && (
-          <button
-            type="button"
-            onClick={onRemoveCloseUp}
-            style={{ fontSize: 12, padding: "3px 9px", borderRadius: 6, border: "1px solid #e0d8cc", backgroundColor: "#fff", color: "#374151", cursor: "pointer", fontFamily: "inherit" }}
-          >
-            − Remove
-          </button>
-        )}
+      <div style={{ marginTop: 14 }}>
+        <p style={{ margin: "0 0 6px", fontSize: 12, color: "#6b7280" }}>Damage close-ups ({photos.damageCloseUps.length})</p>
+        <DamageCloseUpRow photos={photos.damageCloseUps} onAdd={onAddCloseUp} onRemove={onRemoveCloseUp} />
       </div>
     </div>
   );
@@ -1127,16 +1654,19 @@ function PhotoAngleGrid({
 /** The Intake form itself — read-only services list (mirrors what's on this
  * pair, not editable here), the required photo capture, the full
  * per-component condition assessment, and a free-text notes field. "Save &
- * finish later" marks the pair in-progress without requiring everything
- * filled in (photos and a complete assessment are both optional to *save*);
- * "Complete intake" is what actually unblocks the Services checklist and
- * Outtake for this pair, and is gated on all six required photos being
- * present — the one hard requirement in this whole form. */
+ * finish later" marks the pair in-progress without requiring anything
+ * filled in; "Complete intake" is what actually unblocks the Services
+ * checklist and Outtake for this pair, and — per Danielle's direction, while
+ * this phase is about maximizing AI training data — is gated on **both**
+ * all six required photos being present **and** every condition component
+ * having an answer. Notes stays optional even at "Complete," since it's a
+ * catch-all for anything extra, not something every intake will need. */
 function IntakeFormModal({
   pair,
   services,
   photos,
-  onTogglePhotoAngle,
+  onUploadPhotoAngle,
+  onRemovePhotoAngle,
   onAddDamageCloseUp,
   onRemoveDamageCloseUp,
   answers,
@@ -1149,9 +1679,10 @@ function IntakeFormModal({
   pair: ShoePair;
   services: ServiceLine[];
   photos: PhotoSet;
-  onTogglePhotoAngle: (angle: RequiredPhotoAngle) => void;
-  onAddDamageCloseUp: () => void;
-  onRemoveDamageCloseUp: () => void;
+  onUploadPhotoAngle: (angle: RequiredPhotoAngle, file: File) => void;
+  onRemovePhotoAngle: (angle: RequiredPhotoAngle) => void;
+  onAddDamageCloseUp: (file: File) => void;
+  onRemoveDamageCloseUp: (id: string) => void;
   answers: Record<string, string[]>;
   notes: string;
   onToggleCondition: (comp: ConditionComponentDef, value: string) => void;
@@ -1160,6 +1691,8 @@ function IntakeFormModal({
   onSave: (status: FormStatus) => void;
 }) {
   const photosComplete = photoSetComplete(photos);
+  const conditionsComplete = allConditionsAnswered(answers);
+  const canComplete = photosComplete && conditionsComplete;
   return (
     <div
       style={{
@@ -1212,15 +1745,19 @@ function IntakeFormModal({
           </p>
           <PhotoAngleGrid
             photos={photos}
-            onToggleAngle={onTogglePhotoAngle}
+            onUploadAngle={onUploadPhotoAngle}
+            onRemoveAngle={onRemovePhotoAngle}
             onAddCloseUp={onAddDamageCloseUp}
             onRemoveCloseUp={onRemoveDamageCloseUp}
           />
         </div>
 
         <div style={{ borderTop: "1px solid #f0ece5", paddingTop: 16 }}>
-          <p style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
             What is the condition of the...
+          </p>
+          <p style={{ margin: "0 0 14px", fontSize: 12, color: "#9ca3af" }}>
+            Every component below is required to complete intake, for now — maximizing labeled training data matters more than form length while the AI model is still being trained.
           </p>
           {CONDITION_COMPONENTS.map(comp => (
             <ConditionGroup
@@ -1244,7 +1781,7 @@ function IntakeFormModal({
         </div>
 
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #f0ece5" }}>
-          {!photosComplete && (
+          {!canComplete && (
             <div
               role="alert"
               style={{
@@ -1254,7 +1791,11 @@ function IntakeFormModal({
               }}
             >
               <AlertTriangle size={13} style={{ flexShrink: 0 }} />
-              All 6 required photos must be added before intake can be marked complete.
+              {!photosComplete && !conditionsComplete
+                ? "All 6 required photos and every condition below must be completed before intake can be marked complete."
+                : !photosComplete
+                ? "All 6 required photos must be added before intake can be marked complete."
+                : "Every condition below must have an answer before intake can be marked complete."}
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -1267,13 +1808,13 @@ function IntakeFormModal({
             </button>
             <button
               type="button"
-              disabled={!photosComplete}
+              disabled={!canComplete}
               onClick={() => onSave("complete")}
               style={{
                 padding: "8px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                backgroundColor: photosComplete ? "#3d1700" : "#d1d5db",
+                backgroundColor: canComplete ? "#3d1700" : "#d1d5db",
                 color: "#fff",
-                cursor: photosComplete ? "pointer" : "not-allowed",
+                cursor: canComplete ? "pointer" : "not-allowed",
               }}
             >
               Complete intake
@@ -1296,7 +1837,8 @@ function OuttakeFormModal({
   pair,
   services,
   photos,
-  onTogglePhotoAngle,
+  onUploadPhotoAngle,
+  onRemovePhotoAngle,
   onAddDamageCloseUp,
   onRemoveDamageCloseUp,
   notes,
@@ -1307,9 +1849,10 @@ function OuttakeFormModal({
   pair: ShoePair;
   services: ServiceLine[];
   photos: PhotoSet;
-  onTogglePhotoAngle: (angle: RequiredPhotoAngle) => void;
-  onAddDamageCloseUp: () => void;
-  onRemoveDamageCloseUp: () => void;
+  onUploadPhotoAngle: (angle: RequiredPhotoAngle, file: File) => void;
+  onRemovePhotoAngle: (angle: RequiredPhotoAngle) => void;
+  onAddDamageCloseUp: (file: File) => void;
+  onRemoveDamageCloseUp: (id: string) => void;
   notes: string;
   onNotesChange: (value: string) => void;
   onClose: () => void;
@@ -1379,7 +1922,8 @@ function OuttakeFormModal({
           </p>
           <PhotoAngleGrid
             photos={photos}
-            onToggleAngle={onTogglePhotoAngle}
+            onUploadAngle={onUploadPhotoAngle}
+            onRemoveAngle={onRemovePhotoAngle}
             onAddCloseUp={onAddDamageCloseUp}
             onRemoveCloseUp={onRemoveDamageCloseUp}
           />
@@ -1446,7 +1990,7 @@ function OuttakeFormModal({
  * style than the previous split-into-three-cards layout). An order with
  * multiple pairs gets one of these per pair, each progressing independently —
  * outtake for a pair is blocked until that pair's own intake is complete. */
-function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total: number }) {
+function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair; index: number; total: number; orderId: string; orderNumber: string }) {
   const [services, setServices] = useState<ServiceLine[]>(pair.services);
 
   // Intake/Outtake status now live in local state (rather than reading
@@ -1498,12 +2042,77 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
     });
   };
 
-  const toggleBeforePhotoAngle = (angle: RequiredPhotoAngle) => {
-    setBeforePhotos(prev => ({ ...prev, angles: { ...prev.angles, [angle]: !prev.angles[angle] } }));
+  // Real uploads — goes straight to the pair-photos Storage bucket (see
+  // adminData.ts) and records a pair_photos row, rather than the old
+  // client-only URL.createObjectURL() preview. Failures surface an alert and
+  // leave the tile as it was (nothing optimistically added/removed before
+  // the round-trip confirms).
+  const uploadPhoto = async (
+    setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>,
+    side: "before" | "after",
+    angle: RequiredPhotoAngle,
+    file: File,
+  ) => {
+    try {
+      const photo = await uploadPairPhoto({ orderId, pairId: pair.id, side, angle, file });
+      setPhotos(prev => ({ ...prev, angles: { ...prev.angles, [angle]: photo } }));
+    } catch (err) {
+      console.error("Failed to upload photo:", err);
+      alert("Couldn't upload that photo — please try again.");
+    }
   };
-  const toggleAfterPhotoAngle = (angle: RequiredPhotoAngle) => {
-    setAfterPhotos(prev => ({ ...prev, angles: { ...prev.angles, [angle]: !prev.angles[angle] } }));
+  const removePhoto = async (
+    photos: PhotoSet,
+    setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>,
+    angle: RequiredPhotoAngle,
+  ) => {
+    const existing = photos.angles[angle];
+    if (!existing) return;
+    try {
+      if (existing.storagePath) await removePairPhoto(existing, existing.storagePath);
+      setPhotos(prev => {
+        const nextAngles = { ...prev.angles };
+        delete nextAngles[angle];
+        return { ...prev, angles: nextAngles };
+      });
+    } catch (err) {
+      console.error("Failed to remove photo:", err);
+      alert("Couldn't remove that photo — please try again.");
+    }
   };
+  const addCloseUp = async (
+    setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>,
+    side: "before" | "after",
+    file: File,
+  ) => {
+    try {
+      const photo = await uploadPairPhoto({ orderId, pairId: pair.id, side, angle: null, file });
+      setPhotos(prev => ({ ...prev, damageCloseUps: [...prev.damageCloseUps, photo] }));
+    } catch (err) {
+      console.error("Failed to upload photo:", err);
+      alert("Couldn't upload that photo — please try again.");
+    }
+  };
+  const removeCloseUp = async (
+    photos: PhotoSet,
+    setPhotos: React.Dispatch<React.SetStateAction<PhotoSet>>,
+    id: string,
+  ) => {
+    const target = photos.damageCloseUps.find(p => p.id === id);
+    if (!target) return;
+    try {
+      if (target.storagePath) await removePairPhoto(target, target.storagePath);
+      setPhotos(prev => ({ ...prev, damageCloseUps: prev.damageCloseUps.filter(p => p.id !== id) }));
+    } catch (err) {
+      console.error("Failed to remove photo:", err);
+      alert("Couldn't remove that photo — please try again.");
+    }
+  };
+
+  const uploadBeforePhoto = (angle: RequiredPhotoAngle, file: File) => uploadPhoto(setBeforePhotos, "before", angle, file);
+  const removeBeforePhoto = (angle: RequiredPhotoAngle) => removePhoto(beforePhotos, setBeforePhotos, angle);
+  const uploadAfterPhoto = (angle: RequiredPhotoAngle, file: File) => uploadPhoto(setAfterPhotos, "after", angle, file);
+  const removeAfterPhoto = (angle: RequiredPhotoAngle) => removePhoto(afterPhotos, setAfterPhotos, angle);
 
   const saveIntake = (status: FormStatus) => {
     setIntakeStatus(status);
@@ -1557,6 +2166,21 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
             ? <span style={{ fontStyle: "italic" }}>{pair.customerNotes}</span>
             : <span style={{ color: "#9ca3af" }}>No notes provided</span>}
         </KVRow>
+        {/* Placeholder content only (2026-07-20) — the tag design itself is
+            still pending Alex's sign-off, so this reprints a plain,
+            unstyled version of this one pair's tag. Swap the markup in
+            printPairTags.ts once the design is approved; this button and
+            the one next to the order number (print all pairs at once)
+            don't need to change. */}
+        <div style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={() => printPairTags(orderNumber, [pair])}
+            style={{ padding: "5px 12px", backgroundColor: "#fff", color: "#3d1700", border: "1px solid #d9cfc0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >
+            Print tag
+          </button>
+        </div>
 
         <div style={{ marginTop: 14 }}>
           <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Photos</p>
@@ -1568,7 +2192,7 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
             <div style={{ minWidth: 180 }}>
               <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>
                 Before (intake) — required · {beforeFilled}/{REQUIRED_PHOTO_ANGLES.length}
-                {beforePhotos.damageCloseUps > 0 ? ` + ${beforePhotos.damageCloseUps} extra` : ""}
+                {beforePhotos.damageCloseUps.length > 0 ? ` + ${beforePhotos.damageCloseUps.length} extra` : ""}
               </p>
               <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, backgroundColor: beforeComplete ? "#dcfce7" : "#fef3c7", color: beforeComplete ? "#166534" : "#92400e" }}>
                 {beforeComplete ? "Required photos complete" : "Required photos missing"}
@@ -1577,7 +2201,7 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
             <div style={{ minWidth: 180 }}>
               <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>
                 After (outtake) — required · {afterFilled}/{REQUIRED_PHOTO_ANGLES.length}
-                {afterPhotos.damageCloseUps > 0 ? ` + ${afterPhotos.damageCloseUps} extra` : ""}
+                {afterPhotos.damageCloseUps.length > 0 ? ` + ${afterPhotos.damageCloseUps.length} extra` : ""}
               </p>
               <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, backgroundColor: afterComplete ? "#dcfce7" : "#fef3c7", color: afterComplete ? "#166534" : "#92400e" }}>
                 {afterComplete ? "Required photos complete" : "Required photos missing"}
@@ -1613,9 +2237,10 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
           pair={pair}
           services={services}
           photos={beforePhotos}
-          onTogglePhotoAngle={toggleBeforePhotoAngle}
-          onAddDamageCloseUp={() => setBeforePhotos(prev => ({ ...prev, damageCloseUps: prev.damageCloseUps + 1 }))}
-          onRemoveDamageCloseUp={() => setBeforePhotos(prev => ({ ...prev, damageCloseUps: Math.max(0, prev.damageCloseUps - 1) }))}
+          onUploadPhotoAngle={uploadBeforePhoto}
+          onRemovePhotoAngle={removeBeforePhoto}
+          onAddDamageCloseUp={file => addCloseUp(setBeforePhotos, "before", file)}
+          onRemoveDamageCloseUp={id => removeCloseUp(beforePhotos, setBeforePhotos, id)}
           answers={conditionAnswers}
           notes={intakeNotes}
           onToggleCondition={toggleCondition}
@@ -1630,9 +2255,10 @@ function PairCard({ pair, index, total }: { pair: ShoePair; index: number; total
           pair={pair}
           services={services}
           photos={afterPhotos}
-          onTogglePhotoAngle={toggleAfterPhotoAngle}
-          onAddDamageCloseUp={() => setAfterPhotos(prev => ({ ...prev, damageCloseUps: prev.damageCloseUps + 1 }))}
-          onRemoveDamageCloseUp={() => setAfterPhotos(prev => ({ ...prev, damageCloseUps: Math.max(0, prev.damageCloseUps - 1) }))}
+          onUploadPhotoAngle={uploadAfterPhoto}
+          onRemovePhotoAngle={removeAfterPhoto}
+          onAddDamageCloseUp={file => addCloseUp(setAfterPhotos, "after", file)}
+          onRemoveDamageCloseUp={id => removeCloseUp(afterPhotos, setAfterPhotos, id)}
           notes={outtakeNotes}
           onNotesChange={setOuttakeNotes}
           onClose={() => setOuttakeModalOpen(false)}
@@ -1704,6 +2330,97 @@ function CommentsCard({ order }: { order: OrderDetail }) {
 }
 
 /** Compact sidebar card — shows condensed shoe/services/intake info for Dispatch view */
+// ─────────────────────────────────────────────────────────────────────────────
+// Proposal reference — shown when this order was created from an assessment
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compact read-only block linking an order back to its source assessment.
+ * Displayed in the Workshop primary column (before shoe pairs) and in the
+ * Dispatch sidebar — so both roles can trace what the cobbler originally
+ * proposed and see the photos the customer submitted.
+ *
+ * "compact" prop: when true, collapses photos into a single row of thumbnails
+ * and omits the tier labels — used in the Dispatch sidebar where vertical
+ * space is more precious.
+ */
+function ProposalReferenceCard({ assessmentRef, compact = false }: {
+  assessmentRef: NonNullable<OrderDetail["assessmentRef"]>;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(!compact);
+  const shortId = assessmentRef.id.slice(0, 8);
+
+  const essential = assessmentRef.services.filter(s => s.tier === "essential");
+  const recommended = assessmentRef.services.filter(s => s.tier === "recommended");
+
+  return (
+    <div style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, marginBottom: 14, overflow: "hidden" }}>
+      {/* Header row */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#92400e" }}>
+            Source proposal
+          </span>
+          <span style={{ fontSize: 11, color: "#b45309", backgroundColor: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "1px 6px", fontFamily: "monospace" }}>
+            #{shortId}…
+          </span>
+        </div>
+        <span style={{ fontSize: 13, color: "#b45309" }}>{open ? "▴" : "▾"}</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 14px 14px" }}>
+          {/* Customer-submitted photos */}
+          {assessmentRef.photoUrls.length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {assessmentRef.photoUrls.map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noreferrer" title="Open full size">
+                  <img
+                    src={url}
+                    alt={`Assessment photo ${i + 1}`}
+                    style={{ width: compact ? 52 : 72, height: compact ? 52 : 72, objectFit: "cover", borderRadius: 6, border: "1px solid #fde68a" }}
+                  />
+                </a>
+              ))}
+            </div>
+          )}
+
+          {/* Proposed services */}
+          {assessmentRef.services.length === 0 ? (
+            <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>No services on record.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {!compact && essential.length > 0 && (
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 2px" }}>Essential</p>
+              )}
+              {essential.map((s, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#374151" }}>
+                  <span>{s.name}</span>
+                  <span style={{ fontWeight: 600 }}>${(s.priceCents / 100).toFixed(0)}</span>
+                </div>
+              ))}
+              {!compact && recommended.length > 0 && (
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#b45309", textTransform: "uppercase", letterSpacing: "0.05em", margin: "6px 0 2px" }}>Recommended (optional)</p>
+              )}
+              {recommended.map((s, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6b7280" }}>
+                  <span>{s.name}</span>
+                  <span style={{ fontWeight: 600 }}>${(s.priceCents / 100).toFixed(0)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkshopSummaryCard({ order }: { order: OrderDetail }) {
   return (
     <Card title="Repair summary">
@@ -1795,7 +2512,217 @@ function CustomerSidebarCard({ order }: { order: OrderDetail }) {
 // Header
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PageHeader({ order }: { order: OrderDetail }) {
+/**
+ * Approve/Deny buttons for "rework-request-pending" orders.
+ * Looks up reworks.id from the order_id, then calls the matching RPC.
+ * Calls onRefetch on success so the page data reflects the new status.
+ */
+function ReworkActions({ orderId, onRefetch }: { orderId: string; onRefetch: () => void }) {
+  const [loading, setLoading] = useState<"approve" | "deny" | null>(null);
+  const [confirmingDeny, setConfirmingDeny] = useState(false);
+  const [emailChecked, setEmailChecked] = useState(false);
+  const busy = loading !== null;
+
+  const getReworkId = async () => {
+    const { data, error } = await supabase
+      .from("reworks")
+      .select("id")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) throw error ?? new Error("Rework record not found for this order.");
+    return data.id as string;
+  };
+
+  const approve = async () => {
+    setLoading("approve");
+    try {
+      const reworkId = await getReworkId();
+      const { error } = await supabase.rpc("approve_rework", { _rework_id: reworkId });
+      if (error) throw error;
+      toast({ title: "Rework approved", description: "Customer notified automatically." });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Couldn't approve rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const confirmDeny = async () => {
+    setLoading("deny");
+    try {
+      const reworkId = await getReworkId();
+      const { error } = await supabase.rpc("deny_rework", { _rework_id: reworkId });
+      if (error) throw error;
+      // Staff confirmed they've sent a manual email — stamp the timestamp.
+      await supabase.from("reworks").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", reworkId);
+      toast({ title: "Rework request denied." });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Couldn't deny rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+      setConfirmingDeny(false);
+      setEmailChecked(false);
+    }
+  };
+
+  const btnStyle = (extra: React.CSSProperties): React.CSSProperties => ({
+    padding: "7px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700,
+    cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1,
+    whiteSpace: "nowrap", fontFamily: "inherit", ...extra,
+  });
+
+  if (confirmingDeny) {
+    return (
+      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 9, padding: "12px 14px", maxWidth: 340 }}>
+        <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#9a3412" }}>Deny this rework? This can't be undone.</p>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 13, color: "#374151", lineHeight: 1.45, marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={emailChecked}
+            onChange={e => setEmailChecked(e.target.checked)}
+            style={{ marginTop: 2, flexShrink: 0, accentColor: "#3d1700", width: 15, height: 15 }}
+          />
+          I've sent the customer a manual email explaining this decision
+        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={() => { setConfirmingDeny(false); setEmailChecked(false); }}
+            style={{ fontSize: 13, padding: "6px 14px", borderRadius: 7, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151", fontFamily: "inherit" }}>
+            Cancel
+          </button>
+          <button type="button" disabled={!emailChecked || busy} onClick={confirmDeny}
+            style={{ fontSize: 13, padding: "6px 16px", borderRadius: 7, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 700, fontFamily: "inherit" }}>
+            {loading === "deny" ? "Denying…" : "Confirm — deny rework"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <button type="button" disabled={busy} onClick={approve} style={btnStyle({ backgroundColor: "#dcfce7", color: "#166534" })}>
+        {loading === "approve" ? "Approving…" : "Approve"}
+      </button>
+      <button type="button" disabled={busy} onClick={() => setConfirmingDeny(true)} style={btnStyle({ backgroundColor: "#fee2e2", color: "#991b1b" })}>
+        Deny
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Mark Quote Ready / Need More Info / Decline buttons for
+ * "proposal-awaiting-our-response" orders. The assessmentId is the order's id
+ * when the dashboard surfaces assessment rows using their assessments.id.
+ *
+ * Decline requires an inline checkbox confirmation that staff has sent a
+ * manual explanation email (no transactional email fires for this action).
+ */
+function ProposalActions({ assessmentId, onRefetch }: { assessmentId: string; onRefetch: () => void }) {
+  const [loading, setLoading] = useState<string | null>(null);
+  const [confirmingDecline, setConfirmingDecline] = useState(false);
+  const [emailChecked, setEmailChecked] = useState(false);
+  const busy = loading !== null;
+
+  const markReady = async () => {
+    setLoading("mark_quote_ready");
+    try {
+      const { error } = await supabase.rpc("mark_quote_ready", { _assessment_id: assessmentId });
+      if (error) throw error;
+      toast({ title: "Quote ready — customer notified.", description: "An email has been sent automatically." });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const requestMoreInfo = async () => {
+    setLoading("request_more_info");
+    try {
+      const { error } = await supabase.rpc("request_more_info", { _assessment_id: assessmentId });
+      if (error) throw error;
+      toast({ title: "More info requested.", description: "Remember to contact the customer directly — no automated email is sent for this action." });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const confirmDecline = async () => {
+    setLoading("decline_proposal");
+    try {
+      const { error } = await supabase.rpc("decline_proposal", { _assessment_id: assessmentId });
+      if (error) throw error;
+      // Staff confirmed they've sent a manual email — stamp the timestamp.
+      await supabase.from("assessments").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", assessmentId);
+      toast({ title: "Proposal declined." });
+      onRefetch();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+      setConfirmingDecline(false);
+      setEmailChecked(false);
+    }
+  };
+
+  const btnStyle = (extra: React.CSSProperties): React.CSSProperties => ({
+    padding: "7px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700,
+    cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1,
+    whiteSpace: "nowrap", fontFamily: "inherit", ...extra,
+  });
+
+  if (confirmingDecline) {
+    return (
+      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 9, padding: "12px 14px", maxWidth: 340 }}>
+        <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#9a3412" }}>Decline this proposal? This can't be undone.</p>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 13, color: "#374151", lineHeight: 1.45, marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={emailChecked}
+            onChange={e => setEmailChecked(e.target.checked)}
+            style={{ marginTop: 2, flexShrink: 0, accentColor: "#3d1700", width: 15, height: 15 }}
+          />
+          I've sent the customer a manual email explaining this decision
+        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={() => { setConfirmingDecline(false); setEmailChecked(false); }}
+            style={{ fontSize: 13, padding: "6px 14px", borderRadius: 7, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151", fontFamily: "inherit" }}>
+            Cancel
+          </button>
+          <button type="button" disabled={!emailChecked || busy} onClick={confirmDecline}
+            style={{ fontSize: 13, padding: "6px 16px", borderRadius: 7, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 700, fontFamily: "inherit" }}>
+            {loading === "decline_proposal" ? "Declining…" : "Confirm — decline"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button type="button" disabled={busy} onClick={markReady} style={btnStyle({ backgroundColor: "#dcfce7", color: "#166534" })}>
+        {loading === "mark_quote_ready" ? "Sending…" : "Mark quote ready"}
+      </button>
+      <button type="button" disabled={busy} onClick={requestMoreInfo} style={btnStyle({ backgroundColor: "#fef3c7", color: "#92400e" })}>
+        {loading === "request_more_info" ? "Sending…" : "Request more info"}
+      </button>
+      <button type="button" disabled={busy} onClick={() => setConfirmingDecline(true)} style={btnStyle({ backgroundColor: "#fee2e2", color: "#991b1b" })}>
+        Decline
+      </button>
+    </div>
+  );
+}
+
+function PageHeader({ order, onRefetch }: { order: OrderDetail; onRefetch: () => void }) {
   const navigate = useNavigate();
   const timing = dueTiming(order.actionRequiredBy);
   const quickAction = QUICK_ACTION[order.status];
@@ -1809,6 +2736,28 @@ function PageHeader({ order }: { order: OrderDetail }) {
     }
     if (timing === "today") return <span style={{ color: "#d97706", fontWeight: 600 }}>Due today</span>;
     return <span style={{ color: "#6b7280" }}>Due {fmtDate(order.actionRequiredBy)}</span>;
+  })();
+
+  /** For statuses that have dedicated multi-button action UIs, show those
+   * instead of the single generic quick-action button. */
+  const actionBlock = (() => {
+    if (order.status === "rework-request-pending") {
+      return <ReworkActions orderId={order.id} onRefetch={onRefetch} />;
+    }
+    if (order.status === "proposal-awaiting-our-response") {
+      return <ProposalActions assessmentId={order.id} onRefetch={onRefetch} />;
+    }
+    if (quickAction) {
+      return (
+        <button
+          type="button"
+          style={{ padding: "7px 16px", backgroundColor: "#fee2e2", color: "#991b1b", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+        >
+          {quickAction}
+        </button>
+      );
+    }
+    return null;
   })();
 
   return (
@@ -1830,29 +2779,31 @@ function PageHeader({ order }: { order: OrderDetail }) {
           {order.isRework && (
             <span style={{ backgroundColor: "#fef3c7", color: "#92400e", fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 5 }}>Rework</span>
           )}
+          {/* Prints one tag per pair in a single pass — the common case, so
+              nobody has to click "Print tag" separately for every pair.
+              Reprinting just one still lives on that pair's own card below
+              for when a single tag needs to be redone. Placeholder tag
+              content until Alex signs off on the real design — see
+              printPairTags.ts. */}
+          {order.pairs.length > 0 && (
+            <button
+              type="button"
+              onClick={() => printPairTags(order.orderNumber, order.pairs)}
+              style={{ padding: "5px 12px", backgroundColor: "#fff", color: "#3d1700", border: "1px solid #d9cfc0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              Print all tags{order.pairs.length > 1 ? ` (${order.pairs.length})` : ""}
+            </button>
+          )}
         </div>
 
-        {/* Everything about the current action — who owns it, what it is, and
-         * how overdue it is — lives in one block on the far right, so opening
-         * the details page doesn't scatter that context across the header
-         * the way "Workshop action" / the button / "3 days overdue" used to.
-         * The action button itself is colored the same red used for
-         * "Action required" badges on the dashboard tables, rather than the
-         * page's standard brown CTA color — same visual language for "this
-         * needs doing" everywhere in the admin views. */}
-        {quickAction && (
+        {actionBlock && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
             {actionOwner && (
               <span style={{ fontSize: 10, fontWeight: 700, color: ACTION_OWNER_COLOR[actionOwner], textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 {ACTION_OWNER_LABEL[actionOwner]}
               </span>
             )}
-            <button
-              type="button"
-              style={{ padding: "7px 16px", backgroundColor: "#fee2e2", color: "#991b1b", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
-            >
-              {quickAction}
-            </button>
+            {actionBlock}
             {dueLabel && <span style={{ fontSize: 12 }}>{dueLabel}</span>}
           </div>
         )}
@@ -1927,7 +2878,45 @@ export default function AdminOrderDetail() {
     }, { replace: true });
   };
 
-  const order = ORDER_DETAILS[id] ?? buildFallback(id);
+  const [order, setOrder] = useState<OrderDetail | null>(null);
+  const [orderLoading, setOrderLoading] = useState(true);
+  const [orderError, setOrderError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setOrderLoading(true);
+    setOrderError(null);
+    fetchOrderDetail(id)
+      .then(result => { if (!cancelled) setOrder(result ?? buildFallback(id)); })
+      .catch(err => { if (!cancelled) setOrderError(err instanceof Error ? err.message : String(err)); })
+      .finally(() => { if (!cancelled) setOrderLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
+
+  /** Re-fetch the order after a status-changing RPC so the header reflects
+   * the new status immediately without a full page reload. */
+  const refetchOrder = () => {
+    fetchOrderDetail(id)
+      .then(result => { if (result) setOrder(result); })
+      .catch(err => toast({ title: "Couldn't refresh order", description: err instanceof Error ? err.message : String(err), variant: "destructive" }));
+  };
+
+  if (orderLoading || !order) {
+    if (orderError) {
+      return (
+        <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Public Sans', 'Albert Sans', sans-serif" }}>
+          <div style={{ textAlign: "center", color: "#991b1b", fontSize: 14, maxWidth: 420 }}>
+            Couldn't load this order: {orderError}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Public Sans', 'Albert Sans', sans-serif", color: "#9ca3af", fontSize: 14 }}>
+        Loading order…
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", fontFamily: "'Public Sans', 'Albert Sans', sans-serif" }}>
@@ -1944,7 +2933,7 @@ export default function AdminOrderDetail() {
 
       {/* ── Page content ── */}
       <main style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 20px" }}>
-        <PageHeader order={order} />
+        <PageHeader order={order} onRefetch={refetchOrder} />
 
         <DetailTabBar active={detailView} onSelect={handleTabSelect} />
 
@@ -1953,17 +2942,19 @@ export default function AdminOrderDetail() {
 
           {detailView === "workshop" ? (
             <>
-              {/* Primary column — workshop: one card per pair of shoes (shoe
-                  details, notes, photos, services checklist, intake/outtake),
-                  then internal comments shared across the whole order. */}
+              {/* Primary column — workshop: source proposal ref (if any), then
+                  one card per pair of shoes, then internal comments. */}
               <div>
+                {order.assessmentRef && (
+                  <ProposalReferenceCard assessmentRef={order.assessmentRef} />
+                )}
                 {order.pairs.length === 0 ? (
                   <Card title="Shoe &amp; services">
                     <p style={{ color: "#9ca3af", fontSize: 13, margin: 0 }}>No shoe pairs recorded yet.</p>
                   </Card>
                 ) : (
                   order.pairs.map((pair, i) => (
-                    <PairCard key={pair.id} pair={pair} index={i} total={order.pairs.length} />
+                    <PairCard key={pair.id} pair={pair} index={i} total={order.pairs.length} orderId={order.id} orderNumber={order.orderNumber} />
                   ))
                 )}
                 <CommentsCard order={order} />
@@ -1980,9 +2971,12 @@ export default function AdminOrderDetail() {
                 <CustomerLogisticsCard order={order} expanded />
                 <CommentsCard order={order} />
               </div>
-              {/* Sidebar — condensed repair summary (not critical for dispatch, kept for reference) */}
+              {/* Sidebar — condensed repair summary + proposal ref if applicable */}
               <div>
                 <WorkshopSummaryCard order={order} />
+                {order.assessmentRef && (
+                  <ProposalReferenceCard assessmentRef={order.assessmentRef} compact />
+                )}
               </div>
             </>
           )}

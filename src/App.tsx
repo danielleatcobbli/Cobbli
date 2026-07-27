@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -17,7 +17,7 @@ import ResetPassword from "./pages/ResetPassword";
 import LinkExpired from "./pages/LinkExpired";
 import Account from "./pages/Account";
 import StartRepair from "./pages/StartRepair";
-import StartRepairPick from "./pages/StartRepairPick";
+import PairFlowDialog from "./components/cobbli/PairFlowDialog";
 import AssessmentUpload from "./pages/AssessmentUpload";
 import AssessmentDetails from "./pages/AssessmentDetails";
 import AssessmentDeposit from "./pages/AssessmentDeposit";
@@ -36,6 +36,7 @@ import BlogPost from "./pages/BlogPost";
 import SelectServices from "./pages/SelectServices";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
+import PackageDetail from "./pages/PackageDetail";
 import Bag from "./pages/Bag";
 import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
@@ -51,6 +52,62 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
 
 const queryClient = new QueryClient();
+
+// Pre-launch mode: while true, EVERY route on cobbli.com shows the "coming
+// soon" waitlist page (ComingSoon.tsx) instead of the real site — not just
+// "/", so a visitor can't route around it via a direct link like /services.
+// The real app still builds and deploys normally underneath; it's just
+// gated behind PreviewGate below. To go live for everyone, flip
+// VITE_COMING_SOON to "false" (or remove it) in the hosting environment's
+// build settings and redeploy — no code change needed.
+// Danielle's call, 2026-07-20: needs to be a zero-developer flip once her
+// AWS contractor's engagement ends July 31st, and while gated, only she
+// (via PREVIEW_KEY below) should be able to see the real site.
+const SHOW_COMING_SOON = import.meta.env.VITE_COMING_SOON === "true";
+
+// Private bypass so Danielle alone can preview the real site while
+// VITE_COMING_SOON is on. Visiting any URL with ?preview=<PREVIEW_KEY>
+// unlocks the real site in that browser (saved to localStorage, so it
+// only needs to be done once per device) and scrubs the key back out of
+// the visible URL. This is a client-side convenience gate, not real
+// security — the built JS bundle is public, so anyone determined enough
+// to read it could find the key — but it's enough to keep casual visitors
+// on the waitlist page during the pre-launch window.
+const PREVIEW_KEY = import.meta.env.VITE_PREVIEW_KEY as string | undefined;
+const PREVIEW_STORAGE_KEY = "cobbli_preview_unlocked";
+
+// Staff/auth routes are never gated behind the coming-soon page, even to a
+// visitor who hasn't unlocked preview mode — the gate exists to hide the
+// customer-facing site from the public, not to lock Danielle or staff out of
+// signing in and running the workshop/dispatch tools before public launch.
+// Those routes are already behind their own login (RoleRoute/ProtectedRoute),
+// so this doesn't loosen any real access control.
+const STAFF_ROUTE_PREFIXES = ["/admin", "/signin", "/signup", "/reset-password", "/link-expired", "/account"];
+const isStaffRoute = (pathname: string) => STAFF_ROUTE_PREFIXES.some((p) => pathname.startsWith(p));
+
+const PreviewGate = ({ children }: { children: ReactNode }) => {
+  const location = useLocation();
+  const [unlocked, setUnlocked] = useState(
+    () => typeof window !== "undefined" && window.localStorage.getItem(PREVIEW_STORAGE_KEY) === "1",
+  );
+
+  useEffect(() => {
+    if (unlocked) return;
+    const params = new URLSearchParams(location.search);
+    const key = params.get("preview");
+    if (key && PREVIEW_KEY && key === PREVIEW_KEY) {
+      window.localStorage.setItem(PREVIEW_STORAGE_KEY, "1");
+      setUnlocked(true);
+      params.delete("preview");
+      const rest = params.toString();
+      window.history.replaceState(null, "", location.pathname + (rest ? `?${rest}` : ""));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
+  if (SHOW_COMING_SOON && !unlocked && !isStaffRoute(location.pathname)) return <ComingSoon />;
+  return <>{children}</>;
+};
 
 // Fires a GA4 page_view on every client-side route change. gtag is only defined
 // after cookie consent is accepted (see src/lib/consent.ts), so this no-ops
@@ -81,6 +138,7 @@ const App = () => (
                 <PairsProvider>
                   <RepairFlowProvider>
                     <AssessmentProvider>
+                      <PreviewGate>
                       <Routes>
                         <Route path="/" element={<Index />} />
                         <Route path="/coming-soon" element={<ComingSoon />} />
@@ -91,8 +149,7 @@ const App = () => (
                         <Route path="/signup" element={<SignUp />} />
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/link-expired" element={<LinkExpired />} />
-                        <Route path="/start-repair" element={<Navigate to="/services" replace />} />
-                        <Route path="/start-repair/pick" element={<StartRepairPick />} />
+                        <Route path="/start-repair" element={<StartRepair />} />
                         <Route path="/start-repair/assessment" element={<AssessmentUpload />} />
                         <Route path="/start-repair/assessment/details" element={<AssessmentDetails />} />
                         <Route path="/start-repair/assessment/deposit" element={<AssessmentDeposit />} />
@@ -113,12 +170,23 @@ const App = () => (
                             </ProtectedRoute>
                           }
                         />
+                        {/* Public proposal route — no login required to view.
+                            Looks up the assessment by proposal_token column so
+                            the URL is safe to put in a customer email.
+                            The proposal_token is the access credential; the
+                            customer is prompted to sign in only when they
+                            click "Approve" (so we have a user_id for the order). */}
+                        <Route
+                          path="/proposal/t/:token"
+                          element={<AssessmentProposal />}
+                        />
                         <Route path="/start-repair/services" element={<SelectServices />} />
                         <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
                         <Route path="/services" element={<Services />} />
                         <Route path="/services/zipper-reattachment" element={<Navigate to="/services#zipper" replace />} />
                         <Route path="/start-repair/services/zipper-reattachment" element={<Navigate to="/start-repair/services" replace />} />
                         <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
+                        <Route path="/packages/:slug" element={<PackageDetail />} />
                         <Route path="/bag" element={<Bag />} />
                         <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
                         <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
@@ -191,6 +259,8 @@ const App = () => (
                         />
                         <Route path="*" element={<NotFound />} />
                       </Routes>
+                      </PreviewGate>
+                      <PairFlowDialog />
                       <CookieConsent />
                     </AssessmentProvider>
                   </RepairFlowProvider>

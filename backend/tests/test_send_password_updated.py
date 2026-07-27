@@ -62,7 +62,7 @@ def test_returns_ok_with_profile_first_name(
 
     brevo_mock.assert_awaited_once()
     kwargs = brevo_mock.await_args.kwargs
-    assert kwargs["template_id"] == 7
+    assert kwargs["template_id"] == 8
     assert kwargs["to"] == [{"email": "jane@example.com", "name": "Jane"}]
     assert kwargs["params"] == {"first_name": "Jane"}
     assert kwargs["tags"] == ["password-updated"]

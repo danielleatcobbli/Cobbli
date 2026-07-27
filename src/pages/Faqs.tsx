@@ -82,7 +82,7 @@ const CoverageRequestForm = () => {
           <p className="text-sm font-medium text-green-700">
             Great news — we already service your area!{" "}
             <Link
-              to="/services"
+              to="/start-repair"
               className="underline underline-offset-4"
               onClick={() => trackEvent("start_repair", { source: "faqs" })}
             >

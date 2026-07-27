@@ -41,12 +41,21 @@ type ProposedService = {
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const AssessmentProposal = () => {
-  const { id } = useParams<{ id: string }>();
+  // Supports two URL shapes:
+  //   /start-repair/assessment/proposal/:id  (protected, UUID lookup)
+  //   /proposal/:id                          (protected, UUID lookup)
+  //   /proposal/t/:token                     (public,    proposal_token lookup)
+  const { id: routeId, token } = useParams<{ id?: string; token?: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { user: accountUser, addresses, paymentMethods, addOrder } = useAccount();
   const pricing = usePricingConfig();
   const depositCents = pricing.fee("assessment_deposit_cents");
+
+  // The resolved assessment UUID — set after either lookup path completes.
+  // All mutations (order insert, assessment update) use this rather than the
+  // raw route param so the token-based path works identically to the id path.
+  const [assessmentId, setAssessmentId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,22 +74,35 @@ const AssessmentProposal = () => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!id) {
-        setError("Missing proposal id");
+      if (!routeId && !token) {
+        setError("Missing proposal id or token");
         setLoading(false);
         return;
       }
-      const { data, error: e } = await supabase
-        .from("assessments")
-        .select("id, pairs, status, proposed_services")
-        .eq("id", id)
-        .single();
+
+      // Choose the right column to filter on.
+      const query = token
+        ? supabase
+            .from("assessments")
+            .select("id, pairs, status, proposed_services")
+            .eq("proposal_token", token)
+            .maybeSingle()
+        : supabase
+            .from("assessments")
+            .select("id, pairs, status, proposed_services")
+            .eq("id", routeId!)
+            .maybeSingle();
+
+      const { data, error: e } = await query;
       if (cancelled) return;
       if (e || !data) {
         setError(e?.message || "Proposal not found");
         setLoading(false);
         return;
       }
+
+      setAssessmentId(data.id as string);
+
       const ps = (data.pairs as unknown as Pair[]) ?? [];
       const services = (data.proposed_services as unknown as ProposedService[]) ?? [];
       setPairs(ps);
@@ -108,7 +130,7 @@ const AssessmentProposal = () => {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [routeId, token]);
 
   const essential = useMemo(
     () => proposedServices.filter((s) => s.tier === "essential"),
@@ -127,7 +149,10 @@ const AssessmentProposal = () => {
   const depositHeld = pairs.length * depositCents;
   const totalDueToday = Math.max(0, repairsSubtotal + COURIER_FEE_CENTS - depositHeld);
 
-  const proposalReady = status === "proposal_sent" || status === "booked";
+  // "quote_ready" is the value written by mark_quote_ready; "booked" is set
+  // after the customer approves via this page. "proposal_sent" was the old value
+  // and is no longer written anywhere live.
+  const proposalReady = status === "quote_ready" || status === "booked";
   const alreadyBooked = status === "booked";
 
   const toggleRecommended = (sid: string) =>
@@ -139,7 +164,7 @@ const AssessmentProposal = () => {
     });
 
   const onApprove = async () => {
-    if (!id || !user || submitting || alreadyBooked || !proposalReady) return;
+    if (!assessmentId || !user || submitting || alreadyBooked || !proposalReady) return;
     if (essential.length + recommended.length === 0) return;
     setSubmitting(true);
     try {
@@ -182,6 +207,7 @@ const AssessmentProposal = () => {
           courier_fee_cents: COURIER_FEE_CENTS,
           tax_cents: 0,
           total_cents: repairsSubtotal + COURIER_FEE_CENTS,
+          assessment_id: assessmentId,  // link back to the source proposal for traceability
         })
         .select("id")
         .single();
@@ -212,7 +238,7 @@ const AssessmentProposal = () => {
           pairs: updatedPairs as unknown as never,
           status: "booked",
         })
-        .eq("id", id);
+        .eq("id", assessmentId);
       if (aErr) throw aErr;
 
       // Mirror into local AccountContext so OrderConfirmation can render it.
@@ -269,14 +295,41 @@ const AssessmentProposal = () => {
                 <Link to="/account">Back to account</Link>
               </Button>
             </div>
+          ) : status === "declined" ? (
+            <div className="rounded-xl border border-border p-10 text-center">
+              <p className="text-2xl text-primary mb-2">Proposal declined</p>
+              <p className="text-muted-foreground">
+                Unfortunately we weren't able to take on this repair. You should have received an
+                email from us explaining why. If you have questions, please reach out to{" "}
+                <a href="mailto:support@cobbli.com" className="underline">
+                  support@cobbli.com
+                </a>
+                .
+              </p>
+              <Button asChild variant="outline" className="mt-6">
+                <Link to="/account">Back to account</Link>
+              </Button>
+            </div>
+          ) : status === "needs_more_info" ? (
+            <div className="rounded-xl border border-border p-10 text-center">
+              <p className="text-2xl text-primary mb-2">We need a bit more info</p>
+              <p className="text-muted-foreground">
+                Our cobblers have a question before they can finalize your proposal. Check your
+                inbox — we've sent you an email with the details. Once you reply, we'll have your
+                proposal ready within 1&nbsp;–&nbsp;2 business days.
+              </p>
+              <Button asChild variant="outline" className="mt-6">
+                <Link to="/account">Back to account</Link>
+              </Button>
+            </div>
           ) : !proposalReady ? (
             <div className="rounded-xl border border-border p-10 text-center">
               <p className="text-2xl text-primary mb-2">
                 Your proposal isn't ready yet
               </p>
               <p className="text-muted-foreground">
-                Our cobblers are preparing your proposal and will email you when it's ready
-                (usually within 1 - 2 business days).
+                Our cobblers are reviewing your photos and will email you when the proposal is ready
+                (usually within 1&nbsp;–&nbsp;2 business days).
               </p>
               <Button asChild variant="outline" className="mt-6">
                 <Link to="/account">Back to account</Link>
@@ -462,32 +515,47 @@ const AssessmentProposal = () => {
               </section>
 
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button asChild variant="outline" disabled={submitting}>
-                  <Link to="/account">Back to account</Link>
-                </Button>
-                <Button
-                  type="button"
-                  size="lg"
-                  onClick={onApprove}
-                  disabled={
-                    submitting ||
-                    alreadyBooked ||
-                    essential.length + recommended.length === 0
-                  }
-                  className={
-                    submitting ||
-                    alreadyBooked ||
-                    essential.length + recommended.length === 0
-                      ? "opacity-50 cursor-not-allowed"
-                      : ""
-                  }
-                >
-                  {submitting
-                    ? "Processing payment…"
-                    : alreadyBooked
-                    ? "Already approved"
-                    : `Approve proposal & pay ${formatPrice(totalDueToday)}`}
-                </Button>
+                {user && (
+                  <Button asChild variant="outline" disabled={submitting}>
+                    <Link to="/account">Back to account</Link>
+                  </Button>
+                )}
+                {user ? (
+                  <Button
+                    type="button"
+                    size="lg"
+                    onClick={onApprove}
+                    disabled={
+                      submitting ||
+                      alreadyBooked ||
+                      essential.length + recommended.length === 0
+                    }
+                    className={
+                      submitting ||
+                      alreadyBooked ||
+                      essential.length + recommended.length === 0
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }
+                  >
+                    {submitting
+                      ? "Processing payment…"
+                      : alreadyBooked
+                      ? "Already approved"
+                      : `Approve proposal & pay ${formatPrice(totalDueToday)}`}
+                  </Button>
+                ) : (
+                  // Public token-based route: user not logged in.
+                  // The proposal_token is the access credential; login is still
+                  // required to actually place the order (so we have a user_id
+                  // for the orders row). After login the browser returns here
+                  // via the redirect param and the page re-renders with the user.
+                  <Button asChild size="lg">
+                    <Link to={`/auth?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`}>
+                      Sign in to approve
+                    </Link>
+                  </Button>
+                )}
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
                 Payment processing is mocked for now — no card is charged. Questions? Email{" "}

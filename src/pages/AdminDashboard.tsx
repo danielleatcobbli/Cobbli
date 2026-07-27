@@ -15,17 +15,31 @@
  * the real `staff_team` field drives this instead.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ChevronDown } from "lucide-react";
+import { Search, ChevronDown, Star, Download } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import {
+  REQUIRED_PHOTO_ANGLES,
+  type RequiredPhotoAngle,
+  type PhotoSet,
+} from "./AdminOrderDetail";
+import { fetchOrders, fetchGalleryItems, type GalleryItem } from "./adminData";
+import BeforeAfterSlider from "@/components/cobbli/BeforeAfterSlider";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-type OrderStatus =
+export type OrderStatus =
+  // Standard checkout / proposal-approval path
+  | "placed"
+  | "pending_payment"
+  // Proposal / assessment path
   | "proposal-awaiting-our-response"
   | "proposal-awaiting-customer-response"
+  // Logistics
   | "pickup-scheduled"
   | "picked-up"
   | "at-the-workshop"
@@ -34,13 +48,14 @@ type OrderStatus =
   | "return-scheduled"
   | "returned"
   | "completed"
+  // Rework sub-flow
   | "rework-request-pending"
   | "rework-request-approved"
   | "rework-request-denied";
 
-type ScheduleSlot = { date: string; timeLabel: string };
+export type ScheduleSlot = { date: string; timeLabel: string };
 
-type Order = {
+export type Order = {
   id: string;
   orderNumber: string;
   status: OrderStatus;
@@ -62,7 +77,7 @@ type Order = {
   notes?: string;
 };
 
-type TopView = "workshop" | "dispatch" | "kpis";
+type TopView = "workshop" | "dispatch" | "photos" | "kpis";
 type WorkshopTab = "action-required" | "all-orders" | "proposals" | "awaiting-repair" | "in-repair" | "reworks" | "completed";
 type DispatchTab = "action-required" | "today-schedule" | "tomorrow-schedule" | "all-scheduled" | "all-orders";
 
@@ -80,6 +95,8 @@ const PERSPECTIVE_LABEL: Record<Perspective, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
+  "placed":                              { label: "Order placed",                          bg: "#dbeafe", fg: "#1e40af" },
+  "pending_payment":                     { label: "Pending payment",                       bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-our-response":      { label: "Proposal — awaiting our response",     bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-customer-response": { label: "Proposal — awaiting customer response", bg: "#dcfce7", fg: "#166534" },
   "pickup-scheduled":                    { label: "Pickup scheduled",                      bg: "#dbeafe", fg: "#1e40af" },
@@ -121,6 +138,10 @@ const TODAY = "2026-07-08";
 const TOMORROW = "2026-07-09";
 const CURRENT_USER = "DO";
 
+// No longer used to render the page (see fetchOrders() in adminData.ts,
+// wired up in the AdminDashboard component below) — kept only as a
+// reference for the shape/dummy-data conventions the rest of this file's
+// components still document against.
 const ORDERS: Order[] = [
   {
     id: "1",
@@ -459,6 +480,260 @@ function ActionBtn({ label }: { label: string }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RPC action buttons — reworks
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Shown in the Action column for any order with status "rework-request-pending".
+ *
+ * Approve: calls approve_rework RPC (triggers a transactional email automatically).
+ * Deny: opens an inline confirmation panel requiring staff to check a box
+ *   confirming they've sent a manual explanation email to the customer.
+ *   On confirm: calls deny_rework RPC AND stamps reworks.manual_email_sent_at.
+ *
+ * RPCs expect reworks.id (not orders.id), so we do a lightweight lookup on
+ * click — at most one open rework per order, so .limit(1) is safe.
+ */
+function ReworkActionButtons({ orderId, refetch }: { orderId: string; refetch?: () => void }) {
+  const [loading, setLoading] = useState<"approve" | "deny" | null>(null);
+  const [confirmingDeny, setConfirmingDeny] = useState(false);
+  const [emailChecked, setEmailChecked] = useState(false);
+  const busy = loading !== null;
+
+  const getReworkId = async () => {
+    const { data, error } = await supabase
+      .from("reworks")
+      .select("id")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) throw error ?? new Error("Rework record not found for this order.");
+    return data.id as string;
+  };
+
+  const approve = async () => {
+    setLoading("approve");
+    try {
+      const reworkId = await getReworkId();
+      const { error } = await supabase.rpc("approve_rework", { _rework_id: reworkId });
+      if (error) throw error;
+      toast({ title: "Rework approved", description: "Customer notified automatically." });
+      refetch?.();
+    } catch (err) {
+      toast({ title: "Couldn't approve rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const confirmDeny = async () => {
+    setLoading("deny");
+    try {
+      const reworkId = await getReworkId();
+      const { error } = await supabase.rpc("deny_rework", { _rework_id: reworkId });
+      if (error) throw error;
+      // Staff confirmed they sent the manual email — stamp the timestamp.
+      await supabase.from("reworks").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", reworkId);
+      toast({ title: "Rework request denied." });
+      refetch?.();
+    } catch (err) {
+      toast({ title: "Couldn't deny rework", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+      setConfirmingDeny(false);
+      setEmailChecked(false);
+    }
+  };
+
+  if (confirmingDeny) {
+    return (
+      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 7, padding: "8px 10px", maxWidth: 280 }}>
+        <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, color: "#9a3412" }}>Deny this rework? This can't be undone.</p>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer", fontSize: 11, color: "#374151", lineHeight: 1.4, marginBottom: 10 }}>
+          <input
+            type="checkbox"
+            checked={emailChecked}
+            onChange={e => setEmailChecked(e.target.checked)}
+            style={{ marginTop: 1, flexShrink: 0, accentColor: "#3d1700" }}
+          />
+          I've sent the customer a manual email explaining this decision
+        </label>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button type="button" onClick={() => { setConfirmingDeny(false); setEmailChecked(false); }}
+            style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151" }}>
+            Cancel
+          </button>
+          <button type="button" disabled={!emailChecked || busy} onClick={confirmDeny}
+            style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 600 }}>
+            {loading === "deny" ? "Denying…" : "Confirm — deny"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const btnBase: React.CSSProperties = { border: "none", borderRadius: 6, padding: "4px 9px", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1 };
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      <button type="button" disabled={busy} onClick={approve} style={{ ...btnBase, backgroundColor: "#dcfce7", color: "#166534" }}>
+        {loading === "approve" ? "…" : "Approve"}
+      </button>
+      <button type="button" disabled={busy} onClick={() => setConfirmingDeny(true)} style={{ ...btnBase, backgroundColor: "#fee2e2", color: "#991b1b" }}>
+        Deny
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RPC action buttons — proposals / quote assessments
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Shown for "proposal-awaiting-our-response" orders.
+ *
+ * Mark ready: calls mark_quote_ready RPC (triggers transactional email automatically).
+ * Need info: calls request_more_info RPC, then flags the row as needing a
+ *   manual reach-out via onNeedsManualReachOut() — the parent swaps the action
+ *   cell to a "Manual reach out required" tag + "Mark emailed" button.
+ * Decline: opens an inline confirmation panel requiring staff to check a box
+ *   confirming they've sent a manual explanation email. On confirm: calls
+ *   decline_proposal RPC AND stamps assessments.manual_email_sent_at.
+ *
+ * assessmentId — the _assessment_id arg passed to every proposal RPC.
+ */
+function ProposalActionButtons({ assessmentId, refetch, onNeedsManualReachOut }: {
+  assessmentId: string;
+  refetch?: () => void;
+  onNeedsManualReachOut?: () => void;
+}) {
+  const [loading, setLoading] = useState<string | null>(null);
+  const [confirmingDecline, setConfirmingDecline] = useState(false);
+  const [emailChecked, setEmailChecked] = useState(false);
+  const busy = loading !== null;
+
+  const markReady = async () => {
+    setLoading("mark_quote_ready");
+    try {
+      const { error } = await supabase.rpc("mark_quote_ready", { _assessment_id: assessmentId });
+      if (error) throw error;
+      toast({ title: "Quote ready — customer notified.", description: "An email has been sent automatically." });
+      refetch?.();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const requestMoreInfo = async () => {
+    setLoading("request_more_info");
+    try {
+      const { error } = await supabase.rpc("request_more_info", { _assessment_id: assessmentId });
+      if (error) throw error;
+      toast({ title: "More info requested." });
+      refetch?.();
+      // Flag the row as needing a manual reach-out — no transactional email
+      // fires for this action, so the dashboard surfaces it as an open task.
+      onNeedsManualReachOut?.();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const confirmDecline = async () => {
+    setLoading("decline_proposal");
+    try {
+      const { error } = await supabase.rpc("decline_proposal", { _assessment_id: assessmentId });
+      if (error) throw error;
+      // Staff confirmed they sent the manual email — stamp the timestamp.
+      await supabase.from("assessments").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", assessmentId);
+      toast({ title: "Proposal declined." });
+      refetch?.();
+    } catch (err) {
+      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setLoading(null);
+      setConfirmingDecline(false);
+      setEmailChecked(false);
+    }
+  };
+
+  if (confirmingDecline) {
+    return (
+      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 7, padding: "8px 10px", maxWidth: 280 }}>
+        <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, color: "#9a3412" }}>Decline this proposal? This can't be undone.</p>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer", fontSize: 11, color: "#374151", lineHeight: 1.4, marginBottom: 10 }}>
+          <input
+            type="checkbox"
+            checked={emailChecked}
+            onChange={e => setEmailChecked(e.target.checked)}
+            style={{ marginTop: 1, flexShrink: 0, accentColor: "#3d1700" }}
+          />
+          I've sent the customer a manual email explaining this decision
+        </label>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button type="button" onClick={() => { setConfirmingDecline(false); setEmailChecked(false); }}
+            style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151" }}>
+            Cancel
+          </button>
+          <button type="button" disabled={!emailChecked || busy} onClick={confirmDecline}
+            style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 600 }}>
+            {loading === "decline_proposal" ? "Declining…" : "Confirm — decline"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const btnBase: React.CSSProperties = { border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1 };
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      <button type="button" disabled={busy} onClick={markReady} style={{ ...btnBase, backgroundColor: "#dcfce7", color: "#166534" }}>
+        {loading === "mark_quote_ready" ? "…" : "Mark ready"}
+      </button>
+      <button type="button" disabled={busy} onClick={requestMoreInfo} style={{ ...btnBase, backgroundColor: "#fef3c7", color: "#92400e" }}>
+        {loading === "request_more_info" ? "…" : "Need info"}
+      </button>
+      <button type="button" disabled={busy} onClick={() => setConfirmingDecline(true)} style={{ ...btnBase, backgroundColor: "#fee2e2", color: "#991b1b" }}>
+        Decline
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "Manual reach out required" tag + Mark emailed button
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Replaces the ProposalActionButtons cell after request_more_info succeeds.
+ * Styled to match the ACTION_OWNER_LABEL / ACTION_OWNER_COLOR visual language.
+ * onMarkEmailed: stamps assessments.manual_email_sent_at and clears the tag.
+ */
+function ManualReachOutTag({ onMarkEmailed }: { onMarkEmailed: () => void }) {
+  const [marking, setMarking] = useState(false);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <span style={{ backgroundColor: "#fef3c7", color: "#92400e", fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+        Action required: Manual reach out
+      </span>
+      <button
+        type="button"
+        disabled={marking}
+        onClick={() => { setMarking(true); onMarkEmailed(); }}
+        style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, border: "1px solid #e0d8cc", backgroundColor: "#fff", color: "#374151", cursor: marking ? "not-allowed" : "pointer", opacity: marking ? 0.55 : 1, whiteSpace: "nowrap" }}
+      >
+        {marking ? "…" : "Mark emailed"}
+      </button>
+    </div>
+  );
+}
+
 function DueCell({ dateStr }: { dateStr: string | null }) {
   const t = dueTiming(dateStr);
   if (!t || !dateStr) return <span style={{ color: "#d1d5db" }}>—</span>;
@@ -637,7 +912,15 @@ function EmptyState({ message = "No orders match the current filters." }: { mess
 const TH: React.CSSProperties = { padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" };
 const TD: React.CSSProperties = { padding: "11px 14px", verticalAlign: "middle" };
 
-function WorkshopTable({ orders, actionFn = workshopAction, onRowClick }: { orders: Order[]; actionFn?: (s: OrderStatus) => string | null; onRowClick?: (id: string) => void }) {
+function WorkshopTable({ orders, actionFn = workshopAction, onRowClick, refetch, pendingManualReachOut, onNeedsManualReachOut, onMarkEmailed }: {
+  orders: Order[];
+  actionFn?: (s: OrderStatus) => string | null;
+  onRowClick?: (id: string) => void;
+  refetch?: () => void;
+  pendingManualReachOut?: Set<string>;
+  onNeedsManualReachOut?: (orderId: string) => void;
+  onMarkEmailed?: (orderId: string) => void;
+}) {
   if (orders.length === 0) return <EmptyState />;
   return (
     <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, overflow: "hidden" }}>
@@ -678,7 +961,15 @@ function WorkshopTable({ orders, actionFn = workshopAction, onRowClick }: { orde
                 <td style={{ ...TD, color: "#6b7280", fontSize: 12 }}>{fmtDate(o.datePlaced)}</td>
                 <td style={TD}><DueCell dateStr={o.actionRequiredBy} /></td>
                 <td style={TD} onClick={e => e.stopPropagation()}>
-                  {action ? <ActionBtn label={action} /> : <span style={{ color: "#d1d5db" }}>—</span>}
+                  {pendingManualReachOut?.has(o.id)
+                    ? <ManualReachOutTag onMarkEmailed={() => onMarkEmailed?.(o.id)} />
+                    : o.status === "rework-request-pending"
+                    ? <ReworkActionButtons orderId={o.id} refetch={refetch} />
+                    : o.status === "proposal-awaiting-our-response"
+                    ? <ProposalActionButtons assessmentId={o.id} refetch={refetch} onNeedsManualReachOut={() => onNeedsManualReachOut?.(o.id)} />
+                    : action
+                    ? <ActionBtn label={action} />
+                    : <span style={{ color: "#d1d5db" }}>—</span>}
                 </td>
                 <td style={{ ...TD, color: "#9ca3af", fontSize: 12, fontWeight: 500 }}>{o.workshopAssignee}</td>
               </tr>
@@ -694,7 +985,14 @@ function WorkshopTable({ orders, actionFn = workshopAction, onRowClick }: { orde
 // Workshop view
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WorkshopView({ orders, perspective }: { orders: Order[]; perspective: Perspective }) {
+function WorkshopView({ orders, perspective, refetch, pendingManualReachOut = new Set<string>(), onNeedsManualReachOut, onMarkEmailed }: {
+  orders: Order[];
+  perspective: Perspective;
+  refetch?: () => void;
+  pendingManualReachOut?: Set<string>;
+  onNeedsManualReachOut?: (id: string) => void;
+  onMarkEmailed?: (id: string) => void;
+}) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<WorkshopTab>("action-required");
 
@@ -721,8 +1019,15 @@ function WorkshopView({ orders, perspective }: { orders: Order[]; perspective: P
   // Orders scoped to the selected tab
   const tabOrders = useMemo((): Order[] => {
     switch (tab) {
-      case "action-required":
-        return workshopActionOrdersFor(orders, perspective);
+      case "action-required": {
+        const base = workshopActionOrdersFor(orders, perspective);
+        if (pendingManualReachOut.size === 0) return base;
+        const baseIds = new Set(base.map(o => o.id));
+        // Orders flagged as needing a manual reach-out appear in Action required
+        // even if their status alone wouldn't put them there.
+        const extras = orders.filter(o => pendingManualReachOut.has(o.id) && !baseIds.has(o.id));
+        return [...base, ...extras];
+      }
       case "awaiting-repair":
         return orders.filter(o => o.status === "at-the-workshop");
       case "in-repair":
@@ -751,7 +1056,9 @@ function WorkshopView({ orders, perspective }: { orders: Order[]; perspective: P
     return sortByDue(r);
   }, [tabOrders, filters]);
 
-  const actionCount = workshopActionOrdersFor(orders, perspective).length;
+  // Include manual-reach-out tagged orders that aren't already in the base action set.
+  const actionCount = workshopActionOrdersFor(orders, perspective).length
+    + orders.filter(o => pendingManualReachOut.has(o.id) && workshopAction(o.status) === null).length;
   // Badges count only the actionable subset — Proposals/Reworks tabs show
   // every sub-status once opened, but the badge mirrors "how many need my
   // response right now" (same totals-vs-our-turn split as the summary tiles).
@@ -786,7 +1093,14 @@ function WorkshopView({ orders, perspective }: { orders: Order[]; perspective: P
         onChange={patch => setFilters(f => ({ ...f, ...patch }))}
         statusOptions={statusOptionsByTab[tab]}
       />
-      <WorkshopTable orders={displayed} onRowClick={id => navigate(`/admin/order/${id}?view=workshop`)} />
+      <WorkshopTable
+        orders={displayed}
+        onRowClick={id => navigate(`/admin/order/${id}?view=workshop`)}
+        refetch={refetch}
+        pendingManualReachOut={pendingManualReachOut}
+        onNeedsManualReachOut={onNeedsManualReachOut}
+        onMarkEmailed={onMarkEmailed}
+      />
     </div>
   );
 }
@@ -997,7 +1311,7 @@ function AllScheduledTable({ orders, onRowClick }: { orders: Order[]; onRowClick
 // Dispatch view
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DispatchView({ orders, perspective }: { orders: Order[]; perspective: Perspective }) {
+function DispatchView({ orders, perspective, refetch }: { orders: Order[]; perspective: Perspective; refetch?: () => void }) {
   const navigate = useNavigate();
   const goToOrder = (id: string) => navigate(`/admin/order/${id}?view=dispatch`);
   const [tab, setTab] = useState<DispatchTab>("action-required");
@@ -1106,8 +1420,210 @@ function DispatchView({ orders, perspective }: { orders: Order[]; perspective: P
             statusOptions={statusOptionsByTab["all-orders"]}
           />
           {/* Reuse WorkshopTable with dispatch assignee filtering already applied */}
-          <WorkshopTable orders={allOrdersScoped} onRowClick={goToOrder} />
+          <WorkshopTable orders={allOrdersScoped} onRowClick={goToOrder} refetch={refetch} />
         </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Photos view — before/after gallery for pulling social media content
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One completed pair (both intake and outtake photo sets finished) that's
+ * eligible to show up in the gallery — a pair with no "after" photos yet has
+ * nothing to compare, so it never appears here. Admin-only, same as KPIs:
+ * curating marketing content isn't a Workshop/Dispatch operational task. */
+/** Strips the parenthetical detail off a photo-angle label for compact pill
+ * display — e.g. "Sole (bottom, straight-on)" → "Sole". */
+function shortAngleLabel(label: string): string {
+  return label.replace(/\s*\(.*\)/, "");
+}
+
+function ServicePill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: "6px 12px",
+        borderRadius: 9999,
+        fontSize: 12,
+        fontWeight: 500,
+        border: active ? "1px solid #3d1700" : "1px solid #e0d8cc",
+        backgroundColor: active ? "#3d1700" : "#fff",
+        color: active ? "#fff" : "#6b7280",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function AnglePill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: "5px 10px",
+        borderRadius: 6,
+        fontSize: 11,
+        fontWeight: 500,
+        border: active ? "1px solid #d97706" : "1px solid #e0d8cc",
+        backgroundColor: active ? "#fef3c7" : "#fff",
+        color: active ? "#92400e" : "#9ca3af",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** A single before/after card — drag anywhere on the photo to compare. Each
+ * card owns its own slider position; the angle shown is shared across every
+ * card via the parent's selector, so switching to "Back of shoe" compares
+ * that angle across every transformation at once. */
+function GalleryCard({
+  item,
+  angle,
+  featured,
+  onToggleFeatured,
+  onOpenOrder,
+}: {
+  item: GalleryItem;
+  angle: RequiredPhotoAngle;
+  featured: boolean;
+  onToggleFeatured: () => void;
+  onOpenOrder: () => void;
+}) {
+  const before = item.before.angles[angle];
+  const after = item.after.angles[angle];
+  if (!before || !after) return null; // guarded by photoSetComplete at build time — defensive only
+
+  return (
+    <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, padding: 10 }}>
+      <BeforeAfterSlider beforeUrl={before.previewUrl} afterUrl={after.previewUrl} aspectRatio="4 / 3" />
+
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginTop: 8, gap: 8 }}>
+        <div style={{ cursor: "pointer" }} onClick={onOpenOrder}>
+          <p style={{ fontWeight: 500, fontSize: 13, margin: 0, color: "#1f2937" }}>{item.shoeBrand} {item.shoeType}</p>
+          <p style={{ fontSize: 11, color: "#9ca3af", margin: 0, marginTop: 2 }}>{item.shoeColorMaterial} · {item.orderNumber}</p>
+        </div>
+        <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={onToggleFeatured}
+            title={featured ? "Unmark as featured" : "Mark as featured for social"}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}
+          >
+            <Star size={15} fill={featured ? "#fdb600" : "none"} color={featured ? "#fdb600" : "#9ca3af"} />
+          </button>
+          <a
+            href={after.previewUrl}
+            download={after.fileName}
+            title="Download after photo"
+            style={{ padding: 4, display: "flex", color: "#9ca3af" }}
+          >
+            <Download size={15} />
+          </a>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
+        {item.serviceNames.map(name => (
+          <span key={name} style={{ fontSize: 10, fontWeight: 500, padding: "2px 8px", borderRadius: 4, backgroundColor: "#faece7", color: "#993c1d" }}>
+            {name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PhotosView() {
+  const navigate = useNavigate();
+  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchGalleryItems()
+      .then(rows => { if (!cancelled) setItems(rows); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const serviceOptions = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(i => i.serviceNames.forEach(n => set.add(n)));
+    return Array.from(set).sort();
+  }, [items]);
+
+  const [serviceFilter, setServiceFilter] = useState<string>("all");
+  const [angle, setAngle] = useState<RequiredPhotoAngle>("topDown");
+  const [featured, setFeatured] = useState<Set<string>>(new Set());
+
+  const toggleFeatured = (pairId: string) => {
+    setFeatured(prev => {
+      const next = new Set(prev);
+      if (next.has(pairId)) next.delete(pairId);
+      else next.add(pairId);
+      return next;
+    });
+  };
+
+  const filtered = serviceFilter === "all" ? items : items.filter(i => i.serviceNames.includes(serviceFilter));
+
+  if (loading) return <EmptyState message="Loading photos…" />;
+  if (error) return <EmptyState message={`Couldn't load photos: ${error}`} />;
+
+  if (items.length === 0) {
+    return <EmptyState message="No completed pairs yet — before-and-after photos show up here once both intake and outtake photo sets are finished." />;
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, lineHeight: 1.6, maxWidth: 640 }}>
+        Pulled automatically from completed intake and outtake photos — only pairs with a full before and after set show up here. Drag any photo to compare, switch the angle to find the best shot, and star the ones worth posting.
+      </p>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <ServicePill label="All services" active={serviceFilter === "all"} onClick={() => setServiceFilter("all")} />
+        {serviceOptions.map(s => (
+          <ServicePill key={s} label={s} active={serviceFilter === s} onClick={() => setServiceFilter(s)} />
+        ))}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Angle</span>
+        {REQUIRED_PHOTO_ANGLES.map(a => (
+          <AnglePill key={a.key} label={shortAngleLabel(a.label)} active={angle === a.key} onClick={() => setAngle(a.key)} />
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState message="No transformations match this filter." />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+          {filtered.map(item => (
+            <GalleryCard
+              key={item.pairId}
+              item={item}
+              angle={angle}
+              featured={featured.has(item.pairId)}
+              onToggleFeatured={() => toggleFeatured(item.pairId)}
+              onOpenOrder={() => navigate(`/admin/order/${item.orderId}`)}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -1304,10 +1820,67 @@ export default function AdminDashboard() {
   const [perspective, setPerspective] = useState<Perspective>("admin");
   const [view, setView] = useState<TopView>("workshop");
 
+  // Real data (Section 12 developer requirement) — replaces the hardcoded
+  // ORDERS array above, which is now unused dead weight kept only as a
+  // reference for the shape/dummy-data conventions the rest of this file
+  // still follows. Every downstream view (Workshop/Dispatch/Photos/
+  // SummaryStrip) consumes the exact same Order[] shape either way, so
+  // nothing else in this file needed to change.
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+
+  const loadOrders = useCallback(() => {
+    fetchOrders()
+      .then(rows => setOrders(rows))
+      .catch(err => toast({ title: "Couldn't refresh orders", description: err instanceof Error ? err.message : String(err), variant: "destructive" }));
+  }, []);
+
+  // Tracks order IDs that need a manual reach-out email (after request_more_info).
+  // Lives here (top level) so WorkshopView's "Action required" tab badge and
+  // row filtering both see the same Set. Reset naturally on a full page reload;
+  // the DB timestamp (manual_email_sent_at) persists independently.
+  const [pendingManualReachOut, setPendingManualReachOut] = useState<Set<string>>(new Set());
+
+  const addManualReachOut = useCallback(
+    (id: string) => setPendingManualReachOut(prev => new Set([...prev, id])),
+    [],
+  );
+  const removeManualReachOut = useCallback(
+    (id: string) => setPendingManualReachOut(prev => { const n = new Set(prev); n.delete(id); return n; }),
+    [],
+  );
+
+  /** Called when "Mark emailed" is clicked — stamps assessments.manual_email_sent_at,
+   * clears the row from the manual-reach-out queue, and re-syncs the order list. */
+  const handleMarkEmailed = useCallback(async (orderId: string) => {
+    try {
+      const { error } = await supabase
+        .from("assessments")
+        .update({ manual_email_sent_at: new Date().toISOString() })
+        .eq("id", orderId);
+      if (error) throw error;
+      removeManualReachOut(orderId);
+      loadOrders();
+    } catch (err) {
+      toast({ title: "Couldn't record email sent", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    }
+  }, [removeManualReachOut, loadOrders]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setOrdersLoading(true);
+    fetchOrders()
+      .then(rows => { if (!cancelled) setOrders(rows); })
+      .catch(err => { if (!cancelled) setOrdersError(err instanceof Error ? err.message : String(err)); })
+      .finally(() => { if (!cancelled) setOrdersLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   const visibleTopTabs: [TopView, string][] = useMemo(() => {
     if (perspective === "workshop-staff") return [["workshop", "Workshop"]];
     if (perspective === "dispatch-staff") return [["dispatch", "Dispatch"]];
-    return [["workshop", "Workshop"], ["dispatch", "Dispatch"], ["kpis", "KPIs"]];
+    return [["workshop", "Workshop"], ["dispatch", "Dispatch"], ["photos", "Photos"], ["kpis", "KPIs"]];
   }, [perspective]);
 
   // Land on (and snap back to) whichever tab the current perspective is
@@ -1318,9 +1891,27 @@ export default function AdminDashboard() {
     if (!allowed.includes(view)) setView(allowed[0]);
   }, [visibleTopTabs, view]);
 
-  const workshopActionOrders = useMemo(() => workshopActionOrdersFor(ORDERS, perspective), [perspective]);
-  const dispatchActionOrders = useMemo(() => dispatchActionOrdersFor(ORDERS, perspective), [perspective]);
+  const workshopActionOrders = useMemo(() => workshopActionOrdersFor(orders, perspective), [orders, perspective]);
+  const dispatchActionOrders = useMemo(() => dispatchActionOrdersFor(orders, perspective), [orders, perspective]);
   const activeActionOrders = view === "dispatch" ? dispatchActionOrders : workshopActionOrders;
+
+  if (ordersLoading) {
+    return (
+      <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Public Sans', 'Albert Sans', sans-serif", color: "#9ca3af", fontSize: 14 }}>
+        Loading orders…
+      </div>
+    );
+  }
+
+  if (ordersError) {
+    return (
+      <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Public Sans', 'Albert Sans', sans-serif" }}>
+        <div style={{ textAlign: "center", color: "#991b1b", fontSize: 14, maxWidth: 420 }}>
+          Couldn't load orders: {ordersError}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", fontFamily: "'Public Sans', 'Albert Sans', sans-serif" }}>
@@ -1376,12 +1967,18 @@ export default function AdminDashboard() {
 
       {/* ── Main content ── */}
       <main style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 20px" }}>
-        <SummaryStrip view={view} orders={ORDERS} activeActionOrders={activeActionOrders} />
+        {/* Operational tiles don't apply to the Photos tab — nothing there to
+            summarize (overdue tasks, escalations, etc. are workshop/dispatch
+            concepts, not a marketing-content concern). */}
+        {view !== "photos" && (
+          <SummaryStrip view={view} orders={orders} activeActionOrders={activeActionOrders} />
+        )}
 
         {/* View panel */}
         <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, padding: "20px 20px 24px" }}>
-          {view === "workshop" && <WorkshopView orders={ORDERS} perspective={perspective} />}
-          {view === "dispatch" && <DispatchView orders={ORDERS} perspective={perspective} />}
+          {view === "workshop" && <WorkshopView orders={orders} perspective={perspective} refetch={loadOrders} pendingManualReachOut={pendingManualReachOut} onNeedsManualReachOut={addManualReachOut} onMarkEmailed={handleMarkEmailed} />}
+          {view === "dispatch" && <DispatchView orders={orders} perspective={perspective} refetch={loadOrders} />}
+          {view === "photos"   && <PhotosView />}
           {view === "kpis"     && <KPIsView />}
         </div>
       </main>

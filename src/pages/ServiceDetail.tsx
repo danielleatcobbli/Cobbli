@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronLeft, ChevronUp } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import StepIndicator from "@/components/cobbli/StepIndicator";
@@ -10,8 +10,11 @@ import { Button } from "@/components/ui/button";
 import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
 import SoleMaterialDialog, { SOLE_MATERIAL_SLUGS } from "@/components/cobbli/SoleMaterialDialog";
 import ComingSoonVoteButton from "@/components/cobbli/ComingSoonVoteButton";
+import UnsupportedBrandsAccordion from "@/components/cobbli/UnsupportedBrandsAccordion";
 import { useService } from "@/hooks/useServices";
 import { useRepairFlow } from "@/context/RepairFlowContext";
+import type { BagService } from "@/context/BagContext";
+import { minPrice } from "@/types/service";
 import { trackEvent } from "@/lib/analytics";
 
 type Mode = "flow" | "standalone";
@@ -84,7 +87,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
   const [brandsOpen, setBrandsOpen] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const [soleOpen, setSoleOpen] = useState(false);
-  const { setPaintConsent, setSoleMaterial } = useRepairFlow();
+  const { setPaintConsent, setSoleMaterial, openPairFlow } = useRepairFlow();
   const [detailSearchParams] = useSearchParams();
 
   usePageMeta({
@@ -126,7 +129,21 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
     }
   };
 
-  const goToPick = () => navigate(`/start-repair/pick?service=${encodeURIComponent(service.slug)}`);
+  // Opens the shared pair popup (PairFlowDialog, mounted in App.tsx) with
+  // this one service, instead of navigating to a separate page — Danielle's
+  // call (2026-07-15): the describe-pair/anything-else/added-to-bag flow
+  // should overlay wherever the customer already is, not its own route.
+  const goToPick = (overrides?: { paintConsent?: "yes" | "no"; soleMaterial?: "Leather" | "Rubber" }) => {
+    const item: BagService = {
+      id: service.slug,
+      name: service.name,
+      price: minPrice(service) * 100,
+      ...(overrides?.paintConsent ? { paintConsent: overrides.paintConsent } : {}),
+      ...(overrides?.soleMaterial ? { soleMaterial: overrides.soleMaterial } : {}),
+    };
+    trackEvent("service_added", { service_slug: service.slug, source: "service_detail" });
+    openPairFlow([item]);
+  };
 
   const onStart = () => {
     trackEvent("start_repair", { source: "service_detail", service_slug: service.slug });
@@ -269,7 +286,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
         confirmLabel="Start a repair"
         onConfirm={(consent) => {
           setPaintConsent(service.slug, consent);
-          goToPick();
+          goToPick({ paintConsent: consent });
         }}
       />
 
@@ -279,51 +296,11 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
         confirmLabel="Start a repair"
         onConfirm={(material) => {
           setSoleMaterial(service.slug, material);
-          goToPick();
+          goToPick({ soleMaterial: material });
         }}
       />
     </main>
   );
 };
-
-// ---------------------------------------------------------------------------
-// Unsupported brands accordion
-// ---------------------------------------------------------------------------
-
-type AccordionProps = {
-  brands: string[];
-  open: boolean;
-  onToggle: () => void;
-};
-
-const UnsupportedBrandsAccordion = ({ brands, open, onToggle }: AccordionProps) => (
-  <div>
-    <button
-      type="button"
-      onClick={onToggle}
-      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-    >
-      Brands not currently supported
-      {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-    </button>
-    {open && (
-      <div className="mt-2 space-y-2">
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          {brands.join(", ")}.
-        </p>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          These brands use signature materials, finishes, and techniques that require specialist
-          handling and sourcing to repair correctly. We're working toward supporting them.
-        </p>
-        <button
-          type="button"
-          className="text-xs text-muted-foreground underline hover:text-primary"
-        >
-          👍 Vote to add support for these brands
-        </button>
-      </div>
-    )}
-  </div>
-);
 
 export default ServiceDetail;

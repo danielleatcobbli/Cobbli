@@ -9,7 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { trackEvent } from "@/lib/analytics";
 
 const navLinks = [
-  { label: "Start a Repair", to: "/services" },
+  { label: "Start a Repair", to: "/start-repair" },
   { label: "Services", to: "/services" },
   { label: "How It Works", to: "/#how-it-works" },
   { label: "FAQs", to: "/faqs" },
