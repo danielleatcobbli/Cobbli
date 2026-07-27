@@ -13,6 +13,8 @@ import ComingSoonVoteButton from "@/components/cobbli/ComingSoonVoteButton";
 import UnsupportedBrandsAccordion from "@/components/cobbli/UnsupportedBrandsAccordion";
 import { useService } from "@/hooks/useServices";
 import { useRepairFlow } from "@/context/RepairFlowContext";
+import type { BagService } from "@/context/BagContext";
+import { minPrice } from "@/types/service";
 import { trackEvent } from "@/lib/analytics";
 
 type Mode = "flow" | "standalone";
@@ -85,7 +87,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
   const [brandsOpen, setBrandsOpen] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const [soleOpen, setSoleOpen] = useState(false);
-  const { setPaintConsent, setSoleMaterial } = useRepairFlow();
+  const { setPaintConsent, setSoleMaterial, openPairFlow } = useRepairFlow();
   const [detailSearchParams] = useSearchParams();
 
   usePageMeta({
@@ -127,7 +129,21 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
     }
   };
 
-  const goToPick = () => navigate(`/start-repair/pick?service=${encodeURIComponent(service.slug)}`);
+  // Opens the shared pair popup (PairFlowDialog, mounted in App.tsx) with
+  // this one service, instead of navigating to a separate page — Danielle's
+  // call (2026-07-15): the describe-pair/anything-else/added-to-bag flow
+  // should overlay wherever the customer already is, not its own route.
+  const goToPick = (overrides?: { paintConsent?: "yes" | "no"; soleMaterial?: "Leather" | "Rubber" }) => {
+    const item: BagService = {
+      id: service.slug,
+      name: service.name,
+      price: minPrice(service) * 100,
+      ...(overrides?.paintConsent ? { paintConsent: overrides.paintConsent } : {}),
+      ...(overrides?.soleMaterial ? { soleMaterial: overrides.soleMaterial } : {}),
+    };
+    trackEvent("service_added", { service_slug: service.slug, source: "service_detail" });
+    openPairFlow([item]);
+  };
 
   const onStart = () => {
     trackEvent("start_repair", { source: "service_detail", service_slug: service.slug });
@@ -270,7 +286,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
         confirmLabel="Start a repair"
         onConfirm={(consent) => {
           setPaintConsent(service.slug, consent);
-          goToPick();
+          goToPick({ paintConsent: consent });
         }}
       />
 
@@ -280,7 +296,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
         confirmLabel="Start a repair"
         onConfirm={(material) => {
           setSoleMaterial(service.slug, material);
-          goToPick();
+          goToPick({ soleMaterial: material });
         }}
       />
     </main>

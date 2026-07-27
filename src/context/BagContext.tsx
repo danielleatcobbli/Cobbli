@@ -24,6 +24,13 @@ export type BagPair = {
   label?: string;
   /** Shoe type snapshot — required to recompute live prices without depending on the saved pair */
   shoeType?: ShoeType;
+  /** Free-text notes for this specific repair/visit — captured once on the
+   *  "Describe this pair" step, distinct from the pair's own saved
+   *  description: notes are about this repair (e.g. "there's a clicking
+   *  sound"), not the pair's identity, so they're never written back to
+   *  SavedPair. Carried through checkout as part of the order's item
+   *  snapshot. */
+  notes?: string;
   /** ISO timestamp; used to display in reverse order of addition */
   addedAt: string;
   services: BagService[];
@@ -36,7 +43,7 @@ type BagState = {
   /** Sum of snapshot service prices. Not authoritative — UIs should recompute from the live price list. */
   subtotal: number;
   /** Add a new bag entry, or update an existing one if pairId matches */
-  addPair: (services: BagService[], pairId?: string, label?: string, shoeType?: ShoeType) => void;
+  addPair: (services: BagService[], pairId?: string, label?: string, shoeType?: ShoeType, notes?: string) => void;
   removePair: (pairId: string) => void;
   removeService: (pairId: string, serviceId: string) => void;
   /** Find an existing bag entry for a given saved pair id */
@@ -166,7 +173,7 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const addPair: BagState["addPair"] = useCallback((services, pairId, label, shoeType) => {
+  const addPair: BagState["addPair"] = useCallback((services, pairId, label, shoeType, notes) => {
     setPairs((prev) => {
       if (pairId) {
         const idx = prev.findIndex((p) => p.pairId === pairId);
@@ -177,6 +184,7 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
             services,
             label: label ?? next[idx].label,
             shoeType: shoeType ?? next[idx].shoeType,
+            notes: notes ?? next[idx].notes,
             addedAt: new Date().toISOString(),
           };
           return next;
@@ -184,7 +192,7 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
       }
       return [
         ...prev,
-        { id: genId(), pairId, label, shoeType, addedAt: new Date().toISOString(), services },
+        { id: genId(), pairId, label, shoeType, notes, addedAt: new Date().toISOString(), services },
       ];
     });
   }, []);

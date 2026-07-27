@@ -14,18 +14,38 @@
  * - "Broken or missing strap" has no matching real service at all (no
  *   strap-replacement slug exists yet) — treated as not-offered, same as a
  *   coming-soon service, until a real service exists to map it to.
- * - "Broken or missing hardware" has no matching real service either (no
- *   hardware-replacement slug — only buckle-replacement exists, and that one
- *   is coming-soon) — also treated as not-offered.
- * - "Broken heel" (-> heel-replacement) and "Broken or missing buckle"
- *   (-> buckle-replacement) both map to real slugs that exist but are
- *   isComingSoon — correctly treated as not-offered rather than a special case.
+ * - "Broken heel" (-> heel-replacement) and "Broken or missing hardware" /
+ *   "Broken or missing buckle" (both -> hardware-replacement) map to real
+ *   slugs that exist but are isComingSoon — correctly treated as not-offered
+ *   rather than a special case.
+ *
+ * Hardware and buckle repair/replacement are each ONE real catalog service
+ * ("Hardware or buckle repair" / "Hardware or buckle replacement", slugs
+ * hardware-repair / hardware-replacement) — there's no separate buckle-repair
+ * or buckle-replacement slug (a live-data check on 2026-07-15 confirmed this;
+ * an earlier version of this file pointed the buckle conditions at those
+ * non-existent slugs, which incorrectly showed them as not-offered). The
+ * hardware and buckle checklist rows are kept as separate, visually distinct
+ * conditions on purpose — same pattern as the three color-restoration rows
+ * below — even though they resolve to the same underlying service, since a
+ * customer identifying their issue is looking for the photo that matches it,
+ * not the slug behind it.
  */
 
 import { minPrice, type Service, type ServiceCategory } from "@/types/service";
 import { BUNDLES, bundleBySlug, type IncludedCategoryKey } from "@/data/bundles";
 
-export type Condition = { label: string; slug: string };
+export type Condition = {
+  label: string;
+  slug: string;
+  /** Optional photo/illustration for this specific condition, shown next to
+   *  the checkbox on the "What's going on with your shoes?" checklist. Falls
+   *  back to the category icon (CATEGORY_ICONS in CategoryFilterBar.tsx) when
+   *  not set — no real per-condition photography exists yet, so every
+   *  condition renders with its category's icon until real images are added
+   *  here one at a time. */
+  imageUrl?: string;
+};
 
 /**
  * A single display group on the "What's going on with your shoes?" checklist.
@@ -35,46 +55,111 @@ export type Condition = { label: string; slug: string };
  * the exact same category names and icons — no separate sub-category labels
  * nested inside (Danielle's call, to keep the checklist "tight").
  *
- * A condition can legitimately appear in more than one group — e.g. "Worn or
- * missing heel tip" shows under both Sole and Heel, and the three "Loose or
- * detached ___" conditions show under both Straps/buckles/hardware and Tears
- * & holes — Danielle confirmed the duplication is intentional. Checking a
- * condition in one group also checks it in the other, since both checkboxes
- * are keyed off the same label in shared state.
+ * A condition can legitimately appear in more than one group — e.g. the three
+ * "Loose or detached ___" conditions show under both Straps/buckles/hardware
+ * and Tears, holes, & stitching — Danielle confirmed the duplication is
+ * intentional. Checking a condition in one group also checks it in the
+ * other, since both checkboxes are keyed off the same label in shared state.
+ * ("Worn or missing heel tip" used to be duplicated across separate Sole and
+ * Heel groups too, until those merged into one "Sole & Heel" group on
+ * 2026-07-16 — merging removed the need for that particular duplicate.)
  */
 export type ChecklistGroup = { serviceCategory: ServiceCategory; conditions: Condition[] };
 
+// Group order (2026-07-16, Danielle's call): Sole & Heel, Color/scuffs/shine,
+// Insole, Tears/holes/stitching, Zipper, Straps/buckles/hardware — the
+// natural consequence of merging Sole+Heel into one group (removing the
+// separate "Heel" slot) while keeping her original ordering intent from
+// 2026-07-15 otherwise intact. Uses the same "Sole & Heel" ServiceCategory
+// as the Services page filter bar (see CategoryFilterBar.tsx) — it's a
+// UI-only grouping value, never a real per-service tag, so reusing it here
+// costs nothing and keeps the icon (the sole icon) consistent everywhere.
+// "Insole" and "Tears, holes, & stitching" are display-only renames of the
+// real "Inside of shoe"/"Tears & holes" categories — see
+// categoryDisplayLabel() in CategoryFilterBar.tsx — so this file still uses
+// the real category names below; StartRepair.tsx renders the display name.
 export const CHECKLIST_GROUPS: ChecklistGroup[] = [
-  { serviceCategory: "Sole", conditions: [
+  { serviceCategory: "Sole & Heel", conditions: [
     { label: "Worn or damaged sole", slug: "full-resole" },
-    { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement" } ] },
-  { serviceCategory: "Heel", conditions: [
+    { label: "Sole separating from shoe", slug: "full-resole" },
+    { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement" },
     { label: "Loose or separated heel", slug: "heel-reattachment" },
-    { label: "Broken heel", slug: "heel-replacement" },
-    { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement" } ] },
+    { label: "Broken heel", slug: "heel-replacement" } ] },
   { serviceCategory: "Color, scuffs, & shine", conditions: [
-    { label: "Surface scuffs or scratches", slug: "color-restoration" },
+    { label: "Scuffs or scratches", slug: "color-restoration" },
     { label: "Faded or streaky color", slug: "color-restoration" },
     { label: "Dull or dry material", slug: "color-restoration" } ] },
+  // Displayed as "Insole" (see categoryDisplayLabel) — narrower and more
+  // concrete than "Inside of shoe" now that "Holes inside of shoe" has moved
+  // to living solely in Tears, holes, & stitching below: everything left
+  // here is specifically about the insole itself, not the shoe's interior
+  // generally.
   { serviceCategory: "Inside of shoe", conditions: [
     { label: "Worn or damaged insole", slug: "insole-replacement" },
+    { label: "Loose insole", slug: "insole-replacement" } ] },
+  // Displayed as "Tears, holes, & stitching" (see categoryDisplayLabel) —
+  // Danielle's call: a separated seam doesn't read as a "tear" to most
+  // customers, so the category name says stitching outright instead of
+  // relying on "holes" to imply it.
+  { serviceCategory: "Tears & holes", conditions: [
+    { label: "Loose stitching", slug: "seam-repair" },
+    { label: "Loose or detached strap", slug: "strap-repair" },
+    { label: "Loose or detached hardware", slug: "hardware-repair" },
+    { label: "Loose or detached buckle", slug: "hardware-repair" },
     { label: "Holes inside of shoe", slug: "lining-repair" } ] },
+  { serviceCategory: "Zipper", conditions: [
+    { label: "Broken or detached zipper", slug: "zipper-reattachment" },
+    { label: "Broken or detached zipper slider", slug: "zipper-slider-replacement" } ] },
   { serviceCategory: "Straps, buckles, & hardware", conditions: [
     { label: "Loose or detached strap", slug: "strap-repair" },
     { label: "Broken or missing strap", slug: "strap-replacement" },
     { label: "Loose or detached hardware", slug: "hardware-repair" },
     { label: "Broken or missing hardware", slug: "hardware-replacement" },
-    { label: "Loose or detached buckle", slug: "buckle-repair" },
-    { label: "Broken or missing buckle", slug: "buckle-replacement" } ] },
-  { serviceCategory: "Tears & holes", conditions: [
-    { label: "Loose stitching", slug: "seam-repair" },
-    { label: "Loose or detached strap", slug: "strap-repair" },
-    { label: "Loose or detached hardware", slug: "hardware-repair" },
-    { label: "Loose or detached buckle", slug: "buckle-repair" } ] },
-  { serviceCategory: "Zipper", conditions: [
-    { label: "Broken or detached zipper", slug: "zipper-reattachment" },
-    { label: "Broken or detached zipper slider", slug: "zipper-slider-replacement" } ] },
+    { label: "Loose or detached buckle", slug: "hardware-repair" },
+    { label: "Broken or missing buckle", slug: "hardware-replacement" } ] },
+  // New (2026-07-16, Danielle's call) now that deodorizing-treatment is a
+  // real offered service — placed last since it's a less common concern
+  // than the structural repair categories above it. "Odor" is checklist-only
+  // (see the ServiceCategory union in types/service.ts); the underlying
+  // catalog tag for this service is still "Cleaning".
+  { serviceCategory: "Odor", conditions: [
+    { label: "Shoes smell", slug: "deodorizing-treatment" } ] },
 ];
+
+/** slug -> every distinct checklist condition label that maps to it. Shared
+ *  by the checklist's own recommendation screen ("Addresses: …") and by the
+ *  Services page/ServiceCard, so a service is described the same way — by
+ *  the condition it fixes — everywhere it shows up, not just in the
+ *  Starter repair flow. Services with no checklist mapping at all (Cleaning,
+ *  Preventative care) simply aren't in this map; callers fall back to the
+ *  service's own catalog description in that case. */
+export const SLUG_TO_CONDITION_LABELS: Map<string, string[]> = (() => {
+  const map = new Map<string, string[]>();
+  CHECKLIST_GROUPS.forEach((group) =>
+    group.conditions.forEach((c) => {
+      const existing = map.get(c.slug);
+      if (existing) {
+        if (!existing.includes(c.label)) existing.push(c.label);
+      } else {
+        map.set(c.slug, [c.label]);
+      }
+    }),
+  );
+  return map;
+})();
+
+/** "Addresses: worn, damaged, or separating sole" — or undefined when this
+ *  slug isn't part of the checklist at all. Deliberately no "For a …"
+ *  article-based phrasing here: some labels are singular shoe parts ("a
+ *  broken heel") and some are plural/uncountable ("surface scuffs or
+ *  scratches"), so a single template can't get the grammar right for both.
+ *  The colon-prefixed form already reads fine either way and matches the
+ *  phrasing already shipped on the recommendation screen. */
+export function addressesLine(slug: string): string | undefined {
+  const labels = SLUG_TO_CONDITION_LABELS.get(slug);
+  if (!labels || labels.length === 0) return undefined;
+  return `Addresses: ${labels.join(", ").toLowerCase()}`;
+}
 
 /** Canonical slug -> package category mapping, used only for the
  *  package-vs-individual-services recommendation logic below. Kept separate
@@ -94,19 +179,17 @@ const CONDITION_PKG_CAT: Record<string, IncludedCategoryKey> = {
   "strap-replacement": "stitching",
   "hardware-repair": "stitching",
   "hardware-replacement": "stitching",
-  "buckle-repair": "stitching",
-  "buckle-replacement": "stitching",
   "seam-repair": "stitching",
   "zipper-reattachment": "stitching",
   "zipper-slider-replacement": "stitching",
 };
 
-export type Addon = { label: string; slug: string; pkgCat: IncludedCategoryKey | null };
+export type Addon = { label: string; slug: string; pkgCat: IncludedCategoryKey | null; description: string };
 
 export const ADDONS: Addon[] = [
-  { label: "Shoe shine", slug: "shoe-shine", pkgCat: null },
-  { label: "Waterproofing", slug: "waterproofing", pkgCat: "preventative" },
-  { label: "Protective soles", slug: "protective-full-sole", pkgCat: "preventative" },
+  { label: "Shoe shine", slug: "shoe-shine", pkgCat: null, description: "Restores gloss" },
+  { label: "Waterproofing", slug: "waterproofing", pkgCat: "preventative", description: "Protects from rain and moisture" },
+  { label: "Protective soles", slug: "protective-full-sole", pkgCat: "preventative", description: "Guards against wear so your sole lasts longer" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

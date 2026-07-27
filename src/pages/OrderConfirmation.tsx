@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import PickupScheduler, { type PickupWindow } from "@/components/cobbli/PickupScheduler";
+import { PickupScheduler, type PickupWindow } from "@/components/cobbli/PickupScheduler";
 import { useAccount } from "@/context/AccountContext";
 import { formatPrice } from "@/context/BagContext";
 import { supabase } from "@/integrations/supabase/client";

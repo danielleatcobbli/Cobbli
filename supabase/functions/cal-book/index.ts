@@ -91,8 +91,14 @@ serve(async (req) => {
 
     // Cal.com v2 bookings use an attendee object rather than Calendly's
     // invitees/questions-and-answers shape — this is a real rewrite, not a
-    // find-and-replace. Address and notes go into metadata since Cal.com's
-    // attendee object only carries contact fields.
+    // find-and-replace.
+    //
+    // Address: confirmed directly against Cal.com's v2 API schema
+    // (BookingInputAttendeeAddressLocation_2024_08_13) that the event type's
+    // "In Person (Attendee Address)" location is populated via a top-level
+    // `location: { type: "attendeeAddress", address }` object — NOT metadata.
+    // Metadata is an invisible data bucket that never renders anywhere on the
+    // booking; this was the actual reason the address wasn't showing up.
     const bookResp = await fetch(`${CAL_BASE_URL}/v2/bookings`, {
       method: "POST",
       headers: {
@@ -109,12 +115,15 @@ serve(async (req) => {
           timeZone: TIMEZONE,
           phoneNumber: phone,
         },
-        // Store address and any notes in metadata so Danielle can see them on
-        // the Cal.com event detail page and in notification emails.
-        metadata: {
-          pickup_address: address,
-          ...(notes ? { notes } : {}),
+        location: {
+          type: "attendeeAddress",
+          address,
         },
+        // "notes" is a built-in booking-form field on the event type (not a
+        // free-form metadata bucket) — pass it via bookingFieldsResponses so
+        // it shows up as an actual field on the booking, same as address now
+        // does via location.
+        ...(notes && { bookingFieldsResponses: { notes } }),
       }),
     });
 

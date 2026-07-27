@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
+import { categoryMatches, categoryDisplayLabel } from "@/components/cobbli/CategoryFilterBar";
 import {
   CATEGORIES_ORDERED,
   isEligibleForShoeType,
@@ -137,19 +138,13 @@ const SelectServices = () => {
   );
 
   const visible = useMemo(() => {
-    const list =
-      activeCategory === ALL
-        ? eligible
-        : eligible.filter((s) => s.categories.includes(activeCategory as Service["categories"][number]));
+    const list = eligible.filter((s) => categoryMatches(s.categories, activeCategory));
     return [...list].sort((a, b) => a.rank - b.rank);
   }, [eligible, activeCategory]);
 
   const comingSoon = useMemo(() => {
     const list = allServices.filter((s) => s.isComingSoon);
-    const byCat =
-      activeCategory === ALL
-        ? list
-        : list.filter((s) => s.categories.includes(activeCategory as Service["categories"][number]));
+    const byCat = list.filter((s) => categoryMatches(s.categories, activeCategory));
     return [...byCat].sort((a, b) => a.rank - b.rank);
   }, [allServices, activeCategory]);
 
@@ -268,7 +263,7 @@ const SelectServices = () => {
                           : "text-muted-foreground hover:text-primary"
                       }`}
                     >
-                      {c}
+                      {categoryDisplayLabel(c)}
                     </button>
                   );
                 })}

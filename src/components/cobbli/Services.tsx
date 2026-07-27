@@ -2,14 +2,15 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import CategoryFilterBar, {
   ALL_CATEGORIES_LABEL,
+  categoryMatches,
   type CategoryFilter,
 } from "@/components/cobbli/CategoryFilterBar";
 import ServiceCard from "@/components/cobbli/ServiceCard";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
-import { type Service } from "@/types/service";
 import { useServices } from "@/hooks/useServices";
 import { BUNDLES, type Bundle } from "@/data/bundles";
 import { POPULAR_SERVICE_SLUGS, sortServices } from "@/data/serviceOrder";
+import { addressesLine } from "@/data/starterRepairConditions";
 
 // ---------------------------------------------------------------------------
 // Bundle card (homepage) — same data as pages/Services.tsx (src/data/bundles.ts),
@@ -62,12 +63,7 @@ const Services = () => {
 
   const visibleServices = useMemo(() => {
     const list = (services ?? []).filter((s) => !s.isComingSoon);
-    const filtered =
-      active === ALL_CATEGORIES_LABEL
-        ? list
-        : list.filter((s) =>
-            s.categories.includes(active as Service["categories"][number]),
-          );
+    const filtered = list.filter((s) => categoryMatches(s.categories, active));
     return sortServices(filtered);
   }, [services, active]);
 
@@ -103,7 +99,7 @@ const Services = () => {
         </a>
 
         <div className="flex gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1">
-          {BUNDLES.map((bundle) => (
+          {BUNDLES.filter((bundle) => !bundle.hidden).map((bundle) => (
             <HomepageBundleCard key={bundle.slug} bundle={bundle} />
           ))}
         </div>
@@ -149,6 +145,7 @@ const Services = () => {
                 <ServiceCard
                   s={s}
                   isPopular={POPULAR_SERVICE_SLUGS.has(s.slug)}
+                  addresses={addressesLine(s.slug)}
                 />
               </div>
             ))}

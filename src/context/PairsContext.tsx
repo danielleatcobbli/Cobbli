@@ -226,4 +226,12 @@ export const usePairs = () => {
 
 import { displayBrand } from "@/components/cobbli/BrandCombobox";
 export const formatPairLabel = (p: SavedPair) =>
-  [p.colors.join(" / "), displayBrand(p.brand), p.shoeType].filter(Boolean).join(" · ");
+  // Pairs created via the simplified "Describe this pair" step (2026-07-15)
+  // only ever have a description — no shoeType/colors/brand worth showing —
+  // so prefer it outright rather than falling back to a label built from
+  // fields that are now just an "Unspecified"/empty placeholder. Older pairs
+  // saved through the full manual form still fall back to the structured
+  // label exactly as before.
+  p.description?.trim()
+    ? p.description.trim()
+    : [p.colors.join(" / "), displayBrand(p.brand), p.shoeType].filter(Boolean).join(" · ");

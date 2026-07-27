@@ -21,6 +21,12 @@
  *
  * Cal.com API version: 2024-08-13
  * Docs: https://cal.com/docs/api-reference/v2/slots/get-available-slots
+ *
+ * NOTE: Cal.com's real response (confirmed live, 2026-07-15) nests each slot
+ * as { startTime, endTime } — NOT { start, end } as originally assumed. Fixed
+ * after tracing a live 500 (Object.values(...).map(s => s.start) was reading
+ * an undefined field, then .sort() crashed calling .localeCompare() on
+ * undefined). Keep reading startTime/endTime here.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -67,14 +73,17 @@ serve(async (req) => {
     };
 
     const startTime = start_time ?? new Date().toISOString();
+    // +1 day buffer, matching the same fix applied in PickupScheduler.tsx —
+    // this default is only used when a caller omits end_time (the front end
+    // always sends one explicitly), but kept consistent for defense-in-depth.
     const endTime =
-      end_time ?? new Date(Date.now() + LOOK_AHEAD_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      end_time ?? new Date(Date.now() + (LOOK_AHEAD_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
 
     const url = new URL(`${CAL_BASE_URL}/v2/slots/available`);
     url.searchParams.set("startTime", startTime);
     url.searchParams.set("endTime", endTime);
     url.searchParams.set("eventTypeId", String(eventTypeId));
-    // slotFormat=range returns { start, end } pairs directly — no manual
+    // slotFormat=range returns { startTime, endTime } pairs directly — no manual
     // duration computation needed (unlike Calendly which only returned start).
     url.searchParams.set("slotFormat", "range");
 
@@ -103,19 +112,19 @@ serve(async (req) => {
     //   status: "success",
     //   data: {
     //     slots: {
-    //       "2026-07-15": [{ start: "...ISO...", end: "...ISO..." }, ...],
+    //       "2026-07-15": [{ startTime: "...ISO...", endTime: "...ISO..." }, ...],
     //       "2026-07-16": [...],
     //       ...
     //     }
     //   }
     // }
     // Flatten all date groups into the flat windows array that PickupScheduler expects.
-    const slotsMap: Record<string, { start: string; end: string }[]> =
+    const slotsMap: Record<string, { startTime: string; endTime: string }[]> =
       calData?.data?.slots ?? {};
 
     const windows = Object.values(slotsMap)
       .flat()
-      .map((s) => ({ start_time: s.start, end_time: s.end }))
+      .map((s) => ({ start_time: s.startTime, end_time: s.endTime }))
       .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
     return new Response(JSON.stringify({ windows }), {

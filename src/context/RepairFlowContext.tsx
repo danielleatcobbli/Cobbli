@@ -13,14 +13,19 @@ type RepairFlowState = {
   paintConsents: PaintConsentMap;
   /** Sole-material answers keyed by service slug; persists across the flow. */
   soleMaterials: SoleMaterialMap;
-  /** Set by the "What's going on with your shoes?" recommendation flow right
-   *  before navigating to the pick-a-pair page — a ready-to-add list of bag
-   *  line items (a package, individual services, or both) that don't map to
-   *  a single service/bundle query param the way the older flows do.
-   *  StartRepairPick.tsx reads and clears this on confirm. Deliberately kept
-   *  separate from selectedServiceSlugs, since setSelectedPairId() resets
-   *  that array and this needs to survive picking a pair. */
+  /** The items PairFlowDialog.tsx should add once the pair is described —
+   *  set by openPairFlow() below, or directly by the checklist for a
+   *  ready-to-add list of bag line items (a package, individual services, or
+   *  both) that don't map to a single service/bundle the way the other two
+   *  entry points do. PairFlowDialog reads and clears this on confirm.
+   *  Deliberately kept separate from selectedServiceSlugs, since
+   *  setSelectedPairId() resets that array and this needs to survive. */
   pendingRecommendedItems: BagService[] | null;
+  /** Whether the "Describe this pair" / "Anything else?" / "Added to your
+   *  bag" popup (PairFlowDialog.tsx) is open. Deliberately not persisted to
+   *  sessionStorage with the rest of this state — a page reload mid-popup
+   *  should just close it, not try to resurrect it. */
+  pairFlowOpen: boolean;
   setSelectedPairId: (id: string | null) => void;
   setSelectedServiceSlugs: (slugs: string[]) => void;
   setActiveCategory: (c: string) => void;
@@ -29,6 +34,12 @@ type RepairFlowState = {
   setPaintConsent: (slug: string, consent: "yes" | "no") => void;
   setSoleMaterial: (slug: string, material: "Leather" | "Rubber") => void;
   setPendingRecommendedItems: (items: BagService[] | null) => void;
+  /** Opens the pair popup with the given items to add — used by the
+   *  checklist's "Continue" button and by a service/package's "Add to
+   *  repair" / "Start a repair" buttons alike, so all three entry points
+   *  share one popup instead of navigating to a separate page. */
+  openPairFlow: (items: BagService[]) => void;
+  closePairFlow: () => void;
   reset: () => void;
 };
 
@@ -66,6 +77,7 @@ const read = (): Persisted => {
 
 export const RepairFlowProvider = ({ children }: { children: ReactNode }) => {
   const [state, setState] = useState<Persisted>(() => read());
+  const [pairFlowOpen, setPairFlowOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -126,11 +138,17 @@ export const RepairFlowProvider = ({ children }: { children: ReactNode }) => {
     (items: BagService[] | null) => setState((s) => ({ ...s, pendingRecommendedItems: items })),
     [],
   );
+  const openPairFlow = useCallback((items: BagService[]) => {
+    setState((s) => ({ ...s, pendingRecommendedItems: items }));
+    setPairFlowOpen(true);
+  }, []);
+  const closePairFlow = useCallback(() => setPairFlowOpen(false), []);
   const reset = useCallback(() => setState(DEFAULTS), []);
 
   const value = useMemo<RepairFlowState>(
     () => ({
       ...state,
+      pairFlowOpen,
       setSelectedPairId,
       setSelectedServiceSlugs,
       setActiveCategory,
@@ -139,9 +157,11 @@ export const RepairFlowProvider = ({ children }: { children: ReactNode }) => {
       setPaintConsent,
       setSoleMaterial,
       setPendingRecommendedItems,
+      openPairFlow,
+      closePairFlow,
       reset,
     }),
-    [state, setSelectedPairId, setSelectedServiceSlugs, setActiveCategory, addService, removeService, setPaintConsent, setSoleMaterial, setPendingRecommendedItems, reset],
+    [state, pairFlowOpen, setSelectedPairId, setSelectedServiceSlugs, setActiveCategory, addService, removeService, setPaintConsent, setSoleMaterial, setPendingRecommendedItems, openPairFlow, closePairFlow, reset],
   );
   return <RepairFlowContext.Provider value={value}>{children}</RepairFlowContext.Provider>;
 };

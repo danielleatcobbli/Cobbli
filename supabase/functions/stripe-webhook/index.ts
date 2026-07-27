@@ -19,16 +19,19 @@ const WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 interface CartPayload {
   contact_email: string;
   contact_phone: string;
+  contact_name?: string;
   delivery_address: unknown;
   repairs_subtotal_cents: number;
   courier_fee_cents: number;
   total_cents: number;
   /** Set by Checkout.tsx when the customer selected a pickup window.
-   * start/end are ISO 8601 UTC strings (the raw Calendly slot times). */
+   * start/end are ISO 8601 UTC strings. No booking exists yet at this point —
+   * see bookPickup() below for why the Cal.com booking is created here,
+   * server-side, rather than client-side in Checkout.tsx. */
   pickup_window?: {
     start: string;
     end: string;
-    calendly_event_uri?: string;
+    address: string;
   };
   items: Array<{
     pair_snapshot: unknown;
@@ -73,6 +76,55 @@ function formatNyTimeRange(startIso: string, endIso: string): string {
     return `${startStr.slice(0, -3)} – ${endStr}`;
   }
   return `${startStr} – ${endStr}`;
+}
+
+// Creates the Cal.com booking server-side, only once payment has succeeded.
+// Booking used to be created client-side (Checkout.tsx calling cal-book) the
+// moment the customer opened the Payment step — meaning a real booking
+// existed on the calendar before checkout was ever completed. If the
+// customer then went back and picked a different pickup window, the earlier
+// booking was never updated or cancelled (a real bug caught in testing): the
+// Cal.com invite and the eventual order could end up showing two different
+// times. Calling cal-book here instead means exactly one booking is ever
+// created, and only for the window the customer actually checked out with.
+async function bookPickup(
+  pickupWindow: NonNullable<CartPayload["pickup_window"]>,
+  contactName: string,
+  contactEmail: string,
+  contactPhone: string,
+): Promise<string | null> {
+  try {
+    const resp = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/cal-book`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        start_time: pickupWindow.start,
+        name: contactName,
+        email: contactEmail,
+        phone: contactPhone,
+        address: pickupWindow.address,
+      }),
+    });
+    if (!resp.ok) {
+      console.error("cal-book failed during order creation:", resp.status, await resp.text());
+      return null;
+    }
+    const data = await resp.json();
+    if (data?.error) {
+      console.error("cal-book returned an error during order creation:", data.error);
+      return null;
+    }
+    return (data?.event_uri as string | undefined) ?? null;
+  } catch (e) {
+    // Payment has already succeeded at this point — never let a scheduling
+    // hiccup block the order from being created. Log clearly so it's
+    // traceable; pickup_calendly_event_uri is simply left null on the order.
+    console.error("cal-book call threw during order creation:", e);
+    return null;
+  }
 }
 
 function reassembleCart(meta: Record<string, string>): CartPayload | null {
@@ -134,6 +186,18 @@ async function createOrderFromCart(
     ? formatNyTimeRange(payload.pickup_window.start, payload.pickup_window.end)
     : null;
 
+  // Create the real Cal.com booking now — payment has just succeeded, so
+  // this is the one and only moment a booking should be made (see
+  // bookPickup() above). Never blocks order creation if it fails.
+  const pickupCalendlyEventUri = payload.pickup_window
+    ? await bookPickup(
+        payload.pickup_window,
+        payload.contact_name || payload.contact_email.split("@")[0] || "Customer",
+        payload.contact_email,
+        payload.contact_phone,
+      )
+    : null;
+
   // Plain INSERT — the partial unique indexes on stripe_payment_intent_id and
   // stripe_session_id will reject duplicates from concurrent webhook deliveries
   // (checkout.session.completed + payment_intent.succeeded). On unique
@@ -158,10 +222,11 @@ async function createOrderFromCart(
       stripe_payment_intent_id: paymentIntentId,
       pickup_date: pickupDate,
       pickup_time_label: pickupTimeLabel,
-      // Persist the Calendly event URI so the reschedule flow can cancel the
-      // old booking before creating a new one. Null when calendly-book fell back
-      // to a scheduling link (no direct-booking URI was returned).
-      pickup_calendly_event_uri: payload.pickup_window?.calendly_event_uri ?? null,
+      // Persist the Cal.com booking UID so the reschedule flow (cal-cancel)
+      // can cancel this booking before creating a new one. Null if no window
+      // was selected, or if bookPickup() above failed — a failed booking
+      // never blocks the order itself from being created.
+      pickup_calendly_event_uri: pickupCalendlyEventUri,
     })
     .select("id")
     .maybeSingle();
