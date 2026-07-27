@@ -29,8 +29,8 @@ const NoCoverBand = ({ title }: { title: string }) => (
   >
     <span
       aria-hidden="true"
-      className="font-cursive italic line-clamp-3 select-none text-center text-4xl font-semibold leading-snug md:text-5xl"
-      style={{ color: BROWN, opacity: 0.85 }}
+      className="font-cursive line-clamp-3 select-none text-center text-4xl font-bold leading-snug md:text-5xl"
+      style={{ color: BROWN, opacity: 0.95 }}
     >
       {title}
     </span>

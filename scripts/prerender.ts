@@ -339,8 +339,8 @@ function BlogIndex({ posts }: { posts: SanityPost[] }) {
                         {
                           "aria-hidden": "true",
                           className:
-                            "font-cursive italic line-clamp-3 text-center text-4xl font-semibold leading-snug",
-                          style: { color: "#3d1700", opacity: 0.85 },
+                            "font-cursive line-clamp-3 text-center text-4xl font-bold leading-snug",
+                          style: { color: "#3d1700", opacity: 0.95 },
                         },
                         post.title,
                       ),
