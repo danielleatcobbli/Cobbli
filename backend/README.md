@@ -74,7 +74,7 @@ vercel env add SUPABASE_SERVICE_ROLE_KEY
 vercel env add STRIPE_SECRET_KEY
 vercel env add STRIPE_WEBHOOK_SECRET
 vercel env add BREVO_API_KEY
-vercel env add AI_API_KEY
+# (no AI key needed — Bedrock uses IAM)
 vercel env add CORS_ALLOW_ORIGINS           # e.g. https://your-frontend.vercel.app
 vercel deploy                               # preview deploy
 vercel deploy --prod                        # production
@@ -100,7 +100,7 @@ Artifacts (in `backend/`):
 ```bash
 cd backend
 aws configure                          # region us-east-1; IAM user with ECR/App Runner/IAM/SecretsManager
-cp .env.example .env.local             # fill in ALL keys, incl. SUPABASE_ANON_KEY + AI_API_KEY
+cp .env.example .env.local             # fill in ALL keys, incl. SUPABASE_ANON_KEY
 CORS_ALLOW_ORIGINS=https://cobbli.com  # set in .env.local for prod
 ./scripts/aws-secrets.sh               # store secrets (reads .env.local, never CLI args)
 ./scripts/aws-deploy.sh                # build locally (needs docker/colima) + deploy
@@ -129,7 +129,9 @@ See `.env.example`. Required for runtime:
 - `STRIPE_SECRET_KEY` — `sk_test_*` for previews, `sk_live_*` for prod.
 - `STRIPE_WEBHOOK_SECRET` — from Stripe dashboard webhook page (per env).
 - `BREVO_API_KEY` — Brevo transactional API key.
-- `AI_API_KEY` — replaces `LOVABLE_API_KEY` for `analyze-shoe-photos`.
+- Shoe-photo analysis needs **no key** — it runs on AWS Bedrock via IAM (instance
+  role in App Runner, `aws configure` locally). Optional overrides:
+  `BEDROCK_REGION`, `BEDROCK_MODEL_ID`.
 - `CORS_ALLOW_ORIGINS` — comma-separated, defaults to `*`. Prod: `https://cobbli.com`.
 - `SITE_URL` — public origin for recovery links; defaults to `https://cobbli.com`.
 
