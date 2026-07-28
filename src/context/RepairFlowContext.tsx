@@ -21,6 +21,16 @@ type RepairFlowState = {
    *  Deliberately kept separate from selectedServiceSlugs, since
    *  setSelectedPairId() resets that array and this needs to survive. */
   pendingRecommendedItems: BagService[] | null;
+  /** Set by the Starter Repair checklist's new top-of-page "Which pair needs
+   *  attention?" field (2026-07-27, Danielle's call) when the customer types
+   *  a brand-new pair's name there instead of picking a saved one. Lets
+   *  PairFlowDialog skip its own "Describe this pair" step and create the
+   *  pair immediately using this name — the same bypass the dialog already
+   *  does for an existing selected pair — so the name is never asked twice.
+   *  Cleared once PairFlowDialog consumes it. Other entry points (a
+   *  service's "Add to repair," a package's "Start a repair") never set
+   *  this, so they still get the dialog's normal describe step. */
+  pendingNewPairName: string | null;
   /** Whether the "Describe this pair" / "Anything else?" / "Added to your
    *  bag" popup (PairFlowDialog.tsx) is open. Deliberately not persisted to
    *  sessionStorage with the rest of this state — a page reload mid-popup
@@ -34,11 +44,13 @@ type RepairFlowState = {
   setPaintConsent: (slug: string, consent: "yes" | "no") => void;
   setSoleMaterial: (slug: string, material: "Leather" | "Rubber") => void;
   setPendingRecommendedItems: (items: BagService[] | null) => void;
+  setPendingNewPairName: (name: string | null) => void;
   /** Opens the pair popup with the given items to add — used by the
    *  checklist's "Continue" button and by a service/package's "Add to
    *  repair" / "Start a repair" buttons alike, so all three entry points
-   *  share one popup instead of navigating to a separate page. */
-  openPairFlow: (items: BagService[]) => void;
+   *  share one popup instead of navigating to a separate page. The optional
+   *  newPairName is only passed by the checklist's own pair field. */
+  openPairFlow: (items: BagService[], newPairName?: string) => void;
   closePairFlow: () => void;
   reset: () => void;
 };
@@ -53,6 +65,7 @@ type Persisted = {
   paintConsents: PaintConsentMap;
   soleMaterials: SoleMaterialMap;
   pendingRecommendedItems: BagService[] | null;
+  pendingNewPairName: string | null;
 };
 
 const DEFAULTS: Persisted = {
@@ -62,6 +75,7 @@ const DEFAULTS: Persisted = {
   paintConsents: {},
   soleMaterials: {},
   pendingRecommendedItems: null,
+  pendingNewPairName: null,
 };
 
 const read = (): Persisted => {
@@ -138,8 +152,15 @@ export const RepairFlowProvider = ({ children }: { children: ReactNode }) => {
     (items: BagService[] | null) => setState((s) => ({ ...s, pendingRecommendedItems: items })),
     [],
   );
-  const openPairFlow = useCallback((items: BagService[]) => {
-    setState((s) => ({ ...s, pendingRecommendedItems: items }));
+  const setPendingNewPairName = useCallback(
+    (name: string | null) => setState((s) => ({ ...s, pendingNewPairName: name })),
+    [],
+  );
+  // Optional newPairName: set by the Starter Repair checklist when the
+  // customer typed a brand-new pair's name in its own top-of-page field
+  // rather than picking a saved one — see pendingNewPairName above for why.
+  const openPairFlow = useCallback((items: BagService[], newPairName?: string) => {
+    setState((s) => ({ ...s, pendingRecommendedItems: items, pendingNewPairName: newPairName ?? null }));
     setPairFlowOpen(true);
   }, []);
   const closePairFlow = useCallback(() => setPairFlowOpen(false), []);
@@ -157,11 +178,12 @@ export const RepairFlowProvider = ({ children }: { children: ReactNode }) => {
       setPaintConsent,
       setSoleMaterial,
       setPendingRecommendedItems,
+      setPendingNewPairName,
       openPairFlow,
       closePairFlow,
       reset,
     }),
-    [state, pairFlowOpen, setSelectedPairId, setSelectedServiceSlugs, setActiveCategory, addService, removeService, setPaintConsent, setSoleMaterial, setPendingRecommendedItems, openPairFlow, closePairFlow, reset],
+    [state, pairFlowOpen, setSelectedPairId, setSelectedServiceSlugs, setActiveCategory, addService, removeService, setPaintConsent, setSoleMaterial, setPendingRecommendedItems, setPendingNewPairName, openPairFlow, closePairFlow, reset],
   );
   return <RepairFlowContext.Provider value={value}>{children}</RepairFlowContext.Provider>;
 };

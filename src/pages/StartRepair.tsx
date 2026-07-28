@@ -14,32 +14,43 @@
  * mockup exactly, now driven by the live Supabase service catalog instead of
  * hardcoded prices.
  *
- * On confirm, the finalized list is handed to PairFlowDialog.tsx (via
- * RepairFlowContext.openPairFlow) — a popup, not a separate page (Danielle's
- * call, 2026-07-15) — so the customer describes the pair this applies to
- * without leaving this screen. Shoe detail is intentionally asked for after
- * the recommendation, not before.
+ * Fully in-page now (2026-07-27, Danielle's call) — with "Which pair needs
+ * attention?" collected up front on the checklist itself (see the pair field
+ * below), there's no need to hand off to PairFlowDialog.tsx's own "Describe
+ * this pair" / "Anything else?" / "Added to your bag" popups anymore. The
+ * recommendation screen ends in two buttons instead of one "Continue" —
+ * "Add another pair to my order" and "Go to checkout" — and each commits this
+ * pair straight to the bag (see commitPairToBag) before doing its own thing;
+ * there's no secondary confirmation page or popup in between either.
+ * PairFlowDialog itself is untouched and still used by the other two entry
+ * points that don't have this pair field (a service's "Add to repair," a
+ * package's "Start a repair").
  *
  * Route: /start-repair
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { X, Camera, ArrowRight } from "lucide-react";
+import { X, Camera } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useServices } from "@/hooks/useServices";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import type { BagService } from "@/context/BagContext";
-import { formatPrice } from "@/context/BagContext";
+import { formatPrice, useBag } from "@/context/BagContext";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
-import { CHECKLIST_GROUPS, ADDONS, computeRecommendation } from "@/data/starterRepairConditions";
+import { useAuth } from "@/context/AuthContext";
+import type { ShoeType } from "@/types/service";
+import { CHECKLIST_GROUPS, ADDONS, computeRecommendation, COMMON_CONDITION_LABELS, SLUG_TO_CONDITION_LABELS } from "@/data/starterRepairConditions";
 import { CATEGORY_ICONS, categoryDisplayLabel } from "@/components/cobbli/CategoryFilterBar";
+import BeforeAfterImage from "@/components/cobbli/BeforeAfterImage";
 import { trackEvent } from "@/lib/analytics";
+import iconOdor from "@/assets/category-icons/odor.svg";
 
 type CartLine = {
   id: string;
@@ -47,10 +58,12 @@ type CartLine = {
   price: number;
   kind: "package" | "service";
   slug: string;
-  /** Checked condition labels this line addresses — shown as "Addresses: …"
+  /** Checked condition labels this line addresses — shown as "Fixes: …"
    *  above the name so a recommended service/package always traces back to
-   *  the symptom(s) that produced it. Empty for lines that only came from an
-   *  add-on (e.g. waterproofing), which isn't tied to a condition. */
+   *  the symptom(s) that produced it (2026-07-27, Danielle's call: "Fixes"
+   *  reads more like plain speech than "Addresses"). Empty for lines that
+   *  only came from an add-on (e.g. waterproofing), which isn't tied to a
+   *  condition. */
   addresses: string[];
 };
 
@@ -60,19 +73,76 @@ CHECKLIST_GROUPS.forEach((group) => group.conditions.forEach((c) => LABEL_TO_SLU
 const StartRepair = () => {
   const navigate = useNavigate();
   const { data: services, isLoading } = useServices();
-  const { selectedPairId, openPairFlow } = useRepairFlow();
-  const { getPair } = usePairs();
-  // Set only when looping back here from "anything else for this pair?" —
-  // shows which pair additional selections will be added to, so it's clear
-  // this isn't starting a new pair over again.
-  const activePair = selectedPairId ? getPair(selectedPairId) : undefined;
-  const activePairLabel = activePair ? formatPairLabel(activePair) : null;
+  const { selectedPairId, setSelectedPairId } = useRepairFlow();
+  const { pairs, addPair: addSavedPair, getPair } = usePairs();
+  const { findByPairId, addPair: addPairToBag } = useBag();
+  const { user } = useAuth();
+
+  // Which-pair field (2026-07-27, Danielle's call): a dropdown of saved pairs
+  // only makes sense for a signed-in customer who actually has any — a guest
+  // never has saved pairs, so they go straight to the free-text "new pair"
+  // field with no dropdown to show at all. Signed-in customers with saved
+  // pairs get the dropdown, with "Add a new pair" swapping it for the same
+  // text field.
+  const showPairDropdown = !!user && pairs.length > 0;
+  const isAddingNewPair = selectedPairId === null;
+  const [newPairName, setNewPairName] = useState("");
+
+  // Free-form notes for this specific repair (2026-07-27, Danielle's call) —
+  // collected here on the recommendations screen rather than in a separate
+  // popup step. Distinct from the pair's own name/identity: this is about the
+  // repair ("there's a clicking sound near the heel"), so it resets whenever
+  // a fresh pair is started (see onAddAnotherPair) rather than persisting.
+  const [repairNotes, setRepairNotes] = useState("");
 
   const [step, setStep] = useState<"checklist" | "results">("checklist");
   const [checkedLabels, setCheckedLabels] = useState<Set<string>>(new Set());
   const [checkedAddons, setCheckedAddons] = useState<Set<string>>(new Set());
   const [notOffered, setNotOffered] = useState<{ slug: string; name: string }[]>([]);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
+
+  // Bug fix (2026-07-27, Danielle's report): looping back to "add more
+  // services" for a pair that already has services in the bag used to show a
+  // blank checklist — nothing pre-checked — and the pair switcher below was
+  // read-only, so there was no way to fix a wrong pair either. Silently
+  // continuing meant "Continue" only ever sent this pass's newly-checked
+  // items, and addPair() *replaces* a pair's service list rather than merging
+  // — so anything added on a previous pass (e.g. a resole already in the bag)
+  // got wiped out the moment more services were added.
+  //
+  // Fix: whenever the active pair changes (including on first mount here),
+  // re-derive checkedLabels/checkedAddons from whatever that pair already has
+  // in the bag, reversing each service slug back to its checklist condition
+  // label(s) (SLUG_TO_CONDITION_LABELS) or add-on label. That way "Continue"
+  // always sends the *complete* current set for this pair — prior selections
+  // plus whatever changed — so addPair's replace semantics are correct
+  // instead of lossy. Switching to a different pair (or to "new pair," a null
+  // id) starts that pair's own selection fresh rather than carrying over
+  // whatever was checked for the last one.
+  useEffect(() => {
+    // Switching to an existing saved pair means whatever was typed for a new
+    // pair no longer applies — clear it so it can't get sent along by mistake.
+    if (selectedPairId) setNewPairName("");
+    const existing = selectedPairId ? findByPairId(selectedPairId) : undefined;
+    if (!existing) {
+      setCheckedLabels(new Set());
+      setCheckedAddons(new Set());
+      return;
+    }
+    const labels = new Set<string>();
+    const addons = new Set<string>();
+    const addonSlugs = new Set(ADDONS.map((a) => a.slug));
+    existing.services.forEach((svc) => {
+      if (addonSlugs.has(svc.id)) {
+        addons.add(svc.id);
+      } else {
+        (SLUG_TO_CONDITION_LABELS.get(svc.id) ?? []).forEach((label) => labels.add(label));
+      }
+    });
+    setCheckedLabels(labels);
+    setCheckedAddons(addons);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPairId]);
 
   // slug -> service, so each condition's checklist thumbnail can reuse the
   // exact photo shown on that service's card/detail page on /services —
@@ -82,83 +152,173 @@ const StartRepair = () => {
   // then the category icon when neither the service nor the condition has a
   // photo yet.
   const serviceBySlug = useMemo(() => {
-    const map = new Map<string, { imageUrl?: string }>();
+    const map = new Map<string, { imageUrl?: string; afterImageUrl?: string }>();
     (services ?? []).forEach((s) => map.set(s.slug, s));
     return map;
   }, [services]);
 
-  // Two-column split, computed here instead of left to CSS. We tried CSS
-  // multi-column (`columns-2` + `break-inside-avoid`) to dodge Grid's
-  // row-height-matching dead-space bug, but its native `column-fill: balance`
-  // doesn't fill left-to-right in document order — it balances total height
-  // across both columns, which put the short trailing "Odor" group in the
-  // right column instead of the left where there was actually room
-  // (Danielle's report, 2026-07-16: "I think what we wanna do is fill
-  // space"). This greedily assigns each group, in order, to whichever column
-  // currently has fewer total conditions (a proxy for rendered height), so
-  // short groups land wherever there's real room rather than wherever CSS's
-  // balancing algorithm happens to put them.
-  const [leftGroups, rightGroups] = useMemo(() => {
-    const left: typeof CHECKLIST_GROUPS = [];
-    const right: typeof CHECKLIST_GROUPS = [];
-    let leftCount = 0;
-    let rightCount = 0;
-    CHECKLIST_GROUPS.forEach((group) => {
-      if (leftCount <= rightCount) {
-        left.push(group);
-        leftCount += group.conditions.length;
-      } else {
-        right.push(group);
-        rightCount += group.conditions.length;
-      }
-    });
-    return [left, right];
-  }, []);
+  // Category slider (same visual language as CategoryFilterBar's scrollable
+  // mode) + photo-forward tile grid, replacing the old two-column
+  // per-category cards (2026-07-22, Danielle's call — the small list-row
+  // thumbnails were "hard to see," and simply enlarging them wasn't the
+  // answer).
+  //
+  // "All" (the default) is deliberately flat, not grouped by category
+  // (2026-07-22, Danielle's call after weighing it out loud): category
+  // grouping was exactly what forced the wasted space and scrolling she was
+  // trying to fix — every category has to start its own row no matter how
+  // full the previous row was, and a fixed pairing (e.g. a 2-item category
+  // + a 3-item category sharing a row) breaks the moment either category's
+  // item count changes, which happened several times already this session.
+  // The photo is what actually tells a customer "that's my issue," not the
+  // category label above it, so losing the grouping costs little. Tapping a
+  // pill still filters down to one category's tiles (no header needed, the
+  // slider itself makes that obvious).
+  //
+  // Ordering: "All" is seeded from CHECKLIST_GROUPS' existing order, which is
+  // alphabetical by category (2026-07-23, Danielle's call — predictable and
+  // scannable beats frequency-ordered once you already know what you're
+  // looking for). This is just the fallback order for whatever COMMON_
+  // CONDITION_LABELS doesn't already float to the front — see
+  // sortCommonFirst below, which still surfaces the genuinely frequent
+  // conditions first regardless of category order.
+  const [activeChecklistCategory, setActiveChecklistCategory] = useState<
+    (typeof CHECKLIST_GROUPS)[number]["serviceCategory"] | "All"
+  >("All");
 
-  const renderGroup = (group: (typeof CHECKLIST_GROUPS)[number]) => (
-    <div key={group.serviceCategory} className="mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <img
-          src={CATEGORY_ICONS[group.serviceCategory]}
-          alt=""
-          aria-hidden="true"
-          className="h-6 w-6"
-        />
-        <h2 className="text-base font-semibold text-primary">{categoryDisplayLabel(group.serviceCategory)}</h2>
-      </div>
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex flex-col gap-3">
-          {group.conditions.map((cond, idx) => {
-            const id = `cond-${group.serviceCategory}-${cond.slug}-${idx}`;
-            return (
-              <label key={id} htmlFor={id} className="flex items-center gap-3 text-sm text-primary/90 cursor-pointer">
-                <img
-                  src={
-                    serviceBySlug.get(cond.slug)?.imageUrl ??
-                    cond.imageUrl ??
-                    CATEGORY_ICONS[group.serviceCategory]
-                  }
-                  alt=""
-                  aria-hidden="true"
-                  className="h-16 w-16 rounded-lg object-cover shrink-0"
-                  style={{ backgroundColor: "#f5f0e8" }}
-                />
-                <Checkbox
-                  id={id}
-                  checked={checkedLabels.has(cond.label)}
-                  onCheckedChange={() => toggleCondition(cond.label)}
-                />
-                {cond.label}
-              </label>
-            );
-          })}
+  type VisibleCondition = {
+    label: string;
+    slug: string;
+    imageUrl?: string;
+    afterImageUrl?: string;
+    category: (typeof CHECKLIST_GROUPS)[number]["serviceCategory"];
+    id: string;
+  };
+
+  // Common conditions float to the front of whatever's currently visible —
+  // "All" or a single category filter — in the exact order Danielle gave
+  // (COMMON_CONDITION_LABELS, based on real completed-order data, not a
+  // guess). Everything else keeps its existing relative order after that.
+  const sortCommonFirst = (list: VisibleCondition[]): VisibleCondition[] => {
+    const byLabel = new Map(list.map((c) => [c.label, c]));
+    const common = COMMON_CONDITION_LABELS.map((label) => byLabel.get(label)).filter(
+      (c): c is VisibleCondition => !!c,
+    );
+    const commonLabels = new Set(common.map((c) => c.label));
+    const rest = list.filter((c) => !commonLabels.has(c.label));
+    return [...common, ...rest];
+  };
+
+  // TEMPORARY (2026-07-27, Danielle's call) — she's screenshotting this page
+  // for a presentation and wants every tile with a real photo up top, every
+  // tile still falling back to a category icon (or the custom "Shoes smell"
+  // stink-lines icon, also not a real photo — and she's out of Adobe credits
+  // to generate its replacement today) pushed to the back. Layered on top of
+  // sortCommonFirst rather than replacing it — a stable partition, so
+  // Common-first ordering is preserved within each of the two groups. She's
+  // said she'll want to revisit condition order generally later, at which
+  // point this should probably go away.
+  const hasRealImage = (cond: VisibleCondition): boolean => {
+    const img = serviceBySlug.get(cond.slug)?.imageUrl ?? cond.imageUrl;
+    return !!img && img !== iconOdor;
+  };
+
+  const sortImagesFirst = (list: VisibleCondition[]): VisibleCondition[] => [
+    ...list.filter(hasRealImage),
+    ...list.filter((c) => !hasRealImage(c)),
+  ];
+
+  const visibleConditions = useMemo<VisibleCondition[]>(() => {
+    if (activeChecklistCategory === "All") {
+      // Dedupe by label — several conditions intentionally appear in more
+      // than one CHECKLIST_GROUPS entry (e.g. "Damage on heel tab" under both
+      // Scuffs & holes and Insole & interior) so they're reachable from
+      // either category filter. In the flat "All" view that would otherwise
+      // render the exact same tile twice, which reads as a bug rather than
+      // "this fits two categories."
+      const seen = new Set<string>();
+      const flat: VisibleCondition[] = [];
+      CHECKLIST_GROUPS.forEach((group) => {
+        group.conditions.forEach((cond, idx) => {
+          if (seen.has(cond.label)) return;
+          seen.add(cond.label);
+          flat.push({ ...cond, category: group.serviceCategory, id: `cond-${group.serviceCategory}-${cond.slug}-${idx}` });
+        });
+      });
+      return sortImagesFirst(sortCommonFirst(flat));
+    }
+    const group = CHECKLIST_GROUPS.find((g) => g.serviceCategory === activeChecklistCategory);
+    if (!group) return [];
+    return sortImagesFirst(
+      sortCommonFirst(
+        group.conditions.map((cond, idx) => ({
+          ...cond,
+          category: group.serviceCategory,
+          id: `cond-${group.serviceCategory}-${cond.slug}-${idx}`,
+        })),
+      ),
+    );
+  }, [activeChecklistCategory, serviceBySlug]);
+
+  const renderConditionTile = (cond: {
+    label: string;
+    slug: string;
+    imageUrl?: string;
+    afterImageUrl?: string;
+    category: (typeof CHECKLIST_GROUPS)[number]["serviceCategory"];
+    id: string;
+  }) => {
+    const isChecked = checkedLabels.has(cond.label);
+    const isCommon = COMMON_CONDITION_LABELS.includes(cond.label);
+    return (
+      <label
+        key={cond.id}
+        htmlFor={cond.id}
+        className="flex flex-col rounded-xl border overflow-hidden cursor-pointer transition-colors"
+        style={{
+          borderColor: isChecked ? "#3d1700" : "#e8e0d0",
+          borderWidth: isChecked ? 2 : 1,
+          backgroundColor: isChecked ? "#fff5cc" : "#fff",
+        }}
+      >
+        <div className="relative">
+          <BeforeAfterImage
+            before={
+              serviceBySlug.get(cond.slug)?.imageUrl ??
+              cond.imageUrl ??
+              CATEGORY_ICONS[cond.category]
+            }
+            after={serviceBySlug.get(cond.slug)?.afterImageUrl ?? cond.afterImageUrl}
+            alt=""
+            className="aspect-square w-full object-cover"
+            style={{ backgroundColor: "#f5f0e8" }}
+          />
+          {/* "Common" tag (2026-07-23, Danielle's call) — same visual
+              treatment as the "Popular" tag on ServiceCard, but labeled
+              differently on purpose: a problem someone's dealing with isn't
+              "popular," it's just something we see often. */}
+          {isCommon && (
+            <span
+              className="absolute top-2 left-2 text-[10px] font-medium px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
+            >
+              Common
+            </span>
+          )}
+          <Checkbox
+            id={cond.id}
+            checked={isChecked}
+            onCheckedChange={() => toggleCondition(cond.label)}
+            className="absolute top-2 right-2 bg-white/90"
+          />
         </div>
-      </div>
-    </div>
-  );
+        <span className="text-[13px] font-medium text-primary/90 px-2.5 py-2 leading-snug">{cond.label}</span>
+      </label>
+    );
+  };
 
   usePageMeta({
-    title: "Starter repair — Cobbli",
+    title: "Start a repair — Cobbli",
     description:
       "Tell us what's going on with your shoes and we'll recommend the right services or repair package.",
   });
@@ -238,11 +398,65 @@ const StartRepair = () => {
 
   const total = useMemo(() => cartLines.reduce((sum, l) => sum + l.price, 0), [cartLines]);
 
-  const onContinue = () => {
-    if (cartLines.length === 0) return;
+  // Required so either button below always has a pair to attach these
+  // services to — either an existing selected pair, or a name typed into the
+  // new-pair field.
+  const canFinalize = cartLines.length > 0 && (selectedPairId !== null || newPairName.trim().length > 0);
+
+  // Adds the current recommendation set to the bag under whichever pair is
+  // active — creating a new saved pair first if one was typed rather than
+  // picked. Shared by both buttons below (2026-07-27, Danielle's call: no
+  // separate "Continue" step or confirmation screen — each button commits
+  // this pair immediately and then does its own thing, no secondary page in
+  // between).
+  const commitPairToBag = (): boolean => {
+    if (!canFinalize) return false;
     const items: BagService[] = cartLines.map((l) => ({ id: l.id, name: l.name, price: l.price }));
+
+    let pair = selectedPairId ? getPair(selectedPairId) : undefined;
+    if (!pair) {
+      // No shoe-type/color/brand form anymore (Danielle's call, 2026-07-15)
+      // — pricing doesn't depend on them, so "Unspecified"/empty here is a
+      // safe, inert default rather than forcing a choice that doesn't matter.
+      pair = addSavedPair({
+        shoeType: "Unspecified" as ShoeType,
+        colors: [],
+        brand: undefined,
+        description: newPairName.trim(),
+      });
+      setSelectedPairId(pair.id);
+    }
+
     trackEvent("service_added", { source: "starter_repair", item_count: items.length });
-    openPairFlow(items);
+    addPairToBag(items, pair.id, formatPairLabel(pair), pair.shoeType, repairNotes.trim() || undefined);
+    trackEvent("pair_confirmed", { shoe_type: pair.shoeType, source: selectedPairId ? "existing_pair" : "new_pair" });
+    trackEvent("repair_added_to_bag", {
+      value: items.reduce((sum, s) => sum + s.price, 0) / 100,
+      currency: "USD",
+      service_count: items.length,
+    });
+    return true;
+  };
+
+  // "Add another pair to my order" — commits this pair, then a genuine fresh
+  // start for the next one: clears the pair selection/name, notes, and every
+  // piece of checklist state so nothing carries over from the pair just
+  // described.
+  const onAddAnotherPair = () => {
+    if (!commitPairToBag()) return;
+    setSelectedPairId(null);
+    setNewPairName("");
+    setRepairNotes("");
+    setCheckedLabels(new Set());
+    setCheckedAddons(new Set());
+    setCartLines([]);
+    setNotOffered([]);
+    setStep("checklist");
+  };
+
+  const onGoToCheckout = () => {
+    if (!commitPairToBag()) return;
+    navigate("/checkout");
   };
 
   if (isLoading) {
@@ -264,70 +478,189 @@ const StartRepair = () => {
         <div className={`container ${step === "checklist" ? "max-w-4xl" : "max-w-2xl"}`}>
           {step === "checklist" ? (
             <>
-              {activePairLabel && (
-                <p className="mb-2 text-sm font-medium" style={{ color: "#7a5c40" }}>
-                  Adding more services for: {activePairLabel}
-                </p>
-              )}
-              <h1 className="font-display text-3xl md:text-4xl text-primary">What's going on with your shoes?</h1>
-              <p className="mt-2 text-primary/80">
-                Select everything that applies — we'll recommend the right services.
-              </p>
-
-              {/* Photo-flow callout — promoted to a prominent spot at the top
-                  of the page (not a footnote) per Danielle's request: she's
-                  actively doing friends-and-family repairs and wants to keep
-                  steering people toward the photo option early on to see
-                  where they go, alongside the checklist below. Approved via
-                  mockup before building. */}
-              <div
-                className="mt-6 flex items-start gap-3.5 rounded-[10px] border p-4"
-                style={{ backgroundColor: "#fff5cc", borderColor: "#fdb600" }}
-              >
-                <div
-                  className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: "#fdb600" }}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h1 className="font-display text-3xl md:text-4xl text-primary">What needs attention?</h1>
+                  <p className="mt-2 text-primary/80">
+                    Select everything that applies and we'll recommend the right services.
+                  </p>
+                </div>
+                {/* Photo-flow entry point — a wide, short card, far-right
+                    aligned in the header row (2026-07-27, Danielle's call:
+                    the earlier square version was taller than the H1 +
+                    subtext block next to it, pushing the category pills
+                    down). Icon-left/text-right instead of icon-on-top/text-
+                    below keeps its height in line with the header instead of
+                    growing with wrapped text. Kept deliberately quiet
+                    relative to the checklist itself — still a secondary
+                    path, not competing with it. */}
+                <Link
+                  to="/start-repair/assessment"
+                  onClick={() => trackEvent("start_repair", { source: "starter_repair_photo_callout" })}
+                  className="flex items-center gap-2.5 w-64 shrink-0 rounded-lg border border-border px-3 py-2.5 hover:border-primary/40 transition-colors"
                 >
-                  <Camera size={18} style={{ color: "#3d1700" }} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[15px] font-medium" style={{ color: "#3d1700" }}>
-                    Want us to take a look instead?
-                  </p>
-                  <p className="mt-1 text-[13px] leading-relaxed" style={{ color: "#3d1700" }}>
-                    Send photos/videos of your shoes and we'll personally review them and recommend the right repair.
-                  </p>
-                  <Link
-                    to="/start-repair/assessment"
-                    onClick={() => trackEvent("start_repair", { source: "starter_repair_photo_callout" })}
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-[13px] font-medium"
-                    style={{ backgroundColor: "#3d1700", color: "#fff5cc" }}
+                  <span
+                    className="flex items-center justify-center h-8 w-8 rounded-md shrink-0"
+                    style={{ backgroundColor: "#f5f0e8" }}
                   >
-                    Send us photos or videos
-                    <ArrowRight size={15} />
-                  </Link>
-                </div>
+                    <Camera size={16} className="text-[#7a5c40]" />
+                  </span>
+                  <span className="text-[11px] leading-snug text-primary/80 text-left">
+                    <strong className="font-semibold">Not sure?</strong> Send a photo or video and we'll recommend.
+                  </span>
+                </Link>
               </div>
 
-              {/* Two columns on desktop so the wider container above is
-                  actually put to use and there's less scrolling — single
-                  column on mobile, unchanged. Each column is an explicit,
-                  JS-computed list (see leftGroups/rightGroups above) rather
-                  than CSS multi-column, so short groups fill real empty
-                  space instead of wherever the browser's column-balancing
-                  algorithm happens to put them. Columns still won't align
-                  card-for-card between each other (Danielle's earlier call
-                  — worth it to kill dead space). */}
-              <div className="mt-8 flex flex-col md:flex-row gap-8">
-                <div className="flex-1 min-w-0">{leftGroups.map(renderGroup)}</div>
-                <div className="flex-1 min-w-0">{rightGroups.map(renderGroup)}</div>
+              {/* Which-pair field (2026-07-27, Danielle's call) — replaced
+                  the old static "Adding more services for: X" label sitting
+                  next to a dropdown that showed the exact same name a second
+                  time. Now there's exactly one control: the dropdown when
+                  there's a saved pair to show (signed-in, has saved pairs),
+                  or the free-text field in its place otherwise — never both
+                  showing the same pair's name at once. Picking a different
+                  saved pair, or switching to "Add a new pair," re-triggers
+                  the checked-labels effect above so the checklist reloads
+                  that pair's own existing selections instead of carrying
+                  over whatever was checked for the last one. Sits below the
+                  H1/subtext and above the category pills (2026-07-27,
+                  Danielle's call) rather than above the H1. */}
+              <div className="mt-6">
+                <p className="text-sm font-medium mb-1.5" style={{ color: "#7a5c40" }}>
+                  Which pair needs attention? <span style={{ color: "#a32d2d" }}>*</span>
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {showPairDropdown && (
+                    <select
+                      aria-label="Which pair needs attention?"
+                      value={selectedPairId ?? ""}
+                      onChange={(e) => setSelectedPairId(e.target.value || null)}
+                      className="text-sm border border-border rounded-md px-3 py-2 text-primary bg-white"
+                    >
+                      <option value="">Add a new pair</option>
+                      {pairs.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {formatPairLabel(p)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {isAddingNewPair && (
+                    <input
+                      type="text"
+                      value={newPairName}
+                      onChange={(e) => setNewPairName(e.target.value)}
+                      placeholder="e.g. Black loafers"
+                      className="text-sm border border-border rounded-md px-3 py-2 text-primary flex-1 min-w-[200px]"
+                    />
+                  )}
+                </div>
+                {isAddingNewPair && (
+                  <p className="text-xs mt-1.5" style={{ color: "#8a7a68" }}>
+                    Add shoe details to help us match services when you send in multiple pairs.
+                  </p>
+                )}
+              </div>
+
+              {/* Category slider — switched from a horizontally-scrolling row
+                  to a wrapping grid (2026-07-23, Danielle's call): "Cleaning &
+                  odor" was falling off the right edge, forcing a scroll to
+                  see it, which she doesn't want at all. Same fixed-width
+                  auto-fit column technique already used by CategoryFilterBar's
+                  non-scrollable mode — every button is the same width
+                  regardless of label length, labels wrap onto a second line
+                  within that width instead of forcing the button wider, and
+                  the whole row wraps onto a second line of its own once
+                  columns stop fitting (e.g. on a narrower window), rather
+                  than ever requiring horizontal scroll.
+
+                  Column min-width/gap/padding tightened 2026-07-27 (Danielle's
+                  call) — at the old 76px minimum + gap-3, 10 tiles (All + 9
+                  categories) was juuust past what fits at this container's
+                  narrowest desktop width (768px, before max-w-4xl takes over
+                  at the lg breakpoint), so "Zipper" alone kept falling to its
+                  own second row. Shrunk enough to fit all 10 in that
+                  narrowest case with room to spare. */}
+              <div
+                role="tablist"
+                aria-label="Checklist categories"
+                className="mt-8 grid gap-1.5"
+                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(62px, 1fr))" }}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeChecklistCategory === "All"}
+                  onClick={() => setActiveChecklistCategory("All")}
+                  className={`flex flex-col items-center gap-1 px-1.5 py-2.5 rounded-xl text-[11px] font-medium text-center transition-colors min-w-0 w-full ${
+                    activeChecklistCategory === "All" ? "text-primary border-[1.5px]" : "text-[#7a5c40] hover:text-primary"
+                  }`}
+                  style={activeChecklistCategory === "All" ? { backgroundColor: "#f5f0e8", borderColor: "#3d1700" } : undefined}
+                >
+                  <img src={CATEGORY_ICONS["All services"]} alt="" aria-hidden="true" style={{ width: 20, height: 20 }} />
+                  <span
+                    className="leading-snug"
+                    style={activeChecklistCategory === "All" ? { borderBottom: "2px solid #fdb600", paddingBottom: 1 } : undefined}
+                  >
+                    All
+                  </span>
+                </button>
+                {CHECKLIST_GROUPS.map((group) => {
+                  const cat = group.serviceCategory;
+                  const isActive = activeChecklistCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setActiveChecklistCategory(cat)}
+                      className={`flex flex-col items-center gap-1 px-1.5 py-2.5 rounded-xl text-[11px] font-medium text-center transition-colors min-w-0 w-full ${
+                        isActive ? "text-primary border-[1.5px]" : "text-[#7a5c40] hover:text-primary"
+                      }`}
+                      style={isActive ? { backgroundColor: "#f5f0e8", borderColor: "#3d1700" } : undefined}
+                    >
+                      <img src={CATEGORY_ICONS[cat]} alt="" aria-hidden="true" style={{ width: 20, height: 20 }} />
+                      <span
+                        className="leading-snug"
+                        style={isActive ? { borderBottom: "2px solid #fdb600", paddingBottom: 1 } : undefined}
+                      >
+                        {categoryDisplayLabel(cat)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Photo-forward tile grid — flat, no category headers, even for
+                  "All" (see visibleConditions above for why). */}
+              <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                {visibleConditions.map(renderConditionTile)}
               </div>
 
               <div className="mt-8 pt-6 border-t border-border">
-                <p className="text-sm font-semibold text-primary mb-3">Add-ons (optional)</p>
-                <div className="flex flex-wrap gap-x-6 gap-y-3">
+                {/* Renamed to "Add-ons" (2026-07-27, Danielle's call) — back
+                    from "Preventative care," which undersold Shoe shine and
+                    now Lace replacement (neither is really "preventative").
+                    Prices shown here come from the live catalog
+                    (serviceBySlug/cardPriceLabel) so they can never drift
+                    from what's shown on the service's own card/detail page. */}
+                <p className="text-sm font-semibold text-primary mb-1">Add-ons</p>
+                <p className="text-xs text-primary/70 mb-3">A little extra care while we're already working on your shoes.</p>
+                {/* Grid instead of flex-wrap (2026-07-22, Danielle's call:
+                    "evenly spaced") — flex-wrap let each item's width follow
+                    its own text length, so the three columns didn't line up.
+                    Equal-width grid columns match the pattern already used
+                    by CategoryFilterBar. */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
                   {ADDONS.map((addon) => {
                     const id = `addon-${addon.slug}`;
+                    // Strips a trailing "per pair" (same pattern as
+                    // ServiceDetail.tsx's displayPrice) — redundant here,
+                    // Danielle's call (2026-07-27): every add-on is obviously
+                    // priced per pair already.
+                    const price = services?.find((s) => s.slug === addon.slug)?.cardPriceLabel
+                      ?.replace(/\s+per\s+\S.*/i, "")
+                      .trim();
                     return (
                       <label key={addon.slug} htmlFor={id} className="flex items-start gap-2 text-sm text-primary/90 cursor-pointer">
                         <Checkbox
@@ -338,6 +671,7 @@ const StartRepair = () => {
                         />
                         <span>
                           {addon.label}
+                          {price && <span className="ml-1.5 text-[12px] text-muted-foreground">{price}</span>}
                           <span className="block text-[12px] text-muted-foreground">{addon.description}</span>
                         </span>
                       </label>
@@ -374,7 +708,6 @@ const StartRepair = () => {
                 ← Back to checklist
               </button>
               <h1 className="font-display text-3xl md:text-4xl text-primary">Here's what we recommend</h1>
-              <p className="mt-2 text-primary/80">You can remove anything below before continuing.</p>
 
               {notOffered.length > 0 && (
                 <div className="mt-6 flex flex-col gap-3">
@@ -389,7 +722,7 @@ const StartRepair = () => {
               <div className="mt-6 flex flex-col gap-3">
                 {cartLines.length === 0 ? (
                   <p className="text-muted-foreground text-sm py-6">
-                    Nothing left to add — go back to the checklist to select something, or browse all services.
+                    Nothing left to add — go back to the checklist to select something.
                   </p>
                 ) : (
                   cartLines.map((line) => (
@@ -397,7 +730,7 @@ const StartRepair = () => {
                       <div className="min-w-0">
                         {line.addresses.length > 0 && (
                           <p className="text-xs text-muted-foreground mb-1">
-                            Addresses: {line.addresses.join(", ").toLowerCase()}
+                            Fixes: {line.addresses.join(", ").toLowerCase()}
                           </p>
                         )}
                         <p className="font-medium text-primary">
@@ -426,19 +759,66 @@ const StartRepair = () => {
                 <span className="text-xl font-semibold text-primary">{formatPrice(total)}</span>
               </div>
 
+              {/* Notes for this repair (2026-07-27, Danielle's call) — moved
+                  here from the old PairFlowDialog "describe this pair" step,
+                  now that this page is where a repair actually gets
+                  committed. Free-form; resets whenever a fresh pair is
+                  started (see onAddAnotherPair). */}
+              <div className="mt-6">
+                <label htmlFor="repair-notes" className="text-sm font-medium text-primary">
+                  Notes for this repair
+                </label>
+                <Textarea
+                  id="repair-notes"
+                  value={repairNotes}
+                  onChange={(e) => setRepairNotes(e.target.value)}
+                  placeholder="Anything specific you'd like us to pay attention to?"
+                  rows={4}
+                  className="mt-1.5"
+                />
+              </div>
+
+              {/* "Browse full services list" removed 2026-07-27 (Danielle's
+                  call) — she doesn't want to route customers to /services
+                  from here at all: they can already get back via "Back to
+                  checklist" above, and the services page uses catalog
+                  terminology that doesn't match how customers describe their
+                  own problem. The only reason it was here was to let people
+                  see pricing, which she's now reconsidering more broadly
+                  (possibly folding pricing into this flow directly and
+                  dropping /services entirely) — not decided yet, so /services
+                  itself stays as-is for now.
+
+                  Two buttons instead of one "Continue" (2026-07-27,
+                  Danielle's call) — no separate confirmation screen either:
+                  each button commits this pair to the bag (see
+                  commitPairToBag) and then does its own thing directly, never
+                  a secondary page in between. */}
               <div className="mt-8 flex flex-col gap-3">
                 <Button
                   type="button"
+                  variant="outline"
                   size="lg"
-                  onClick={onContinue}
-                  disabled={cartLines.length === 0}
-                  className={cartLines.length === 0 ? "opacity-50 cursor-not-allowed" : ""}
+                  onClick={onAddAnotherPair}
+                  disabled={!canFinalize}
+                  className={!canFinalize ? "opacity-50 cursor-not-allowed" : ""}
                 >
-                  Continue
+                  Add another pair to my order
                 </Button>
-                <Button type="button" variant="outline" size="lg" onClick={() => navigate("/services")}>
-                  Browse full services list
+                <Button
+                  type="button"
+                  size="lg"
+                  onClick={onGoToCheckout}
+                  disabled={!canFinalize}
+                  className={!canFinalize ? "opacity-50 cursor-not-allowed" : ""}
+                >
+                  Go to checkout
                 </Button>
+                {cartLines.length > 0 && !canFinalize && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Name this pair on the checklist to continue.
+                  </p>
+                )}
               </div>
             </>
           )}

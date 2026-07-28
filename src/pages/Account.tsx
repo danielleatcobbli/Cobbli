@@ -544,7 +544,7 @@ const PaymentMethods = () => {
 
   return (
     <section>
-      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My Payment Methods</h1>
+      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My payment methods</h1>
       {items === null ? (
         <BrandSpinner className="py-10" />
       ) : items.length === 0 ? (

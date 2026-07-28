@@ -59,6 +59,8 @@ const PairFlowDialog = () => {
     setSelectedPairId,
     pendingRecommendedItems,
     setPendingRecommendedItems,
+    pendingNewPairName,
+    setPendingNewPairName,
   } = useRepairFlow();
   const { addPair: addPairToBag } = useBag();
 
@@ -94,6 +96,29 @@ const PairFlowDialog = () => {
       });
       setPairLabel(formatPairLabel(existingPair));
       setPendingRecommendedItems(null);
+      setStep("anythingElse");
+    } else if (pendingNewPairName && itemsToAdd.length > 0) {
+      // The Starter Repair checklist's own "Which pair needs attention?"
+      // field (2026-07-27) already collected a new pair's name up front —
+      // create it and add straight to the bag rather than asking again here,
+      // same bypass as the existingPair branch above.
+      const pair = addSavedPair({
+        shoeType: "Unspecified" as ShoeType,
+        colors: [],
+        brand: undefined,
+        description: pendingNewPairName.trim(),
+      });
+      setSelectedPairId(pair.id);
+      addPairToBag(itemsToAdd, pair.id, formatPairLabel(pair), pair.shoeType);
+      trackEvent("pair_confirmed", { shoe_type: pair.shoeType, source: "new_pair" });
+      trackEvent("repair_added_to_bag", {
+        value: itemsToAdd.reduce((sum, s) => sum + s.price, 0) / 100,
+        currency: "USD",
+        service_count: itemsToAdd.length,
+      });
+      setPairLabel(formatPairLabel(pair));
+      setPendingRecommendedItems(null);
+      setPendingNewPairName(null);
       setStep("anythingElse");
     } else {
       setStep("describe");

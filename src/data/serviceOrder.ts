@@ -9,39 +9,28 @@
  * The underlying service records themselves already come from one place
  * (Supabase, via useServices()) on both pages — this file only covers the
  * display-order/popularity layer on top of that shared data.
+ *
+ * Both POPULAR_SERVICE_SLUGS and ORDERED_SERVICE_SLUGS are now derived
+ * entirely from starterRepairConditions.ts (2026-07-23, Danielle's call: "if
+ * the condition doesn't have a common tag, the service shouldn't have a
+ * popular tag" — and display order should be "stored in the same way we have
+ * it sorted on the conditions page"). Neither is hand-maintained here
+ * anymore, so the checklist and the Services page/homepage can't drift out
+ * of sync with each other the way they previously could.
  */
 
 import { type Service } from "@/types/service";
+import { COMMON_SERVICE_SLUGS, CHECKLIST_ORDERED_SLUGS } from "@/data/starterRepairConditions";
 
-export const POPULAR_SERVICE_SLUGS = new Set([
-  "full-resole",
-  "color-restoration",
-  "leather-or-suede-conditioning",
-  "insole-replacement",
-  "lining-repair",
-  "shoe-shine",
-]);
+export const POPULAR_SERVICE_SLUGS = new Set(COMMON_SERVICE_SLUGS);
 
-export const ORDERED_SERVICE_SLUGS: string[] = [
-  // Popular
-  "full-resole",
-  "color-restoration",
-  "leather-or-suede-conditioning",
-  "insole-replacement",
-  "lining-repair",
-  "shoe-shine",
-  // Non-popular
-  "protective-full-sole",
-  "waterproofing",
-  "high-heel-tip-replacement",
-  "heel-reattachment",
-  "seam-repair",
-  "strap-repair",
-  "hardware-repair",
-  "zipper-replacement",
-  "zipper-slider-replacement",
-  "deodorizing-treatment",
-];
+// Services with no checklist condition behind them at all (Add-ons) —
+// appended after everything the checklist covers, in the same relative order
+// they've always shown in. Never "Popular" (see above), since nothing
+// "common" maps to them. Lace replacement added 2026-07-27.
+const NON_CHECKLIST_SERVICE_SLUGS: string[] = ["shoe-shine", "protective-full-sole", "waterproofing", "lace-replacement"];
+
+export const ORDERED_SERVICE_SLUGS: string[] = [...CHECKLIST_ORDERED_SLUGS, ...NON_CHECKLIST_SERVICE_SLUGS];
 
 export const slugOrder = (slug: string): number => {
   const idx = ORDERED_SERVICE_SLUGS.indexOf(slug);

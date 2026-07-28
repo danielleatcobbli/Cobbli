@@ -20,39 +20,52 @@ export const SHOE_TYPES: ShoeType[] = [
   "Sneakers",
 ];
 
+// Unified 2026-07-23 (Danielle's call): the Services page/homepage filter
+// bar and the Start a Repair checklist previously used two different
+// category taxonomies (this union used to carry both a set of real-catalog
+// categories and a separate set of "checklist-only" ones, matched up ad hoc
+// per service). She wants "one and the same" — same categories, same names,
+// same icons, everywhere a category shows up. These 9 are exactly
+// CHECKLIST_GROUPS' own categories (starterRepairConditions.ts), in the same
+// order, and are now the only ServiceCategory values that exist — every real
+// catalog service's `categories` column is tagged with these directly.
+//
+// Two categories from the old catalog taxonomy had no checklist equivalent
+// at all (Preventative care, Fit) since waterproofing/protective soles/shoe
+// stretching aren't "problems" a customer selects, they're add-ons or a fit
+// adjustment. Per Danielle's explicit call, these were folded into whichever
+// of the 9 fits best rather than kept as their own bucket — see the Supabase
+// migration notes for exactly where each landed (Protective soles -> Sole &
+// heel, Waterproofing -> Material & finish, Shoe stretching -> Material &
+// finish — renamed from "Material & shape" 2026-07-27 once "Shoes losing
+// shape" was removed as a condition, see starterRepairConditions.ts). Same
+// for "Sole"/"Heel" as separate single-word tags and "Odor" as
+// distinct from "Cleaning & odor" — both were legacy/vestigial and are gone
+// now that every sole/heel service is tagged "Sole & heel" directly.
 export type ServiceCategory =
-  | "Sole"
-  | "Heel"
-  // UI-only grouping for the Services page filter bar (CategoryFilterBar.tsx)
-  // — Danielle's call (2026-07-15): Sole and Heel "naturally go together," so
-  // they're shown as one combined filter button there. Real services are
-  // still individually tagged "Sole" and/or "Heel" in the catalog; nothing
-  // is ever assigned this value directly. See categoryMatches() in
-  // CategoryFilterBar.tsx for the OR-match this implies.
-  | "Sole & Heel"
-  | "Cleaning"
-  | "Color, scuffs, & shine"
-  | "Inside of shoe"
-  | "Preventative care"
+  | "Sole & heel"
+  | "Scuffs & holes"
+  | "Color & stains"
+  | "Material & finish"
+  | "Insole & interior"
+  | "Stitching & seams"
   | "Straps, buckles, & hardware"
-  | "Tears & holes"
   | "Zipper"
-  | "Fit"
-  // Checklist-only, like "Sole & Heel" above (2026-07-16, Danielle's call) —
-  // deodorizing-treatment is tagged "Cleaning" in the catalog, not "Odor", so
-  // this deliberately isn't in CATEGORIES_ORDERED / the Services page filter
-  // bar (adding it there would create a filter button matching zero
-  // services). Used only as a ChecklistGroup.serviceCategory value.
-  | "Odor";
+  | "Cleaning & odor";
 
+// Alphabetical (2026-07-23, Danielle's call — categories should be
+// predictable/scannable rather than frequency-ordered; must stay in sync
+// with CHECKLIST_GROUPS' own order in starterRepairConditions.ts since the
+// two taxonomies are unified).
 export const CATEGORIES_ORDERED: ServiceCategory[] = [
-  "Sole & Heel",
-  "Cleaning",
-  "Color, scuffs, & shine",
-  "Inside of shoe",
-  "Preventative care",
+  "Cleaning & odor",
+  "Color & stains",
+  "Insole & interior",
+  "Material & finish",
+  "Scuffs & holes",
+  "Sole & heel",
+  "Stitching & seams",
   "Straps, buckles, & hardware",
-  "Tears & holes",
   "Zipper",
 ];
 
@@ -117,6 +130,10 @@ export type Service = {
   /** Representative "before" photo for this service's card/detail page.
    *  Falls back to the solid brand-color placeholder when not set. */
   imageUrl?: string;
+  /** "After" photo — swaps in on hover over the card image (see
+   *  BeforeAfterImage). Optional and usually unset for now (2026-07-22): we
+   *  don't have real after photos yet, so hover is a no-op until one exists. */
+  afterImageUrl?: string;
 };
 
 /** Lowest standard variant price (dollars), used by the repair flow back-compat. */

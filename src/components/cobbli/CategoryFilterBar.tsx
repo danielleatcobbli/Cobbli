@@ -1,64 +1,52 @@
 import iconAll from "@/assets/category-icons/all.svg";
 import iconBottom from "@/assets/category-icons/bottom.svg";
-import iconHeel from "@/assets/category-icons/heel.svg";
-import iconCleaning from "@/assets/category-icons/cleaning.svg";
 import iconColor from "@/assets/category-icons/color.svg";
 import iconInside from "@/assets/category-icons/inside.svg";
-import iconPreventative from "@/assets/category-icons/preventative.svg";
 import iconStraps from "@/assets/category-icons/straps.svg";
 import iconTears from "@/assets/category-icons/tears.svg";
 import iconZipper from "@/assets/category-icons/zipper.svg";
-import iconOdor from "@/assets/category-icons/odor.svg";
+import iconScratch from "@/assets/category-icons/scratch.svg";
+import iconLeather from "@/assets/category-icons/leather.svg";
+import iconShoeshine from "@/assets/category-icons/shoeshine.svg";
 import { CATEGORIES_ORDERED, type ServiceCategory } from "@/types/service";
 
 export const ALL_CATEGORIES_LABEL = "All services" as const;
 export const FILTER_BAR_CATEGORIES = [ALL_CATEGORIES_LABEL, ...CATEGORIES_ORDERED] as const;
 export type CategoryFilter = (typeof FILTER_BAR_CATEGORIES)[number];
 
-/** Shared category icon set — also reused by StartRepair.tsx's checklist so
- *  the same icon appears for a category everywhere it's shown. "Sole" and
- *  "Heel" stay here individually for the checklist's own separate Sole/Heel
- *  groups; "Sole & Heel" (the combined filter-bar button) deliberately reuses
- *  the sole icon rather than getting a new one — Danielle's call, the two
- *  "naturally go together." */
+/** Shared category icon set — one icon per category, in lockstep everywhere
+ *  a category shows up (Services page filter bar, homepage, and the Start a
+ *  Repair checklist all read from this same map, since the two taxonomies
+ *  were unified into one on 2026-07-23 — see ServiceCategory in
+ *  types/service.ts). "Stitching & seams" still borrows iconTears as a
+ *  PLACEHOLDER — flagged, needs a real icon commissioned once Danielle's
+ *  ready to prioritize it. */
 export const CATEGORY_ICONS: Record<string, string> = {
   [ALL_CATEGORIES_LABEL]: iconAll,
-  "Sole": iconBottom,
-  "Heel": iconHeel,
-  "Sole & Heel": iconBottom,
-  "Cleaning": iconCleaning,
-  "Color, scuffs, & shine": iconColor,
-  "Inside of shoe": iconInside,
-  "Preventative care": iconPreventative,
+  "Sole & heel": iconBottom,
+  "Scuffs & holes": iconScratch,
+  "Color & stains": iconColor,
+  "Material & finish": iconLeather,
+  "Insole & interior": iconInside,
+  "Stitching & seams": iconTears,
   "Straps, buckles, & hardware": iconStraps,
-  "Tears & holes": iconTears,
   "Zipper": iconZipper,
-  // Dedicated "stinky shoe" icon Danielle supplied (2026-07-16), recolored to
-  // match the set's brown (#3d1700) and normalized to the same svg wrapper
-  // conventions as the rest of category-icons/*.
-  "Odor": iconOdor,
+  "Cleaning & odor": iconShoeshine,
 };
 
 const ICONS = CATEGORY_ICONS;
 
-/** Display text overrides, shared by this filter bar and the Starter repair
+/** Display text override, shared by this filter bar and the Start a Repair
  *  checklist (StartRepair.tsx) so a category reads the same way in both
- *  places. Two different motivations, same mechanism:
- *  - "Straps, buckles, & hardware" / "Color, scuffs, & shine" are shortened
- *    (2026-07-15) so every filter-bar button fits on one row.
- *  - "Inside of shoe" -> "Insole" and "Tears & holes" -> "Tears, holes, &
- *    stitching" (2026-07-15) are clarity renames: "Insole" is more concrete
- *    and matches how customers actually describe that part of the shoe, and
- *    a separated seam doesn't read as a "tear" to most people.
- *  All four are display-only — the underlying ServiceCategory value (used
- *  for matching against a service's real category tags, and as the
- *  CATEGORY_ICONS key) is untouched, so none of this needs a catalog data
- *  migration and can't drift out of sync with it. */
+ *  places. "Straps, buckles, & hardware" is shortened to fit the filter-bar
+ *  button width (2026-07-15) — display-only, the underlying ServiceCategory
+ *  value (used for matching against a service's real category tags, and as
+ *  the CATEGORY_ICONS key) is untouched. The other three overrides that used
+ *  to live here (Color/scuffs/shine, Inside of shoe, Tears & holes) were
+ *  removed with the 2026-07-23 category unification — those categories don't
+ *  exist anymore, replaced by the checklist's own (already-short) names. */
 const CATEGORY_DISPLAY_LABELS: Partial<Record<ServiceCategory, string>> = {
   "Straps, buckles, & hardware": "Straps & hardware",
-  "Color, scuffs, & shine": "Color & shine",
-  "Inside of shoe": "Insole",
-  "Tears & holes": "Tears, holes, & stitching",
 };
 
 /** The text to show for a category, anywhere it's displayed — see
@@ -67,13 +55,11 @@ export const categoryDisplayLabel = (c: ServiceCategory | typeof ALL_CATEGORIES_
   CATEGORY_DISPLAY_LABELS[c as ServiceCategory] ?? c;
 
 /** Whether a service (by its real category tags) matches the active filter.
- *  Special-cases "Sole & Heel" — the one filter-bar entry that isn't a real
- *  per-service tag — as "tagged Sole OR Heel" rather than an exact match, so
- *  merging those two into one button never requires touching the catalog's
- *  own "Sole"/"Heel" tags. */
+ *  Every category is now a direct, real per-service tag (2026-07-23 unifi-
+ *  cation removed the old "Sole & heel" OR-match special case — services are
+ *  tagged "Sole & heel" directly now, not separately "Sole" and/or "Heel"). */
 export function categoryMatches(categories: ServiceCategory[], filter: CategoryFilter): boolean {
   if (filter === ALL_CATEGORIES_LABEL) return true;
-  if (filter === "Sole & Heel") return categories.includes("Sole") || categories.includes("Heel");
   return categories.includes(filter as ServiceCategory);
 }
 

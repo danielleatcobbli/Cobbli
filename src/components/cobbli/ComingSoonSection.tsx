@@ -19,40 +19,32 @@ const ComingSoonSection = ({ services, serviceIdBySlug, disableLinks: _disableLi
       <p className="text-sm mb-6" style={{ color: "#7a5c40" }}>
         Vote for what you'd like us to offer next
       </p>
+      {/* No image on these cards (2026-07-27, Danielle's call) — there's no
+          real photo for a service that doesn't exist yet, so the placeholder
+          tan box was just dead space. Just name, description, and the vote
+          button now. The per-card "Coming soon" pill is dropped too, since
+          the section heading right above already says that. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-5 md:gap-6">
         {services.map((s) => {
           const id = serviceIdBySlug[s.slug];
           return (
             <div
               key={s.slug}
-              className="rounded-xl overflow-hidden border border-border bg-card shadow-soft flex flex-col"
+              className="rounded-xl border border-border bg-card shadow-soft flex flex-col p-4 gap-1"
               style={{ opacity: 0.8 }}
             >
-              <div
-                className="aspect-[4/5] relative"
-                style={{ backgroundColor: "#9a8870" }}
+              <h3
+                className="text-[14px] font-bold leading-snug"
+                style={{ color: "#3d1700" }}
               >
-                <span
-                  className="absolute top-2 left-2 text-[10px] font-medium px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
-                >
-                  Coming soon
-                </span>
-              </div>
-              <div className="p-4 flex flex-col gap-1 flex-1">
-                <h3
-                  className="text-[14px] font-bold leading-snug"
-                  style={{ color: "#3d1700" }}
-                >
-                  {s.name}
-                </h3>
-                {s.description && (
-                  <p className="text-[12px] leading-snug mt-0.5" style={{ color: "#7a5c40" }}>
-                    {s.description}
-                  </p>
-                )}
-              </div>
-              <div className="px-4 pb-4">
+                {s.name}
+              </h3>
+              {s.description && (
+                <p className="text-[12px] leading-snug mt-0.5 flex-1" style={{ color: "#7a5c40" }}>
+                  {s.description}
+                </p>
+              )}
+              <div className="pt-3">
                 <ComingSoonVoteButton serviceId={id} />
               </div>
             </div>

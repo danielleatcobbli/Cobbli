@@ -341,7 +341,7 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
     key: "heel", label: "heel", multi: false, exclusiveValues: ["good"],
     options: [
       { value: "good", label: "Good" },
-      { value: "loose", label: "Loose (not yet detached)", service: "Heel repair" },
+      { value: "loose", label: "Loose (not yet detached)", service: "Heel reattachment" },
       { value: "separated", label: "Separated (detached but present)", service: "Heel replacement" },
       { value: "missing", label: "Missing entirely", service: "Heel replacement" },
       { value: "cracked", label: "Cracked or broken through the body", service: "Heel replacement" },
@@ -352,8 +352,8 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
     options: [
       { value: "not-applicable", label: "Not applicable" },
       { value: "good", label: "Good" },
-      { value: "worn-down", label: "Worn down", service: "High heel tip repair" },
-      { value: "missing", label: "Missing", service: "High heel tip repair" },
+      { value: "worn-down", label: "Worn down", service: "Heel tip repair" },
+      { value: "missing", label: "Missing", service: "Heel tip repair" },
     ],
   },
   {
@@ -375,8 +375,8 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
     key: "stitching", label: "stitching", multi: false, exclusiveValues: ["good"],
     options: [
       { value: "good", label: "Good" },
-      { value: "seam-separated", label: "Seam separated (opened, thread intact)", service: "Seam repair" },
-      { value: "thread-broken", label: "Thread broken or frayed", service: "Seam repair" },
+      { value: "seam-separated", label: "Seam separated (opened, thread intact)", service: "Stitching" },
+      { value: "thread-broken", label: "Thread broken or frayed", service: "Stitching" },
     ],
   },
   {
@@ -384,25 +384,25 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
     options: [
       { value: "good", label: "Good" },
       { value: "dull", label: "Dull, no damage", service: "Shoe shine" },
-      { value: "scuffs", label: "Scuffs present", service: "Scuff, stain, & color restoration" },
-      { value: "scratches", label: "Scratches present", service: "Scuff, stain, & color restoration" },
-      { value: "stains", label: "Stains present", service: "Scuff, stain, & color restoration" },
+      { value: "scuffs", label: "Scuffs present", service: "Scuff repair" },
+      { value: "scratches", label: "Scratches present", service: "Scuff repair" },
+      { value: "stains", label: "Stains present", service: "Color restoration" },
     ],
   },
   {
     key: "color", label: "color", multi: true, exclusiveValues: ["good"],
     options: [
       { value: "good", label: "Good" },
-      { value: "faded", label: "Faded or streaky", service: "Scuff, stain, & color restoration" },
-      { value: "discolored", label: "Discolored", service: "Scuff, stain, & color restoration" },
+      { value: "faded", label: "Faded or streaky", service: "Color restoration" },
+      { value: "discolored", label: "Discolored", service: "Color restoration" },
     ],
   },
   {
     key: "material", label: "material", multi: true, exclusiveValues: ["good"],
     options: [
       { value: "good", label: "Good" },
-      { value: "dry-cracking", label: "Dry or cracking", service: "Cleaning & conditioning" },
-      { value: "dull-dirty", label: "Dull or dirty (needs conditioning)", service: "Cleaning & conditioning" },
+      { value: "dry-cracking", label: "Dry or cracking", service: "Leather or suede conditioning" },
+      { value: "dull-dirty", label: "Dull or dirty (needs conditioning)", service: "Leather or suede conditioning" },
     ],
   },
   {
@@ -410,7 +410,7 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
     options: [
       { value: "not-applicable", label: "Not applicable" },
       { value: "good", label: "Good" },
-      { value: "separating", label: "Separating from shoe", service: "Strap repair" },
+      { value: "separating", label: "Separating from shoe", service: "Stitching" },
       { value: "torn-damaged", label: "Torn or otherwise damaged", service: "Strap replacement" },
     ],
   },
@@ -419,9 +419,9 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
     options: [
       { value: "not-applicable", label: "Not applicable" },
       { value: "good", label: "Good" },
-      { value: "loose", label: "Loose or detached", service: "Hardware or buckle repair" },
-      { value: "broken", label: "Broken or damaged", service: "Hardware or buckle replacement" },
-      { value: "missing", label: "Missing", service: "Hardware or buckle replacement" },
+      { value: "loose", label: "Loose or detached", service: "Stitching" },
+      { value: "broken", label: "Broken or damaged", service: "Hardware replacement" },
+      { value: "missing", label: "Missing", service: "Hardware replacement" },
     ],
   },
   {
@@ -429,9 +429,9 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
     options: [
       { value: "not-applicable", label: "Not applicable" },
       { value: "good", label: "Good" },
-      { value: "loose", label: "Loose or detached", service: "Hardware or buckle repair" },
-      { value: "broken", label: "Broken or damaged", service: "Hardware or buckle replacement" },
-      { value: "missing", label: "Missing", service: "Hardware or buckle replacement" },
+      { value: "loose", label: "Loose or detached", service: "Stitching" },
+      { value: "broken", label: "Broken or damaged", service: "Buckle replacement" },
+      { value: "missing", label: "Missing", service: "Buckle replacement" },
     ],
   },
   {

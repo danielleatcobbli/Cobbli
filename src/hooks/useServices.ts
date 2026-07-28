@@ -23,6 +23,7 @@ type Row = {
   is_coming_soon: boolean | null;
   qa_config: QAConfig | null;
   image_url: string | null;
+  after_image_url: string | null;
   service_variants: VariantRow[] | null;
 };
 
@@ -51,6 +52,7 @@ const mapRow = (r: Row): Service => {
     isComingSoon: !!r.is_coming_soon,
     qa: r.qa_config ?? undefined,
     imageUrl: r.image_url ?? undefined,
+    afterImageUrl: r.after_image_url ?? undefined,
     variants,
   };
 };
@@ -59,7 +61,7 @@ const fetchServices = async (): Promise<Service[]> => {
   const { data, error } = await supabase
     .from("services")
     .select(
-      "id, slug, name, short_description, full_description, card_name, card_price_label, categories, popularity_rank, is_coming_soon, qa_config, image_url, service_variants(variant_key, variant_label, standard_cents, premium_cents, rank)",
+      "id, slug, name, short_description, full_description, card_name, card_price_label, categories, popularity_rank, is_coming_soon, qa_config, image_url, after_image_url, service_variants(variant_key, variant_label, standard_cents, premium_cents, rank)",
     )
     .eq("is_active", true);
   if (error) throw error;

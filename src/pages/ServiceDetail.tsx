@@ -16,21 +16,11 @@ import { useRepairFlow } from "@/context/RepairFlowContext";
 import type { BagService } from "@/context/BagContext";
 import { minPrice } from "@/types/service";
 import { trackEvent } from "@/lib/analytics";
+import BeforeAfterImage from "@/components/cobbli/BeforeAfterImage";
+import { SLUG_TO_CONDITION_IMAGE } from "@/data/starterRepairConditions";
+import { POPULAR_SERVICE_SLUGS } from "@/data/serviceOrder";
 
 type Mode = "flow" | "standalone";
-
-// ---------------------------------------------------------------------------
-// Popular services
-// ---------------------------------------------------------------------------
-
-const POPULAR_SERVICE_SLUGS = new Set([
-  "full-resole",
-  "color-restoration",
-  "leather-or-suede-conditioning",
-  "insole-replacement",
-  "lining-repair",
-  "shoe-shine",
-]);
 
 // ---------------------------------------------------------------------------
 // Flat price fallback — used only when the DB card_price_label is empty.
@@ -40,27 +30,28 @@ const POPULAR_SERVICE_SLUGS = new Set([
 
 const SERVICE_DETAIL_PRICE: Record<string, string> = {
   "full-resole":                   "$85",
+  "partial-resole":                "$60",
   "high-heel-tip-replacement":     "$35",
   "heel-reattachment":             "$100",
   "color-restoration":             "$80",
+  "scuff-repair":                  "$80",
   "leather-or-suede-conditioning": "$65",
   "deodorizing-treatment":         "$50",
+  "deep-clean":                    "$50",
   "shoe-shine":                    "$20",
   "insole-replacement":            "$50",
+  "gluing":                        "$50",
   "lining-repair":                 "$75",
-  "seam-repair":                   "$50",
+  "patch-repair":                  "$75",
+  "stitching":                     "$50",
   "waterproofing":                 "$30",
   "protective-full-sole":          "$50",
-  "hardware-repair":               "$45",
-  "buckle-repair":                 "$45",
-  "strap-repair":                  "$45",
-  "zipper-reattachment":           "$75",
+  "zipper-replacement":            "$80",
   "zipper-slider-replacement":     "$45",
   // Coming soon
-  "full-dye":                      "$125",
-  "shoe-stretching":               "$40",
+  "strap-replacement":             "$80",
   "buckle-replacement":            "$80",
-  "heel-replacement":              "$150",
+  "hardware-replacement":          "$80",
 };
 
 // ---------------------------------------------------------------------------
@@ -70,10 +61,10 @@ const SERVICE_DETAIL_PRICE: Record<string, string> = {
 const UNSUPPORTED_BRANDS: Record<string, string[]> = {
   "full-resole":         ["Christian Louboutin", "Golden Goose", "Maison Margiela"],
   "color-restoration":   ["Golden Goose"],
+  "scuff-repair":        ["Golden Goose"],
   "insole-replacement":  ["Maison Margiela"],
   "protective-full-sole":["Christian Louboutin", "Golden Goose", "Maison Margiela"],
-  "zipper-reattachment": ["Golden Goose"],
-  "heel-replacement":    ["Christian Louboutin"],
+  "zipper-replacement":  ["Golden Goose"],
 };
 
 // ---------------------------------------------------------------------------
@@ -111,6 +102,13 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
   }
 
   if (!service) return <Navigate to={mode === "flow" ? "/start-repair/services" : "/services"} replace />;
+
+  // Falls back to the matching checklist condition's photo when this service
+  // has no catalog image_url of its own — same "same tile image everywhere"
+  // rule as ServiceCard (2026-07-23, Danielle's call).
+  const fallbackImage = SLUG_TO_CONDITION_IMAGE.get(service.slug);
+  const heroImage = service.imageUrl ?? fallbackImage?.imageUrl;
+  const heroAfterImage = service.afterImageUrl ?? fallbackImage?.afterImageUrl;
 
   const unsupportedBrands = UNSUPPORTED_BRANDS[service.slug];
   const isPopular = POPULAR_SERVICE_SLUGS.has(service.slug);
@@ -182,9 +180,10 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                 backgroundColor: service.isComingSoon ? "#9a8870" : "#3d1700",
               }}
             >
-              {service.imageUrl && !service.isComingSoon && (
-                <img
-                  src={service.imageUrl}
+              {heroImage && !service.isComingSoon && (
+                <BeforeAfterImage
+                  before={heroImage}
+                  after={heroAfterImage}
                   alt={service.name}
                   className="absolute inset-0 w-full h-full object-cover"
                 />

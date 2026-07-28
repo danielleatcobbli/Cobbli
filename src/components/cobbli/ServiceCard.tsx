@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import type { Service } from "@/types/service";
+import BeforeAfterImage from "@/components/cobbli/BeforeAfterImage";
+import { SLUG_TO_CONDITION_IMAGE } from "@/data/starterRepairConditions";
 
 type Props = {
   s: Service;
@@ -9,7 +11,7 @@ type Props = {
    *  card. The callback receives the service slug; the caller is responsible for
    *  handling any required modal gates before navigating. */
   onAddToRepair?: (slug: string) => void;
-  /** "Addresses: …" line from addressesLine() in starterRepairConditions.ts —
+  /** "Fixes: …" line from addressesLine() in starterRepairConditions.ts —
    *  shown in place of s.description when this service maps to at least one
    *  checklist condition, so the same service reads the same way here as it
    *  does on the Starter repair recommendation screen. Falls back to
@@ -28,13 +30,12 @@ const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair, addresses }: P
     <div className="group w-full rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col h-full">
       <Link to={to} className="flex flex-col flex-1">
         <div className="aspect-[4/5] relative overflow-hidden" style={{ backgroundColor: "#3d1700" }}>
-          {s.imageUrl && (
-            <img
-              src={s.imageUrl}
-              alt={s.name}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          )}
+          <BeforeAfterImage
+            before={s.imageUrl ?? SLUG_TO_CONDITION_IMAGE.get(s.slug)?.imageUrl}
+            after={s.afterImageUrl ?? SLUG_TO_CONDITION_IMAGE.get(s.slug)?.afterImageUrl}
+            alt={s.name}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
           {isPopular && (
             <span
               className="absolute top-2 left-2 text-[10px] font-medium px-2 py-0.5 rounded-full"

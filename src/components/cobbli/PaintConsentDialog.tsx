@@ -8,10 +8,15 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-/** Slugs that require paint/dye consent before being added to a repair. */
+/** Slugs that require paint/dye consent before being added to a repair.
+ *  Scuff repair was split out of the old combined "Scuff, stain, & color
+ *  restoration" service (2026-07-23, Danielle's call) but keeps the same
+ *  consent gate as Color restoration. Stain repair was deactivated
+ *  2026-07-27 — Stains now points at Color restoration directly. */
 export const PAINT_CONSENT_SLUGS = new Set([
   "faded-or-patchy-color",
   "color-restoration",
+  "scuff-repair",
 ]);
 
 type Props = {

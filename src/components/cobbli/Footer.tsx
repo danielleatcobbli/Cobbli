@@ -1,5 +1,6 @@
 import instagram from "@/assets/icons/instagram.svg";
 import tiktok from "@/assets/icons/tiktok.svg";
+import x from "@/assets/icons/x.svg";
 
 const socials = [
   {
@@ -11,6 +12,11 @@ const socials = [
     src: tiktok,
     label: "TikTok",
     href: "https://www.tiktok.com/@cobblidotcom?_r=1&_t=ZP-95dDXUo1ht8",
+  },
+  {
+    src: x,
+    label: "X",
+    href: "https://x.com/cobblidotcom",
   },
 ];
 

@@ -27,6 +27,11 @@ backend/.env
 # Contains real user PII (auth rows, data import) — never commit
 migration/
 
+# Scratch drop zone for Danielle to hand off before/after condition photos —
+# Claude reads these and uploads them to the service-photos Supabase bucket,
+# they're never meant to live in the repo itself.
+/photo-uploads/
+
 # Python
 __pycache__/
 *.pyc
