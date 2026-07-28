@@ -27,7 +27,6 @@ import Admin from "./pages/Admin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminOrderDetail from "./pages/AdminOrderDetail";
 import OwnerSettings from "./pages/OwnerSettings";
-import AdminBlog from "./pages/AdminBlog";
 import AdminOrders from "./pages/admin/AdminOrders";
 import AdminReworks from "./pages/admin/AdminReworks";
 import AdminReports from "./pages/admin/AdminReports";
@@ -238,14 +237,6 @@ const App = () => (
                           element={
                             <RoleRoute allow={["admin"]}>
                               <OwnerSettings />
-                            </RoleRoute>
-                          }
-                        />
-                        <Route
-                          path="/admin/blog"
-                          element={
-                            <RoleRoute allow={["admin"]}>
-                              <AdminBlog />
                             </RoleRoute>
                           }
                         />
