@@ -173,7 +173,7 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
     { label: "Sole separating from shoe", slug: "gluing", imageUrl: "/condition-photos/sole-separating-from-shoe.jpg" },
     { label: "Sole worn at the heel", slug: "partial-resole", imageUrl: "/condition-photos/sole-worn-at-the-heel.jpg" },
     { label: "Sole worn on front", slug: "partial-resole", imageUrl: "/condition-photos/sole-worn-on-front.jpg" },
-    { label: "Loose or detached heel", slug: "heel-reattachment", imageUrl: "/condition-photos/loose-or-detached-heel.jpg" },
+    { label: "Loose or detached heel", slug: "heel-reattachment", imageUrl: "/condition-photos/loose-or-detached-heel.jpg", afterImageUrl: "/condition-photos/loose-or-detached-heel-after.png" },
     { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement", imageUrl: "/condition-photos/worn-or-missing-heel-tip.jpg" } ] },
   { serviceCategory: "Stitching & seams", conditions: [
     { label: "Loose or detached strap", slug: "stitching" },
