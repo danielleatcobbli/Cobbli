@@ -5,7 +5,7 @@ const items = [
   {
     icon: ShieldCheck,
     title: "Quality guaranteed",
-    desc: "Not happy with your repair? We'll make it right, no questions asked.",
+    desc: "Not happy with your repair? Let us know within 14 days and we'll make it right, no questions asked.",
   },
   {
     icon: Hammer,

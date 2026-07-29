@@ -19,7 +19,6 @@ import Account from "./pages/Account";
 import StartRepair from "./pages/StartRepair";
 import PairFlowDialog from "./components/cobbli/PairFlowDialog";
 import AssessmentUpload from "./pages/AssessmentUpload";
-import AssessmentDetails from "./pages/AssessmentDetails";
 import AssessmentDeposit from "./pages/AssessmentDeposit";
 import AssessmentConfirmation from "./pages/AssessmentConfirmation";
 import AssessmentProposal from "./pages/AssessmentProposal";
@@ -150,7 +149,6 @@ const App = () => (
                         <Route path="/link-expired" element={<LinkExpired />} />
                         <Route path="/start-repair" element={<StartRepair />} />
                         <Route path="/start-repair/assessment" element={<AssessmentUpload />} />
-                        <Route path="/start-repair/assessment/details" element={<AssessmentDetails />} />
                         <Route path="/start-repair/assessment/deposit" element={<AssessmentDeposit />} />
                         <Route path="/start-repair/assessment/confirmation" element={<AssessmentConfirmation />} />
                         <Route

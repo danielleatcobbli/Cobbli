@@ -511,10 +511,10 @@ const Checkout = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <Field id="email" label="Email">
+                    <Field id="email" label="Email" required>
                       <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                     </Field>
-                    <Field id="phone" label="Phone">
+                    <Field id="phone" label="Phone" required>
                       <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
                       <p className="text-xs mt-1.5" style={{ color: "#7a5c40" }}>
                         We'll text this number with pickup and return updates
@@ -597,14 +597,14 @@ const Checkout = () => {
                     {editingAddrId && (
                       <p className="text-sm text-muted-foreground">Edit this address</p>
                     )}
-                    <Field id="street" label="Street Address">
+                    <Field id="street" label="Street Address" required>
                       <Input
                         id="street"
                         value={addrForm.street}
                         onChange={(e) => setAddrForm({ ...addrForm, street: e.target.value })}
                       />
                     </Field>
-                    <Field id="street2" label="Address 2 (optional)">
+                    <Field id="street2" label="Address 2">
                       <Input
                         id="street2"
                         value={addrForm.street2}
@@ -612,14 +612,14 @@ const Checkout = () => {
                       />
                     </Field>
                     <div className="grid sm:grid-cols-3 gap-4">
-                      <Field id="city" label="City">
+                      <Field id="city" label="City" required>
                         <Input
                           id="city"
                           value={addrForm.city}
                           onChange={(e) => setAddrForm({ ...addrForm, city: e.target.value })}
                         />
                       </Field>
-                      <Field id="state" label="State">
+                      <Field id="state" label="State" required>
                         <Select
                           value={addrForm.state}
                           onValueChange={(v) => setAddrForm({ ...addrForm, state: v })}
@@ -632,7 +632,7 @@ const Checkout = () => {
                           </SelectContent>
                         </Select>
                       </Field>
-                      <Field id="zip" label="Zip Code">
+                      <Field id="zip" label="Zip Code" required>
                         <Input
                           id="zip"
                           inputMode="numeric"
@@ -910,14 +910,18 @@ const StepCard = ({
 const Field = ({
   id,
   label,
+  required,
   children,
 }: {
   id: string;
   label: string;
+  required?: boolean;
   children: React.ReactNode;
 }) => (
   <div className="space-y-1.5">
-    <Label htmlFor={id}>{label}</Label>
+    <Label htmlFor={id}>
+      {label} {required && <span className="text-destructive">*</span>}
+    </Label>
     {children}
   </div>
 );

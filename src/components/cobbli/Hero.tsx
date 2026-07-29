@@ -34,11 +34,6 @@ const Hero = () => {
                   Start a repair
                 </Button>
               </Link>
-              <Link to="/services">
-                <Button size="lg" variant="heroOutline">
-                  Browse services
-                </Button>
-              </Link>
             </div>
           </div>
         </div>

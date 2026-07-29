@@ -49,6 +49,11 @@ import type { ShoeType } from "@/types/service";
 import { CHECKLIST_GROUPS, ADDONS, computeRecommendation, COMMON_CONDITION_LABELS, SLUG_TO_CONDITION_LABELS } from "@/data/starterRepairConditions";
 import { CATEGORY_ICONS, categoryDisplayLabel } from "@/components/cobbli/CategoryFilterBar";
 import BeforeAfterImage from "@/components/cobbli/BeforeAfterImage";
+import SoleInsoleConditionDialog, {
+  SOLE_CONDITION_LABEL,
+  INSOLE_CONDITION_LABEL,
+  type SoleInsoleAction,
+} from "@/components/cobbli/SoleInsoleConditionDialog";
 import { trackEvent } from "@/lib/analytics";
 import iconOdor from "@/assets/category-icons/odor.svg";
 
@@ -100,6 +105,16 @@ const StartRepair = () => {
   const [checkedAddons, setCheckedAddons] = useState<Set<string>>(new Set());
   const [notOffered, setNotOffered] = useState<{ slug: string; name: string }[]>([]);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
+
+  // Gates "See my recommendations" when the checklist can't tell on its own
+  // which service to recommend — "Sole separating from shoe" and "Loose or
+  // detached insole" both cover a still-good part that just needs regluing
+  // *and* a worn-out one that needs replacing, and the right service differs
+  // (gluing vs. full-resole / insole-replacement). Only the question(s)
+  // matching a checked condition are shown (2026-07-28, Danielle's call).
+  const [soleInsoleOpen, setSoleInsoleOpen] = useState(false);
+  const needsSoleQuestion = checkedLabels.has(SOLE_CONDITION_LABEL);
+  const needsInsoleQuestion = checkedLabels.has(INSOLE_CONDITION_LABEL);
 
   // Bug fix (2026-07-27, Danielle's report): looping back to "add more
   // services" for a pair that already has services in the bag used to show a
@@ -343,14 +358,30 @@ const StartRepair = () => {
 
   const anyChecked = checkedLabels.size > 0 || checkedAddons.size > 0;
 
-  const seeRecommendations = () => {
+  // Entry point for the "See my recommendations" button — routes through the
+  // sole/insole follow-up first when needed, since the recommendation itself
+  // depends on the answer.
+  const onSeeRecommendationsClick = () => {
+    if (!services || !anyChecked) return;
+    if (needsSoleQuestion || needsInsoleQuestion) {
+      setSoleInsoleOpen(true);
+      return;
+    }
+    seeRecommendations({});
+  };
+
+  const seeRecommendations = (answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction }) => {
     if (!services || !anyChecked) return;
     const requiredSlugs = new Set<string>();
     // slug -> every checked condition label that maps to it, so each
     // resulting service/package line can show which symptom(s) it addresses.
     const slugToLabels = new Map<string, string[]>();
     checkedLabels.forEach((label) => {
-      const slug = LABEL_TO_SLUG.get(label);
+      let slug = LABEL_TO_SLUG.get(label);
+      // Override the default checklist mapping (both point at "gluing") once
+      // the customer has told us the part actually needs replacing instead.
+      if (label === SOLE_CONDITION_LABEL && answers.sole === "replace") slug = "full-resole";
+      if (label === INSOLE_CONDITION_LABEL && answers.insole === "replace") slug = "insole-replacement";
       if (slug) {
         requiredSlugs.add(slug);
         const existing = slugToLabels.get(slug);
@@ -690,7 +721,7 @@ const StartRepair = () => {
                 <Button
                   type="button"
                   size="lg"
-                  onClick={seeRecommendations}
+                  onClick={onSeeRecommendationsClick}
                   disabled={!anyChecked}
                   className={!anyChecked ? "opacity-50 cursor-not-allowed" : ""}
                 >
@@ -825,6 +856,14 @@ const StartRepair = () => {
         </div>
       </section>
       <Footer />
+
+      <SoleInsoleConditionDialog
+        open={soleInsoleOpen}
+        onOpenChange={setSoleInsoleOpen}
+        showSole={needsSoleQuestion}
+        showInsole={needsInsoleQuestion}
+        onConfirm={(answers) => seeRecommendations(answers)}
+      />
     </main>
   );
 };

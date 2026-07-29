@@ -348,7 +348,7 @@ const ResetPassword = () => {
               <h1 className="text-2xl md:text-3xl font-semibold">Reset your password</h1>
               <form onSubmit={handleRequest} className="space-y-5" noValidate>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email address</Label>
+                  <Label htmlFor="email">Email address <span className="text-destructive">*</span></Label>
                   <Input
                     id="email"
                     type="email"
@@ -406,7 +406,7 @@ const ResetPassword = () => {
               <h1 className="text-2xl md:text-3xl font-semibold">Set new password</h1>
               <form onSubmit={handleResetSubmit} className="space-y-5" noValidate>
                 <div className="space-y-2">
-                  <Label htmlFor="new-pwd">New password</Label>
+                  <Label htmlFor="new-pwd">New password <span className="text-destructive">*</span></Label>
                   <div className="relative">
                     <Input
                       id="new-pwd"
@@ -440,7 +440,7 @@ const ResetPassword = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-pwd">Confirm new password</Label>
+                  <Label htmlFor="confirm-pwd">Confirm new password <span className="text-destructive">*</span></Label>
                   <div className="relative">
                     <Input
                       id="confirm-pwd"

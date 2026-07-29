@@ -67,7 +67,7 @@ const CoverageRequestForm = () => {
   return (
     <form onSubmit={onSubmit} className="space-y-4 rounded-md border border-border p-4" noValidate>
       <div className="space-y-1.5">
-        <Label htmlFor="cr-zip">Zip code</Label>
+        <Label htmlFor="cr-zip">Zip code <span className="text-destructive">*</span></Label>
         <Input
           id="cr-zip"
           inputMode="numeric"
@@ -93,7 +93,7 @@ const CoverageRequestForm = () => {
         )}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="cr-email">Email (optional)</Label>
+        <Label htmlFor="cr-email">Email</Label>
         <Input
           id="cr-email"
           type="email"
@@ -121,8 +121,9 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "How does Cobbli work?",
     a: (
       <p>
-        Simply add the services you need to your bag and check out. We take care of the rest: we'll pick up
-        your shoes, expertly repair them, and return them to your doorstep.
+        Tell us what's wrong with your shoes through our quick Start a Repair form or by sending us a
+        photo or video and we'll recommend the right repairs. From there, we pick up your shoes, repair
+        them in-house, and return them to your door.
       </p>
     ),
   },
@@ -135,8 +136,10 @@ const faqs: { q: string; a: ReactNode }[] = [
           let you know if you're within our coverage zone.
         </p>
         <p className="pl-4">
-          Alphabet City, Battery Park City, Chelsea, Chinatown, East Village, FiDi, Flatiron, Gramercy,
-          Little Italy, Lower East Side, NoHo, SoHo, Tribeca, Union Square, West Village
+          Alphabet City, Battery Park City, Chelsea, Chinatown, East Village, FiDi, Flatiron, Garment
+          District, Gramercy, Hell's Kitchen, Lenox Hill, Little Italy, Lower East Side, Midtown East,
+          Murray Hill, NoHo, Rockefeller Center, SoHo, Sutton Place, Theater District, Tribeca, Union
+          Square, Upper East Side, Upper West Side, West Village, Yorkville
         </p>
         <p>
           Don't see your neighborhood? Let us know your zip code below — we use submissions to prioritize
@@ -150,8 +153,8 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "How do I schedule my pickup and return?",
     a: (
       <p>
-        We will text the phone number provided during checkout to schedule your pickup. Once your shoes are
-        ready, we will text you to schedule your return.
+        Schedule your pickup during checkout. Once your shoes are ready, we will text you to schedule your
+        return.
       </p>
     ),
   },
@@ -167,7 +170,8 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "How long do repairs take?",
     a: (
       <p>
-        Repairs are completed within 7 calendar days. If your shoes are ready early, we'll let you know.
+        Most repairs are completed within 7–10 days of us receiving your shoes. If your shoes are ready
+        early, we'll let you know.
       </p>
     ),
   },
@@ -197,14 +201,10 @@ const faqs: { q: string; a: ReactNode }[] = [
     a: (
       <div className="space-y-3">
         <p>
-          It depends on the shoe. Well-made shoes crafted from leather (including nubuck and suede) or
-          canvas are almost always repairable and can last a lifetime with the right care. However, even
-          well-made shoes can become impossible to repair with neglect – it's important to repair good
-          shoes when you notice an issue so they don't get beyond fixing.
-        </p>
-        <p>
-          Cheaply made shoes tend not to be worthwhile to repair, except when it comes to minor fixes like
-          a heel tip repair.
+          Well-made shoes crafted from leather (including nubuck and suede) or canvas are almost always
+          repairable and can last a lifetime with the right care. However, even well-made shoes can become
+          impossible to repair with neglect – it's important to repair good shoes when you notice an issue
+          so they don't get beyond fixing.
         </p>
         <div>
           <p className="font-medium text-foreground">Signs it's time to replace:</p>

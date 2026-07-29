@@ -268,7 +268,7 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="needs-first-name">First name</Label>
+              <Label htmlFor="needs-first-name">First name <span className="text-destructive">*</span></Label>
               <Input
                 id="needs-first-name"
                 value={nameForm.first}
@@ -277,7 +277,7 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="needs-last-name">Last name</Label>
+              <Label htmlFor="needs-last-name">Last name <span className="text-destructive">*</span></Label>
               <Input
                 id="needs-last-name"
                 value={nameForm.last}

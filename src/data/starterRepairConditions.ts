@@ -144,7 +144,7 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
   { serviceCategory: "Color & stains", conditions: [
     { label: "Faded or streaky color", slug: "color-restoration" },
     { label: "Stains", slug: "color-restoration", imageUrl: "/condition-photos/stains.jpg", afterImageUrl: "/condition-photos/stains-after.jpg" },
-    { label: "Water stains", slug: "color-restoration" } ] },
+    { label: "Water stains", slug: "color-restoration", imageUrl: "/condition-photos/water-stains.jpg", afterImageUrl: "/condition-photos/water-stains-after.png" } ] },
   { serviceCategory: "Insole & interior", conditions: [
     { label: "Worn or damaged insole", slug: "insole-replacement", imageUrl: "/condition-photos/worn-or-damaged-insole.jpg" },
     { label: "Loose or detached insole", slug: "gluing", imageUrl: "/condition-photos/loose-or-detached-insole.jpg" },
@@ -171,19 +171,19 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
   { serviceCategory: "Sole & heel", conditions: [
     { label: "Worn or damaged sole", slug: "full-resole", imageUrl: "/condition-photos/worn-or-damaged-sole.jpg" },
     { label: "Sole separating from shoe", slug: "gluing", imageUrl: "/condition-photos/sole-separating-from-shoe.jpg" },
-    { label: "Sole worn at the heel", slug: "partial-resole", imageUrl: "/condition-photos/sole-worn-at-the-heel.jpg", afterImageUrl: "/condition-photos/sole-worn-at-the-heel-after.jpg" },
-    { label: "Sole worn on front", slug: "partial-resole" },
+    { label: "Sole worn at the heel", slug: "partial-resole", imageUrl: "/condition-photos/sole-worn-at-the-heel.jpg" },
+    { label: "Sole worn on front", slug: "partial-resole", imageUrl: "/condition-photos/sole-worn-on-front.jpg" },
     { label: "Loose or detached heel", slug: "heel-reattachment", imageUrl: "/condition-photos/loose-or-detached-heel.jpg" },
     { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement", imageUrl: "/condition-photos/worn-or-missing-heel-tip.jpg" } ] },
   { serviceCategory: "Stitching & seams", conditions: [
     { label: "Loose or detached strap", slug: "stitching" },
-    { label: "Loose or detached hardware", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-hardware.jpg" },
     { label: "Loose or detached buckle", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-buckle.jpg" },
+    { label: "Loose or detached hardware", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-hardware.jpg" },
     { label: "Loose seam", slug: "stitching" } ] },
   { serviceCategory: "Straps, buckles, & hardware", conditions: [
     { label: "Loose or detached strap", slug: "stitching" },
-    { label: "Loose or detached hardware", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-hardware.jpg" },
-    { label: "Loose or detached buckle", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-buckle.jpg" } ] },
+    { label: "Loose or detached buckle", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-buckle.jpg" },
+    { label: "Loose or detached hardware", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-hardware.jpg" } ] },
   // "Broken zipper" and "Zipper separating from shoe" removed 2026-07-27
   // (Danielle's call) — not supporting zipper-replacement initially, coming
   // back later (see is_coming_soon on that service in Supabase). "Broken or
@@ -358,7 +358,7 @@ export const ADDONS: Addon[] = [
   { label: "Protective soles", slug: "protective-full-sole", pkgCat: "preventative", description: "Guard against wear so your soles last longer" },
   // Added 2026-07-27 (Danielle's call) — new real catalog service, not a
   // placeholder. $15 card_price_label is a guess pending her confirmation.
-  { label: "Lace replacement", slug: "lace-replacement", pkgCat: null, description: "Swap in a fresh matching pair of laces" },
+  { label: "Lace replacement", slug: "lace-replacement", pkgCat: null, description: "We replace your laces with a new matching pair so your shoes look and feel fresh." },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Plus, X, FileVideo, Play, Camera, Video, Upload } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
-import StepIndicator from "@/components/cobbli/StepIndicator";
-import { ASSESSMENT_STEPS } from "@/components/cobbli/assessmentSteps";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +14,8 @@ import { apiFetchJson } from "@/integrations/api/client";
 import { toast } from "@/hooks/use-toast";
 import { useAssessment } from "@/context/AssessmentContext";
 import { createPreviewUrl } from "@/lib/heicPreview";
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const MAX_FILES = 10;
 const MAX_SIZE = 50 * 1024 * 1024;
@@ -82,9 +85,12 @@ type UploadEntry = { kind: "image" | "video"; promise: Promise<string> };
 
 const AssessmentUpload = () => {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
-  const { setUploads, setAiPrefill, reset, setAiLoading } = useAssessment();
+  const { user } = useAuth();
+  const isGuest = !user;
+  const { setUploads, setAiPrefill, reset } = useAssessment();
   const [files, setFiles] = useState<Picked[]>([]);
+  const [description, setDescription] = useState("");
+  const [email, setEmail] = useState(user?.email ?? "");
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +104,10 @@ const AssessmentUpload = () => {
     description:
 "Upload photos or a short video of your shoes and Cobbli's cobblers will recommend the right repairs.",
   });
+
+  useEffect(() => {
+    if (user?.email) setEmail(user.email);
+  }, [user?.email]);
 
   useEffect(() => {
     return () => files.forEach((f) => URL.revokeObjectURL(f.preview));
@@ -199,60 +209,91 @@ const AssessmentUpload = () => {
       return next;
     });
 
-  const onNext = () => {
-    if (files.length === 0 || busy) return;
+  const emailValid = emailRegex.test(email.trim());
+  const canSubmit = files.length > 0 && emailValid && !busy;
+
+  /** Danielle's call (2026-07-28): drop the separate "confirm your shoe
+   *  details" step entirely — shoe type/color/brand aren't asked for here.
+   *  Brand still matters for exact resole pricing, but that gets collected
+   *  later (at proposal/pricing time) rather than up front; asking for it
+   *  here just adds friction to a step that's only "send us photos." We
+   *  still run the AI photo analysis in the background and store whatever
+   *  it infers on the assessment record — useful context for the cobbler
+   *  preparing the proposal — but nothing about it is shown to or confirmed
+   *  by the customer. */
+  const onSubmit = async () => {
+    if (!canSubmit || busy) return;
     setBusy(true);
     reset();
-    setAiLoading(true);
 
     const currentFiles = [...files];
     const entries = currentFiles
       .map((p) => ({ picked: p, entry: uploadMapRef.current.get(p.file) }))
       .filter((x): x is { picked: Picked; entry: UploadEntry } => !!x.entry);
 
-    // Fire-and-forget: complete uploads + AI in background. Navigation is immediate.
-    (async () => {
+    try {
+      const results = await Promise.all(
+        entries.map((x) => x.entry.promise.then((path) => ({ kind: x.picked.kind, path }))),
+      );
+      const photoPaths = results.filter((r) => r.kind === "image").map((r) => r.path);
+      const videoPaths = results.filter((r) => r.kind === "video").map((r) => r.path);
+      setUploads(photoPaths, videoPaths);
+
+      let aiPrefill: { shoeType: string | null; colors: string[]; brand: string | null } = {
+        shoeType: null,
+        colors: [],
+        brand: null,
+      };
       try {
-        const results = await Promise.all(
-          entries.map((x) => x.entry.promise.then((path) => ({ kind: x.picked.kind, path }))),
+        const data = await apiFetchJson<{ shoeType?: string | null; colors?: string[]; brand?: string | null }>(
+          "/analyze-shoe-photos/",
+          { method: "POST", body: JSON.stringify({ photoPaths }) },
         );
-        const photoPaths = results.filter((r) => r.kind === "image").map((r) => r.path);
-        const videoPaths = results.filter((r) => r.kind === "video").map((r) => r.path);
-        setUploads(photoPaths, videoPaths);
-
-        try {
-          const data = await apiFetchJson<{ shoeType?: string | null; colors?: string[]; brand?: string | null }>(
-            "/analyze-shoe-photos/",
-            { method: "POST", body: JSON.stringify({ photoPaths }) },
-          );
-          setAiPrefill({
-            shoeType: data?.shoeType ?? null,
-            colors: Array.isArray(data?.colors) ? data.colors : [],
-            brand: data?.brand ?? null,
-          });
-        } catch (e) {
-          console.warn("AI prefill failed", e);
-          setAiPrefill({ shoeType: null, colors: [], brand: null });
-        }
-      } catch (e: any) {
-        console.warn("Upload failed", e);
-        setAiPrefill({ shoeType: null, colors: [], brand: null });
-        toast({ title: "Upload failed", description: e?.message || "Could not upload your files.", variant: "destructive" });
-      } finally {
-        setAiLoading(false);
+        aiPrefill = {
+          shoeType: data?.shoeType ?? null,
+          colors: Array.isArray(data?.colors) ? data.colors : [],
+          brand: data?.brand ?? null,
+        };
+        setAiPrefill(aiPrefill);
+      } catch (e) {
+        console.warn("AI prefill failed", e);
       }
-    })();
 
-    navigate("/start-repair/assessment/details");
-    setBusy(false);
+      const pair = {
+        photoPaths,
+        videoPaths,
+        aiPrefill,
+        shoeType: aiPrefill.shoeType,
+        colors: aiPrefill.colors,
+        brand: aiPrefill.brand ?? "",
+      };
+      const insertRow: Record<string, unknown> = {
+        pairs: [pair],
+        status: "submitted",
+        guest_email: email.trim(),
+        description: description.trim() || null,
+      };
+      if (user) insertRow.user_id = user.id;
+
+      const { data, error } = await supabase
+        .from("assessments")
+        .insert(insertRow as never)
+        .select("id")
+        .single();
+      if (error) throw error;
+
+      reset();
+      navigate(`/start-repair/assessment/confirmation?id=${data.id}`, { replace: true });
+    } catch (e: any) {
+      console.error("submit assessment failed", e);
+      toast({ title: "Could not submit", description: e?.message || "Please try again.", variant: "destructive" });
+      setBusy(false);
+    }
   };
-
-  const canNext = files.length > 0 && !busy;
 
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <Header />
-      <StepIndicator steps={ASSESSMENT_STEPS} current="upload" ariaLabel="Assessment progress" />
 
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">
@@ -357,10 +398,6 @@ const AssessmentUpload = () => {
             JPG, PNG, HEIC, MP4, MOV · up to {MAX_FILES} files · 50MB max each
           </p>
 
-          <p className="mt-2 text-sm italic text-muted-foreground">
-            We'll use your photo or video to fill in as many shoe details as we can
-          </p>
-
           {files.length > 0 && (
             <div className="mt-5 grid grid-cols-3 sm:grid-cols-4 gap-3">
               {files.map((f, idx) => (
@@ -398,22 +435,55 @@ const AssessmentUpload = () => {
             </div>
           )}
 
-          <div
-            className="mt-6 rounded-lg p-4 text-sm text-primary"
-            style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
-          >
-            <strong>Tip:</strong> Upload a short video or photos of the shoe from all sides. Make sure to capture any areas of damage or wear. The more we can see, the better our recommendation.
+          <p className="mt-6 text-sm text-muted-foreground">
+            Tip: Upload a short video or photos of the shoe from all sides. Make sure to capture any areas of damage or wear. The more we can see, the better our recommendation.
+          </p>
+
+          <div className="mt-8 space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="assessment-description">Anything else we should know?</Label>
+              <Textarea
+                id="assessment-description"
+                placeholder="e.g. The heel has been wobbling for a few weeks, or there's a stain on the left toe"
+                value={description}
+                onChange={(e) => setDescription(e.target.value.slice(0, 1000))}
+                maxLength={1000}
+                rows={4}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="proposal-email">
+                Where should we send your proposal? <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="proposal-email"
+                type="email"
+                placeholder="you@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              {isGuest && (
+                <p className="text-[13px] text-muted-foreground">
+                  Already have an account?{" "}
+                  <Link to="/signin" className="underline">
+                    Sign in instead
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="mt-8">
+          <div className="mt-10">
             <Button
               type="button"
               size="lg"
-              onClick={onNext}
-              disabled={!canNext}
-              className={!canNext ? "opacity-50 cursor-not-allowed" : ""}
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              className={!canSubmit ? "opacity-50 cursor-not-allowed" : ""}
             >
-              {busy ? "Uploading…" : "Next"}
+              {busy ? "Submitting…" : "Submit"}
             </Button>
           </div>
         </div>

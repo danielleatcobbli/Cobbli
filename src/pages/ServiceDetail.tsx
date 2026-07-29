@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import PaintConsentDialog, { PAINT_CONSENT_SLUGS } from "@/components/cobbli/PaintConsentDialog";
 import SoleMaterialDialog, { SOLE_MATERIAL_SLUGS } from "@/components/cobbli/SoleMaterialDialog";
 import ComingSoonVoteButton from "@/components/cobbli/ComingSoonVoteButton";
-import UnsupportedBrandsAccordion from "@/components/cobbli/UnsupportedBrandsAccordion";
 import { useService } from "@/hooks/useServices";
 import { useRepairFlow } from "@/context/RepairFlowContext";
 import type { BagService } from "@/context/BagContext";
@@ -55,19 +54,6 @@ const SERVICE_DETAIL_PRICE: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Brands not currently supported — per service
-// ---------------------------------------------------------------------------
-
-const UNSUPPORTED_BRANDS: Record<string, string[]> = {
-  "full-resole":         ["Christian Louboutin", "Golden Goose", "Maison Margiela"],
-  "color-restoration":   ["Golden Goose"],
-  "scuff-repair":        ["Golden Goose"],
-  "insole-replacement":  ["Maison Margiela"],
-  "protective-full-sole":["Christian Louboutin", "Golden Goose", "Maison Margiela"],
-  "zipper-replacement":  ["Golden Goose"],
-};
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -75,7 +61,6 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
   const { slug = "" } = useParams();
   const navigate = useNavigate();
   const { service, isLoading } = useService(slug);
-  const [brandsOpen, setBrandsOpen] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const [soleOpen, setSoleOpen] = useState(false);
   const { setPaintConsent, setSoleMaterial, openPairFlow } = useRepairFlow();
@@ -110,7 +95,6 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
   const heroImage = service.imageUrl ?? fallbackImage?.imageUrl;
   const heroAfterImage = service.afterImageUrl ?? fallbackImage?.afterImageUrl;
 
-  const unsupportedBrands = UNSUPPORTED_BRANDS[service.slug];
   const isPopular = POPULAR_SERVICE_SLUGS.has(service.slug);
   // Use the DB card_price_label as the canonical price (so the detail page always
   // matches the grid card). Fall back to the local table if the DB value is empty.
@@ -153,7 +137,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
       setSoleOpen(true);
       return;
     }
-    goToPick();
+    navigate("/start-repair");
   };
 
   return (
@@ -222,16 +206,6 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                   <div className="mt-8">
                     <ComingSoonVoteButton serviceId={service.id} />
                   </div>
-
-                  {unsupportedBrands && unsupportedBrands.length > 0 && (
-                    <div className="mt-4">
-                      <UnsupportedBrandsAccordion
-                        brands={unsupportedBrands}
-                        open={brandsOpen}
-                        onToggle={() => setBrandsOpen((o) => !o)}
-                      />
-                    </div>
-                  )}
                 </>
               ) : (
                 <>
@@ -259,17 +233,6 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                   >
                     Start a repair
                   </Button>
-
-                  {/* ── Brands not currently supported ── */}
-                  {unsupportedBrands && unsupportedBrands.length > 0 && (
-                    <div className="mt-4">
-                      <UnsupportedBrandsAccordion
-                        brands={unsupportedBrands}
-                        open={brandsOpen}
-                        onToggle={() => setBrandsOpen((o) => !o)}
-                      />
-                    </div>
-                  )}
                 </>
               )}
             </div>

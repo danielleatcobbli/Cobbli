@@ -191,7 +191,7 @@ const SignIn = () => {
 
               <form onSubmit={handleSubmit} className="space-y-5" noValidate>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email address</Label>
+                  <Label htmlFor="email">Email address <span className="text-destructive">*</span></Label>
                   <Input
                     id="email"
                     type="email"
@@ -205,7 +205,7 @@ const SignIn = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
                   <div className="relative">
                     <Input
                       id="password"

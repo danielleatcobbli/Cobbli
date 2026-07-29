@@ -37,9 +37,12 @@ const AssessmentDeposit = () => {
 "Authorize a $20 deposit so our cobblers can prepare your repair proposal.",
   });
 
+  // Danielle's call (2026-07-28): the assessment flow no longer collects
+  // shoe type/color/brand from the customer (see AssessmentUpload.tsx), so
+  // "ready" just means photos or a video were actually uploaded.
   const ready = useMemo(
-    () => !!draft.shoeType && draft.colors.length > 0,
-    [draft.shoeType, draft.colors],
+    () => draft.photoPaths.length > 0 || draft.videoPaths.length > 0,
+    [draft.photoPaths, draft.videoPaths],
   );
 
   // After successful return from Stripe, navigate to confirmation.
@@ -72,7 +75,7 @@ const AssessmentDeposit = () => {
   }, [draft.photoPaths]);
 
   if (!ready && !returningSessionId) {
-    return <Navigate to="/start-repair/assessment/details" replace />;
+    return <Navigate to="/start-repair/assessment" replace />;
   }
 
   const onConfirm = async () => {
@@ -149,14 +152,32 @@ const AssessmentDeposit = () => {
                     ))}
                   </div>
                 )}
-                <dl className="mt-4 grid grid-cols-3 gap-y-2 text-sm">
-                  <dt className="text-muted-foreground">Shoe type</dt>
-                  <dd className="col-span-2 text-primary">{draft.shoeType}</dd>
-                  <dt className="text-muted-foreground">Color(s)</dt>
-                  <dd className="col-span-2 text-primary">{draft.colors.join(", ")}</dd>
-                  <dt className="text-muted-foreground">Brand</dt>
-                  <dd className="col-span-2 text-primary">{displayBrand(draft.brand) || "—"}</dd>
-                </dl>
+                {/* Shoe type/color/brand no longer come from the customer
+                    (see AssessmentUpload.tsx, 2026-07-28) — only shown here
+                    when the background photo analysis actually inferred
+                    something, since it's often empty. */}
+                {(draft.shoeType || draft.colors.length > 0 || draft.brand) && (
+                  <dl className="mt-4 grid grid-cols-3 gap-y-2 text-sm">
+                    {draft.shoeType && (
+                      <>
+                        <dt className="text-muted-foreground">Shoe type</dt>
+                        <dd className="col-span-2 text-primary">{draft.shoeType}</dd>
+                      </>
+                    )}
+                    {draft.colors.length > 0 && (
+                      <>
+                        <dt className="text-muted-foreground">Color(s)</dt>
+                        <dd className="col-span-2 text-primary">{draft.colors.join(", ")}</dd>
+                      </>
+                    )}
+                    {draft.brand && (
+                      <>
+                        <dt className="text-muted-foreground">Brand</dt>
+                        <dd className="col-span-2 text-primary">{displayBrand(draft.brand) || "—"}</dd>
+                      </>
+                    )}
+                  </dl>
+                )}
               </div>
 
               <div className="mt-6 flex items-baseline justify-between rounded-xl border border-border p-5">
@@ -168,7 +189,7 @@ const AssessmentDeposit = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => navigate("/start-repair/assessment/details")}
+                  onClick={() => navigate("/start-repair/assessment")}
                   disabled={submitting}
                 >
                   Back

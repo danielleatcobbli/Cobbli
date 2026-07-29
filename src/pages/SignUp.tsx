@@ -235,7 +235,7 @@ const SignUp = () => {
               <form onSubmit={handleSubmit} className="space-y-5" noValidate>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label htmlFor="first-name">First name</Label>
+                    <Label htmlFor="first-name">First name <span className="text-destructive">*</span></Label>
                     <Input
                       id="first-name"
                       autoComplete="given-name"
@@ -245,7 +245,7 @@ const SignUp = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="last-name">Last name</Label>
+                    <Label htmlFor="last-name">Last name <span className="text-destructive">*</span></Label>
                     <Input
                       id="last-name"
                       autoComplete="family-name"
@@ -257,7 +257,7 @@ const SignUp = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
                   <Input
                     id="email"
                     type="email"
@@ -279,7 +279,7 @@ const SignUp = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone number</Label>
+                  <Label htmlFor="phone">Phone number <span className="text-destructive">*</span></Label>
                   <div className="relative">
                     <span
                       className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground pointer-events-none select-none"
@@ -304,7 +304,7 @@ const SignUp = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -336,7 +336,7 @@ const SignUp = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirm">Confirm password</Label>
+                  <Label htmlFor="confirm">Confirm password <span className="text-destructive">*</span></Label>
                   <div className="relative">
                     <Input
                       id="confirm"

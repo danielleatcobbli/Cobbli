@@ -7,6 +7,11 @@ import instagram from "@/assets/icons/instagram.svg";
 import tiktok from "@/assets/icons/tiktok.svg";
 import x from "@/assets/icons/x.svg";
 
+// Same hero photo + copy as the real homepage (src/components/cobbli/Hero.tsx),
+// so the waitlist page reads as "the real site with an email gate" rather than
+// a bare placeholder. Served from /public, same as Hero.tsx.
+const hero = "/assets/hero-cobbler.webp";
+
 const emailSchema = z
   .string()
   .trim()
@@ -78,22 +83,35 @@ const ComingSoon = () => {
 
   return (
     <main
-      className="min-h-screen flex flex-col items-center justify-between px-6 py-10 text-white"
-      style={{ backgroundColor: "#3d1700", fontFamily: "'Albert Sans', sans-serif" }}
+      className="relative min-h-screen flex flex-col items-center justify-between px-6 py-10 text-white overflow-hidden"
+      style={{ fontFamily: "'Albert Sans', sans-serif" }}
     >
-      <div className="w-full flex justify-center">
+      <img
+        src={hero}
+        alt="Master cobbler restoring a leather brogue shoe in a workshop"
+        className="absolute inset-0 h-full w-full object-cover"
+        loading="eager"
+        decoding="async"
+      />
+      {/* Same gradient the homepage hero uses, plus a flat wash so the logo,
+          form, and social icons stay legible everywhere on the page, not just
+          where the homepage's gradient is darkest. */}
+      <div className="absolute inset-0 bg-gradient-hero" />
+      <div className="absolute inset-0" style={{ backgroundColor: "rgba(61, 23, 0, 0.45)" }} />
+
+      <div className="relative z-10 w-full flex justify-center">
         <img src={logo} alt="Cobbli" className="h-32 md:h-40 w-auto" />
       </div>
 
-      <section className="flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto py-10">
+      <section className="relative z-10 flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto py-10">
         <h1
-          className="text-3xl md:text-5xl font-semibold leading-tight"
+          className="text-3xl md:text-5xl font-semibold leading-tight text-white"
           style={{ fontFamily: "'Playfair Display', serif" }}
         >
-          Expert shoe & leather repair, delivered to your door.
+          Expert Shoe Repair Delivered to Your Doorstep
         </h1>
-        <p className="mt-5 text-base md:text-lg text-white/85">
-          Cobbli is coming soon to Manhattan. Be the first to know when we launch.
+        <p className="mt-5 text-base md:text-lg font-medium" style={{ color: "#fdb600" }}>
+          Coming soon to Manhattan — be the first to know when we launch.
         </p>
 
         {success ? (
@@ -152,7 +170,7 @@ const ComingSoon = () => {
         )}
       </section>
 
-      <div className="flex items-center gap-4">
+      <div className="relative z-10 flex items-center gap-4">
         {socials.map((s) => (
           <a
             key={s.label}

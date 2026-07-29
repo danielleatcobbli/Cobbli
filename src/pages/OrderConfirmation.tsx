@@ -667,7 +667,7 @@ const OrderConfirmation = () => {
             {/* Description */}
             <div>
               <label htmlFor="rework-desc" className="text-sm font-medium block mb-2">
-                What needs to be fixed?
+                What needs to be fixed? <span className="text-destructive">*</span>
               </label>
               <Textarea
                 id="rework-desc"

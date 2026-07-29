@@ -3,19 +3,19 @@ import { Link } from "react-router-dom";
 const steps = [
   {
     n: "1",
-    title: "Choose your services",
+    title: "Tell us what's wrong",
     desc: (
       <>
-        Browse services and add what you need to your bag. Not sure what you need?{" "}
-        <Link to="/start-repair/assessment" className="underline hover:text-primary">
-          Get a personalized recommendation →
+        Tell us what's wrong with your shoes or send us a photo or video. Either way, we'll
+        recommend the right repairs.{" "}
+        <Link to="/start-repair" className="underline hover:text-primary">
+          Start a repair →
         </Link>
       </>
     ),
   },
-  { n: "2", title: "Schedule pickup and return", desc: "Once you've placed your order, we'll text you to schedule your pickup and return at the times that work best for you." },
-  { n: "3", title: "We handle the rest", desc: "We'll pick up your shoes and have them repaired within 7-days." },
-  { n: "4", title: "We return your shoes", desc: "We'll return your beautifully repaired shoes right to your door during your scheduled return window." },
+  { n: "2", title: "Schedule your pickup", desc: "Check out and select the pickup window that works best for you. We'll come to you then." },
+  { n: "3", title: "We handle the rest", desc: "We repair your shoes in-house and let you know as soon as they're ready to schedule your return." },
 ];
 
 const HowItWorks = () => {
@@ -32,7 +32,7 @@ const HowItWorks = () => {
           </h2>
         </div>
 
-        <ol className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+        <ol className="grid gap-5 md:grid-cols-3">
           {steps.map((s, i) => (
             <li
               key={s.n}

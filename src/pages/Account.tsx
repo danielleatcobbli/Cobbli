@@ -668,20 +668,20 @@ const AddAddress = () => {
       <h1 className="text-2xl md:text-3xl font-semibold mb-6">Add address</h1>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
-          <Label htmlFor="street">Street address</Label>
+          <Label htmlFor="street">Street address <span className="text-destructive">*</span></Label>
           <Input id="street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="street2">Apt, suite, etc. (optional)</Label>
+          <Label htmlFor="street2">Apt, suite, etc.</Label>
           <Input id="street2" value={form.street2} onChange={(e) => setForm({ ...form, street2: e.target.value })} />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="city">City</Label>
+            <Label htmlFor="city">City <span className="text-destructive">*</span></Label>
             <Input id="city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="state">State</Label>
+            <Label htmlFor="state">State <span className="text-destructive">*</span></Label>
             <Select value={form.state} onValueChange={(v) => setForm({ ...form, state: v })}>
               <SelectTrigger id="state"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -693,7 +693,7 @@ const AddAddress = () => {
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="zip">ZIP code</Label>
+          <Label htmlFor="zip">ZIP code <span className="text-destructive">*</span></Label>
           <Input id="zip" inputMode="numeric" maxLength={5} value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value.replace(/\D/g, "") })} />
           {zipInvalid && (
             <p className="text-sm text-destructive">We don't currently service this ZIP code.</p>
@@ -799,7 +799,7 @@ const AddPaymentMethod = () => {
       <h1 className="text-2xl md:text-3xl font-semibold mb-6">Add payment method</h1>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="cardholder">Cardholder name</Label>
+          <Label htmlFor="cardholder">Cardholder name <span className="text-destructive">*</span></Label>
           <Input
             id="cardholder"
             autoComplete="cc-name"
@@ -808,7 +808,7 @@ const AddPaymentMethod = () => {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="billing-address">Billing address</Label>
+          <Label htmlFor="billing-address">Billing address <span className="text-destructive">*</span></Label>
           {addresses.length === 0 ? (
             <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
               You don't have any saved addresses yet.{" "}
@@ -843,7 +843,7 @@ const AddPaymentMethod = () => {
         )}
 
         <div className="space-y-1.5">
-          <Label>Card details</Label>
+          <Label>Card details <span className="text-destructive">*</span></Label>
           {loadError ? (
             <p className="text-sm text-destructive">{loadError}</p>
           ) : !clientSecret ? (
@@ -962,20 +962,20 @@ const EditAddress = () => {
       <h1 className="text-2xl md:text-3xl font-semibold mb-6">Edit address</h1>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
-          <Label htmlFor="street">Street address</Label>
+          <Label htmlFor="street">Street address <span className="text-destructive">*</span></Label>
           <Input id="street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="street2">Apt, suite, etc. (optional)</Label>
+          <Label htmlFor="street2">Apt, suite, etc.</Label>
           <Input id="street2" value={form.street2} onChange={(e) => setForm({ ...form, street2: e.target.value })} />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="city">City</Label>
+            <Label htmlFor="city">City <span className="text-destructive">*</span></Label>
             <Input id="city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="state">State</Label>
+            <Label htmlFor="state">State <span className="text-destructive">*</span></Label>
             <Select value={form.state} onValueChange={(v) => setForm({ ...form, state: v })}>
               <SelectTrigger id="state"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -987,7 +987,7 @@ const EditAddress = () => {
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="zip">ZIP code</Label>
+          <Label htmlFor="zip">ZIP code <span className="text-destructive">*</span></Label>
           <Input id="zip" inputMode="numeric" maxLength={5} value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value.replace(/\D/g, "") })} />
           {zipInvalid && (
             <p className="text-sm text-destructive">We don't currently service this ZIP code.</p>
@@ -1192,7 +1192,7 @@ const EditPaymentMethod = () => {
   const billingFields = (
     <>
       <div className="space-y-1.5">
-        <Label htmlFor="billing-address">Billing address</Label>
+        <Label htmlFor="billing-address">Billing address <span className="text-destructive">*</span></Label>
         <Select
           value={form.billingAddressId}
           onValueChange={(v) => setForm({ ...form, billingAddressId: v })}
@@ -1214,7 +1214,7 @@ const EditPaymentMethod = () => {
       {isNewAddress && (
         <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
           <div className="space-y-1.5">
-            <Label htmlFor="new-street">Street address</Label>
+            <Label htmlFor="new-street">Street address <span className="text-destructive">*</span></Label>
             <Input
               id="new-street"
               value={newAddr.street}
@@ -1222,7 +1222,7 @@ const EditPaymentMethod = () => {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="new-street2">Apt, suite, etc. (optional)</Label>
+            <Label htmlFor="new-street2">Apt, suite, etc.</Label>
             <Input
               id="new-street2"
               value={newAddr.street2}
@@ -1231,7 +1231,7 @@ const EditPaymentMethod = () => {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="new-city">City</Label>
+              <Label htmlFor="new-city">City <span className="text-destructive">*</span></Label>
               <Input
                 id="new-city"
                 value={newAddr.city}
@@ -1239,7 +1239,7 @@ const EditPaymentMethod = () => {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-state">State</Label>
+              <Label htmlFor="new-state">State <span className="text-destructive">*</span></Label>
               <Select value={newAddr.state} onValueChange={(v) => setNewAddr({ ...newAddr, state: v })}>
                 <SelectTrigger id="new-state"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -1251,7 +1251,7 @@ const EditPaymentMethod = () => {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="new-zip">ZIP code</Label>
+            <Label htmlFor="new-zip">ZIP code <span className="text-destructive">*</span></Label>
             <Input
               id="new-zip"
               inputMode="numeric"
@@ -1302,7 +1302,7 @@ const EditPaymentMethod = () => {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="cardholder">Cardholder name</Label>
+          <Label htmlFor="cardholder">Cardholder name <span className="text-destructive">*</span></Label>
           <Input
             id="cardholder"
             autoComplete="cc-name"
@@ -1315,7 +1315,7 @@ const EditPaymentMethod = () => {
           <>
             {billingFields}
             <div className="space-y-1.5">
-              <Label>New card details</Label>
+              <Label>New card details <span className="text-destructive">*</span></Label>
               {setupError && !clientSecret && <p className="text-sm text-destructive">{setupError}</p>}
               {!clientSecret ? (
                 !setupError && <BrandSpinner className="py-6" />
@@ -1336,7 +1336,7 @@ const EditPaymentMethod = () => {
         ) : (
           <>
             <div className="space-y-1.5">
-              <Label htmlFor="exp">Expiration (MM/YY)</Label>
+              <Label htmlFor="exp">Expiration (MM/YY) <span className="text-destructive">*</span></Label>
               <Input
                 id="exp"
                 inputMode="numeric"
