@@ -40,6 +40,13 @@ import { apiFetchJson } from "@/integrations/api/client";
 
 type Step = "contact" | "address" | "pickup" | "payment";
 
+type CanonicalTotals = {
+  repairsSubtotalCents: number;
+  courierFeeCents: number;
+  taxCents: number;
+  totalCents: number;
+};
+
 const Checkout = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -138,6 +145,7 @@ const Checkout = () => {
   const [placing, setPlacing] = useState(false);
   const [cartPayload, setCartPayload] = useState<unknown | null>(null);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [canonicalTotals, setCanonicalTotals] = useState<CanonicalTotals | null>(null);
   const [showStripe, setShowStripe] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -147,6 +155,10 @@ const Checkout = () => {
   const attemptedPaymentPrepRef = useRef(false);
   // Invalidates an in-flight preparation if the customer leaves Payment.
   const paymentPrepGenerationRef = useRef(0);
+  const displayedRepairsSubtotal = canonicalTotals?.repairsSubtotalCents ?? subtotal;
+  const displayedCourierFee = canonicalTotals?.courierFeeCents ?? courierFee;
+  const displayedTax = canonicalTotals?.taxCents ?? taxCents;
+  const displayedTotal = canonicalTotals?.totalCents ?? orderSubtotal;
 
   useEffect(() => {
     if (!selectedAddrId && defaultAddrId) setSelectedAddrId(defaultAddrId);
@@ -230,8 +242,6 @@ const Checkout = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [returningSessionId]);
-
-  if (pairs.length === 0 && !returningSessionId) return <Navigate to="/bag" replace />;
 
   // ----- handlers -----
   const saveContact = () => {
@@ -352,6 +362,8 @@ const Checkout = () => {
               id: s.id,
               name: s.name,
               ...(s.paintConsent ? { paint_consent: s.paintConsent } : {}),
+              ...(s.soleMaterial ? { sole_material: s.soleMaterial } : {}),
+              premium: s.premium === true,
             },
             price_cents: s.price,
           })),
@@ -375,7 +387,9 @@ const Checkout = () => {
             },
           })
         : Promise.resolve({ data: null, error: null });
-      const checkoutPromise = apiFetchJson<{ clientSecret?: string }>("/checkout/", {
+      const checkoutPromise = apiFetchJson<
+        { clientSecret?: string } & Partial<CanonicalTotals>
+      >("/checkout/", {
         method: "POST",
         headers: { Authorization: authorization },
         body: JSON.stringify({
@@ -418,8 +432,18 @@ const Checkout = () => {
       if (!checkoutData.clientSecret) {
         throw new Error("Failed to create checkout session");
       }
+      const confirmedTotals = {
+        repairsSubtotalCents: checkoutData.repairsSubtotalCents,
+        courierFeeCents: checkoutData.courierFeeCents,
+        taxCents: checkoutData.taxCents,
+        totalCents: checkoutData.totalCents,
+      };
+      if (Object.values(confirmedTotals).some((value) => typeof value !== "number")) {
+        throw new Error("Checkout did not return confirmed pricing");
+      }
 
       setCartPayload(payload);
+      setCanonicalTotals(confirmedTotals as CanonicalTotals);
       setCheckoutClientSecret(checkoutData.clientSecret);
       setShowStripe(true);
       setPlacing(false);
@@ -460,6 +484,7 @@ const Checkout = () => {
       setShowStripe(false);
       setCartPayload(null);
       setCheckoutClientSecret(null);
+      setCanonicalTotals(null);
       setPlacing(false);
       return;
     }
@@ -471,6 +496,10 @@ const Checkout = () => {
   }, [openStep, paymentDone, selectedAddress, authUser, showStripe, placing]);
 
   const returnUrl = `${window.location.origin}/checkout?session_id={CHECKOUT_SESSION_ID}`;
+
+  if (pairs.length === 0 && !returningSessionId) {
+    return <Navigate to="/bag" replace />;
+  }
 
   if (returningSessionId && finalizing) {
     return (
@@ -823,7 +852,7 @@ const Checkout = () => {
                   {showStripe && cartPayload && checkoutClientSecret && (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">
-                        Total <span className="font-medium text-foreground">{formatPrice(orderSubtotal)}</span> — payment is processed securely by Stripe.
+                        Total <span className="font-medium text-foreground">{formatPrice(displayedTotal)}</span> — payment is processed securely by Stripe.
                       </p>
                       <div className="rounded-lg border border-border overflow-hidden bg-card">
                         <StripeEmbeddedCheckoutPanel
@@ -847,19 +876,19 @@ const Checkout = () => {
                 <dl className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Repairs</dt>
-                    <dd>{formatPrice(subtotal)}</dd>
+                    <dd>{formatPrice(displayedRepairsSubtotal)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Delivery &amp; Pickup Service</dt>
-                    <dd>{courierFee === 0 ? "Free" : formatPrice(courierFee)}</dd>
+                    <dd>{displayedCourierFee === 0 ? "Free" : formatPrice(displayedCourierFee)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Taxes</dt>
-                    <dd>{taxCents === 0 ? "Free" : formatPrice(taxCents)}</dd>
+                    <dd>{displayedTax === 0 ? "Free" : formatPrice(displayedTax)}</dd>
                   </div>
                   <div className="border-t border-border pt-3 flex justify-between font-semibold text-base">
                     <dt>Subtotal</dt>
-                    <dd>{formatPrice(orderSubtotal)}</dd>
+                    <dd>{formatPrice(displayedTotal)}</dd>
                   </div>
                 </dl>
                 <p className="mt-3 text-xs text-muted-foreground">

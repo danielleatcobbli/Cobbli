@@ -19,14 +19,13 @@ import { useAuth } from "@/context/AuthContext";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { trackEvent } from "@/lib/analytics";
 import bagIcon from "@/assets/icons/bag.svg";
-
-const FREE_COURIER_THRESHOLD = 10000; // $100 in cents
-const COURIER_FEE = 1500; // $15 in cents
+import { usePricingConfig } from "@/hooks/usePricingConfig";
 
 const Bag = () => {
   const navigate = useNavigate();
   const { pairs: rawPairs, removePair, removeService } = useBag();
   const { pairs, subtotal } = useLivePricedBag(rawPairs);
+  const pricing = usePricingConfig();
   const { getPair } = usePairs();
   const { setSelectedPairId, setSelectedServiceSlugs, setActiveCategory } = useRepairFlow();
 
@@ -52,7 +51,10 @@ const Bag = () => {
   );
 
   const repairsTotal = subtotal;
-  const courierFee = repairsTotal >= FREE_COURIER_THRESHOLD ? 0 : COURIER_FEE;
+  const courierFee =
+    repairsTotal >= pricing.fee("free_courier_threshold_cents")
+      ? 0
+      : pricing.fee("courier_fee_cents");
   const orderSubtotal = repairsTotal + courierFee;
 
   const { user } = useAuth();

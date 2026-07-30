@@ -23,6 +23,7 @@ interface CartPayload {
   delivery_address: unknown;
   repairs_subtotal_cents: number;
   courier_fee_cents: number;
+  tax_cents: number;
   total_cents: number;
   /** Set by Checkout.tsx when the customer selected a pickup window.
    * start/end are ISO 8601 UTC strings. No booking exists yet at this point —
@@ -147,6 +148,7 @@ async function createOrderFromCart(
   meta: Record<string, string>,
   sessionId: string | null,
   paymentIntentId: string | null,
+  paidAmountCents: number | null,
 ) {
   const userId = meta.userId;
   if (!userId) {
@@ -172,6 +174,18 @@ async function createOrderFromCart(
   const payload = reassembleCart(meta);
   if (!payload) {
     console.error("cart webhook missing/invalid payload metadata");
+    return;
+  }
+  if (
+    !Number.isInteger(payload.total_cents)
+    || typeof paidAmountCents !== "number"
+    || !Number.isInteger(paidAmountCents)
+    || payload.total_cents !== paidAmountCents
+  ) {
+    console.error(
+      "cart amount mismatch",
+      { sessionId, metadataTotal: payload.total_cents, paidAmountCents },
+    );
     return;
   }
 
@@ -214,7 +228,7 @@ async function createOrderFromCart(
       payment_method_snapshot: null,
       repairs_subtotal_cents: payload.repairs_subtotal_cents,
       courier_fee_cents: payload.courier_fee_cents,
-      tax_cents: 0,
+      tax_cents: payload.tax_cents ?? 0,
       total_cents: payload.total_cents,
       payment_status: "paid",
       paid_at: nowIso,
@@ -267,9 +281,10 @@ async function markPaid(
   meta: Record<string, string>,
   sessionId: string | null,
   paymentIntentId: string | null,
+  paidAmountCents: number | null,
 ) {
   if (meta.kind === "cart") {
-    await createOrderFromCart(meta, sessionId, paymentIntentId);
+    await createOrderFromCart(meta, sessionId, paymentIntentId, paidAmountCents);
   } else if (meta.kind === "deposit" && meta.assessmentId) {
     await supabase
       .from("assessments")
@@ -333,14 +348,14 @@ Deno.serve(async (req) => {
             ? session.payment_intent
             : session.payment_intent?.id ?? null;
         if (session.payment_status === "paid") {
-          await markPaid(meta, session.id, paymentIntentId);
+          await markPaid(meta, session.id, paymentIntentId, session.amount_total);
         }
         break;
       }
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
         const meta = (pi.metadata ?? {}) as Record<string, string>;
-        await markPaid(meta, null, pi.id);
+        await markPaid(meta, null, pi.id, pi.amount_received);
         break;
       }
       case "payment_intent.payment_failed": {

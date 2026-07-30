@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from app.auth import CurrentUser
+from app.pricing import CartQuote, quote_cart
 from app.settings import get_settings
 from app.stripe_customers import resolve_or_create_customer
 from app.supabase_client import get_supabase_admin
@@ -31,6 +32,10 @@ class CheckoutRequest(BaseModel):
 
 class CheckoutResponse(BaseModel):
     clientSecret: str | None = Field(default=None)
+    repairsSubtotalCents: int | None = Field(default=None)
+    courierFeeCents: int | None = Field(default=None)
+    taxCents: int | None = Field(default=None)
+    totalCents: int | None = Field(default=None)
 
 
 def _persist_stripe_customer_id(
@@ -82,24 +87,13 @@ def _validate_cart(payload: Any) -> dict[str, Any]:
     addr = payload.get("delivery_address")
     if not isinstance(addr, dict):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid delivery_address")
-    total = payload.get("total_cents")
-    if not isinstance(total, int) or isinstance(total, bool) or total < 50:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid total_cents")
-    repairs = payload.get("repairs_subtotal_cents")
-    if not isinstance(repairs, int) or isinstance(repairs, bool) or repairs < 0:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Invalid repairs_subtotal_cents"
-        )
-    courier = payload.get("courier_fee_cents")
-    if not isinstance(courier, int) or isinstance(courier, bool) or courier < 0:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid courier_fee_cents")
     items = payload.get("items")
     if not isinstance(items, list) or len(items) == 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cart has no items")
     return payload
 
 
-@router.post("/", response_model=CheckoutResponse)
+@router.post("/", response_model=CheckoutResponse, response_model_exclude_none=True)
 def create_checkout(
     body: CheckoutRequest,
     request: Request,
@@ -121,6 +115,13 @@ def create_checkout(
 
     if body.kind == "cart":
         _validate_cart(body.cartPayload)
+
+    pricing_duration_ms = 0.0
+    cart_quote: CartQuote | None = None
+    if body.kind == "cart":
+        pricing_started = perf_counter()
+        cart_quote = quote_cart(body.cartPayload or {})
+        pricing_duration_ms = (perf_counter() - pricing_started) * 1000
 
     customer_started = perf_counter()
     customer_id = user.stripe_customer_id
@@ -196,7 +197,9 @@ def create_checkout(
         metadata = {"userId": user.id, "kind": "order", "orderId": body.rowId}
 
     elif body.kind == "cart":
-        payload = body.cartPayload or {}
+        if cart_quote is None:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Missing quote")
+        payload = cart_quote.payload
         line_items = [
             {
                 "price_data": {
@@ -258,8 +261,17 @@ def create_checkout(
         (
             f"auth;dur={auth_duration_ms:.2f}",
             f"customer;dur={customer_duration_ms:.2f}",
+            f"pricing;dur={pricing_duration_ms:.2f}",
             f"stripe_session;dur={stripe_session_duration_ms:.2f}",
             f"total;dur={auth_duration_ms + route_duration_ms:.2f}",
         )
     )
-    return CheckoutResponse(clientSecret=session.client_secret)
+    return CheckoutResponse(
+        clientSecret=session.client_secret,
+        repairsSubtotalCents=(
+            cart_quote.repairs_subtotal_cents if cart_quote else None
+        ),
+        courierFeeCents=cart_quote.courier_fee_cents if cart_quote else None,
+        taxCents=cart_quote.tax_cents if cart_quote else None,
+        totalCents=cart_quote.total_cents if cart_quote else None,
+    )

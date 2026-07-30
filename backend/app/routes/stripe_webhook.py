@@ -72,6 +72,20 @@ def _create_order_from_cart(
     if not payload:
         logger.error("cart webhook missing/invalid payload metadata")
         return
+    canonical_total = payload.get("total_cents")
+    paid_total = session.get("amount_total")
+    if (
+        not isinstance(canonical_total, int)
+        or not isinstance(paid_total, int)
+        or canonical_total != paid_total
+    ):
+        logger.error(
+            "cart amount mismatch for session %s: metadata=%r stripe=%r",
+            session_id,
+            canonical_total,
+            paid_total,
+        )
+        return
 
     now_iso = _now_iso()
 
@@ -88,7 +102,7 @@ def _create_order_from_cart(
                 "payment_method_snapshot": None,
                 "repairs_subtotal_cents": payload.get("repairs_subtotal_cents", 0),
                 "courier_fee_cents": payload.get("courier_fee_cents", 0),
-                "tax_cents": 0,
+                "tax_cents": payload.get("tax_cents", 0),
                 "total_cents": payload.get("total_cents", 0),
                 "payment_status": "paid",
                 "paid_at": now_iso,

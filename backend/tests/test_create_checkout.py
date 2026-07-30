@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import statistics
+from copy import deepcopy
 from time import perf_counter, sleep
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -9,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.auth import AuthUser, require_user
+from app.pricing import CartQuote
 
 
 @pytest.fixture
@@ -21,6 +23,29 @@ def authed_client(client, auth_user):
     client.app.dependency_overrides[require_user] = lambda: auth_user
     yield client
     client.app.dependency_overrides.pop(require_user, None)
+
+
+@pytest.fixture(autouse=True)
+def canonical_quote():
+    def quote(payload):
+        canonical = deepcopy(payload)
+        canonical["items"] = [
+            {**item, "price_cents": 5000} for item in canonical.get("items", [])
+        ]
+        canonical["repairs_subtotal_cents"] = 5000
+        canonical["courier_fee_cents"] = 500
+        canonical["tax_cents"] = 0
+        canonical["total_cents"] = 5500
+        return CartQuote(
+            payload=canonical,
+            repairs_subtotal_cents=5000,
+            courier_fee_cents=500,
+            tax_cents=0,
+            total_cents=5500,
+        )
+
+    with patch("app.routes.create_checkout.quote_cart", side_effect=quote) as mocked:
+        yield mocked
 
 
 def _stripe_session(session_id: str = "cs_test_1", client_secret: str = "cs_test_secret"):  # noqa: S107
@@ -279,7 +304,13 @@ def test_cart_creates_session_and_chunks_metadata(authed_client):
         )
 
     assert res.status_code == 200, res.text
-    assert res.json() == {"clientSecret": "secret_c"}
+    assert res.json() == {
+        "clientSecret": "secret_c",
+        "repairsSubtotalCents": 5000,
+        "courierFeeCents": 500,
+        "taxCents": 0,
+        "totalCents": 5500,
+    }
 
     md = create_session.call_args.kwargs["metadata"]
     assert md["userId"] == "user-123"
@@ -291,7 +322,11 @@ def test_cart_creates_session_and_chunks_metadata(authed_client):
     )
     assert chunks, "expected cart_N chunks"
     rebuilt = "".join(md[k] for k in chunks)
-    assert json.loads(rebuilt) == payload
+    canonical_payload = json.loads(rebuilt)
+    assert canonical_payload["total_cents"] == 5500
+    assert canonical_payload["courier_fee_cents"] == 500
+    assert canonical_payload["tax_cents"] == 0
+    assert canonical_payload["items"][0]["price_cents"] == 5000
 
 
 def test_cart_invalid_email(authed_client):
@@ -308,18 +343,24 @@ def test_cart_invalid_email(authed_client):
     assert res.status_code == 400
 
 
-def test_cart_total_too_low(authed_client):
+def test_cart_client_total_too_low_is_ignored(authed_client):
     bad = _valid_cart()
     bad["total_cents"] = 10
     with patch("app.routes.create_checkout.get_supabase_admin"), patch(
         "app.routes.create_checkout.stripe.Customer.search",
         return_value=SimpleNamespace(data=[SimpleNamespace(id="cus_x")]),
-    ):
+    ), patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        return_value=_stripe_session(),
+    ) as create_session:
         res = authed_client.post(
             "/checkout/",
             json={"kind": "cart", "returnUrl": "https://x", "cartPayload": bad},
         )
-    assert res.status_code == 400
+    assert res.status_code == 200
+    assert create_session.call_args.kwargs["line_items"][0]["price_data"][
+        "unit_amount"
+    ] == 5500
 
 
 def test_cart_no_items(authed_client):
@@ -439,6 +480,7 @@ def test_cart_uses_cached_customer_and_exposes_server_timing(
     timing = res.headers["server-timing"]
     assert "auth;dur=" in timing
     assert "customer;dur=" in timing
+    assert "pricing;dur=" in timing
     assert "stripe_session;dur=" in timing
     assert "total;dur=" in timing
     sb.auth.admin.update_user_by_id.assert_not_called()
