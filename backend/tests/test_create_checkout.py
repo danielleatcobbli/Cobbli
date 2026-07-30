@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import statistics
+from time import perf_counter, sleep
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -402,3 +404,183 @@ def test_resolve_customer_by_email_updates_metadata(authed_client):
     md = modify.call_args.kwargs["metadata"]
     assert md["userId"] == "user-123"
     assert md["foo"] == "bar"
+
+
+def test_cart_uses_cached_customer_and_exposes_server_timing(
+    authed_client, auth_user
+):
+    auth_user.app_metadata = {
+        "role": "customer",
+        "stripe_customer_id": "cus_cached",
+    }
+    auth_user.stripe_customer_id = "cus_cached"
+    sb, _c, _u = _make_supabase_mock(SimpleNamespace(data=None, error=None))
+
+    with patch(
+        "app.routes.create_checkout.get_supabase_admin", return_value=sb
+    ), patch(
+        "app.routes.create_checkout.stripe.Customer.search"
+    ) as customer_search, patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        return_value=_stripe_session("cs_cached", "secret_cached"),
+    ) as create_session:
+        res = authed_client.post(
+            "/checkout/",
+            json={
+                "kind": "cart",
+                "returnUrl": "https://x/done",
+                "cartPayload": _valid_cart(),
+            },
+        )
+
+    assert res.status_code == 200, res.text
+    customer_search.assert_not_called()
+    assert create_session.call_args.kwargs["customer"] == "cus_cached"
+    timing = res.headers["server-timing"]
+    assert "auth;dur=" in timing
+    assert "customer;dur=" in timing
+    assert "stripe_session;dur=" in timing
+    assert "total;dur=" in timing
+    sb.auth.admin.update_user_by_id.assert_not_called()
+
+
+def test_cart_backfills_customer_id_without_replacing_app_metadata(
+    authed_client, auth_user
+):
+    auth_user.app_metadata = {"role": "customer"}
+    auth_user.stripe_customer_id = None
+    sb, _c, _u = _make_supabase_mock(SimpleNamespace(data=None, error=None))
+
+    with patch(
+        "app.routes.create_checkout.get_supabase_admin", return_value=sb
+    ), patch(
+        "app.routes.create_checkout.stripe.Customer.search",
+        return_value=SimpleNamespace(data=[SimpleNamespace(id="cus_backfill")]),
+    ), patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        return_value=_stripe_session(),
+    ):
+        res = authed_client.post(
+            "/checkout/",
+            json={
+                "kind": "cart",
+                "returnUrl": "https://x/done",
+                "cartPayload": _valid_cart(),
+            },
+        )
+
+    assert res.status_code == 200, res.text
+    sb.auth.admin.update_user_by_id.assert_called_once_with(
+        "user-123",
+        {
+            "app_metadata": {
+                "role": "customer",
+                "stripe_customer_id": "cus_backfill",
+            }
+        },
+    )
+
+
+def test_five_repeat_checkouts_keep_customer_lookup_off_critical_path(
+    authed_client, auth_user
+):
+    auth_user.app_metadata = {"stripe_customer_id": "cus_repeat"}
+    auth_user.stripe_customer_id = "cus_repeat"
+    sb, _c, _u = _make_supabase_mock(SimpleNamespace(data=None, error=None))
+
+    with patch(
+        "app.routes.create_checkout.get_supabase_admin", return_value=sb
+    ), patch(
+        "app.routes.create_checkout.stripe.Customer.search"
+    ) as customer_search, patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        return_value=_stripe_session(),
+    ):
+        responses = [
+            authed_client.post(
+                "/checkout/",
+                json={
+                    "kind": "cart",
+                    "returnUrl": "https://x/done",
+                    "cartPayload": _valid_cart(),
+                },
+            )
+            for _ in range(5)
+        ]
+
+    assert all(response.status_code == 200 for response in responses)
+    customer_search.assert_not_called()
+    total_durations = [
+        float(
+            next(
+                metric
+                for metric in response.headers["server-timing"].split(", ")
+                if metric.startswith("total;")
+            ).split("=")[1]
+        )
+        for response in responses
+    ]
+    assert len(total_durations) == 5
+    assert statistics.median(total_durations) >= 0
+
+
+def test_five_request_medians_show_cached_customer_latency_reduction(
+    authed_client, auth_user
+):
+    sb, _c, _u = _make_supabase_mock(SimpleNamespace(data=None, error=None))
+    request_json = {
+        "kind": "cart",
+        "returnUrl": "https://x/done",
+        "cartPayload": _valid_cart(),
+    }
+
+    def delayed_customer_lookup(**_kwargs):
+        sleep(0.05)
+        return "cus_benchmark"
+
+    def delayed_session_create(**_kwargs):
+        sleep(0.005)
+        return _stripe_session()
+
+    def total_duration(response):
+        return float(
+            next(
+                metric
+                for metric in response.headers["server-timing"].split(", ")
+                if metric.startswith("total;")
+            ).split("=")[1]
+        )
+
+    def run_five():
+        endpoint_durations = []
+        backend_durations = []
+        for _ in range(5):
+            started = perf_counter()
+            response = authed_client.post("/checkout/", json=request_json)
+            endpoint_durations.append((perf_counter() - started) * 1000)
+            assert response.status_code == 200, response.text
+            backend_durations.append(total_duration(response))
+        return backend_durations, endpoint_durations
+
+    auth_user.app_metadata = {}
+    auth_user.stripe_customer_id = None
+    with patch(
+        "app.routes.create_checkout.get_supabase_admin", return_value=sb
+    ), patch(
+        "app.routes.create_checkout.resolve_or_create_customer",
+        side_effect=delayed_customer_lookup,
+    ) as customer_lookup, patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        side_effect=delayed_session_create,
+    ):
+        uncached_backend, uncached_endpoint = run_five()
+        assert customer_lookup.call_count == 5
+
+        auth_user.app_metadata = {"stripe_customer_id": "cus_benchmark"}
+        auth_user.stripe_customer_id = "cus_benchmark"
+        cached_backend, cached_endpoint = run_five()
+
+    # The controlled 50 ms customer lookup must disappear from both the
+    # backend's own timing and the caller-observed endpoint duration.
+    assert statistics.median(uncached_backend) - statistics.median(cached_backend) >= 40
+    assert statistics.median(uncached_endpoint) - statistics.median(cached_endpoint) >= 40

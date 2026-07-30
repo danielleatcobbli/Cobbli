@@ -12,6 +12,8 @@ interface StripeEmbeddedCheckoutProps {
   /** Required for kind="cart" — full order data, persisted only after Stripe confirms payment. */
   cartPayload?: unknown;
   returnUrl: string;
+  /** A session prepared by the parent, allowing other checkout work to run in parallel. */
+  clientSecret?: string;
 }
 
 export function StripeEmbeddedCheckoutPanel({
@@ -19,6 +21,7 @@ export function StripeEmbeddedCheckoutPanel({
   rowId,
   cartPayload,
   returnUrl,
+  clientSecret,
 }: StripeEmbeddedCheckoutProps) {
   const fetchClientSecret = useCallback(async (): Promise<string> => {
     const data = await apiFetchJson<{ clientSecret?: string }>("/checkout/", {
@@ -40,13 +43,17 @@ export function StripeEmbeddedCheckoutPanel({
   // React to fully unmount/remount the provider so it actually fetches a new
   // session instead of reusing a stale one.
   const instanceKey = useMemo(
-    () => JSON.stringify({ kind, rowId, cartPayload }),
-    [kind, rowId, cartPayload],
+    () => clientSecret ?? JSON.stringify({ kind, rowId, cartPayload }),
+    [clientSecret, kind, rowId, cartPayload],
+  );
+  const options = useMemo(
+    () => (clientSecret ? { clientSecret } : { fetchClientSecret }),
+    [clientSecret, fetchClientSecret],
   );
 
   return (
     <div id="checkout" className="w-full">
-      <EmbeddedCheckoutProvider key={instanceKey} stripe={getStripe()} options={{ fetchClientSecret }}>
+      <EmbeddedCheckoutProvider key={instanceKey} stripe={getStripe()} options={options}>
         <EmbeddedCheckout />
       </EmbeddedCheckoutProvider>
     </div>
