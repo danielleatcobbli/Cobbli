@@ -14,7 +14,10 @@ import { useRole } from "@/hooks/useRole";
 import { trackEvent } from "@/lib/analytics";
 import { consumeReturnTo, peekReturnTo, saveReturnTo } from "@/lib/authRedirect";
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Requires at least 2 characters after the last dot (e.g. "gmail.co" but not
+// "gmail.c") — still permissive about actual domain names, just catches
+// obviously-truncated/mistyped addresses (Danielle's call, 2026-07-30).
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 const SignIn = () => {
   const navigate = useNavigate();

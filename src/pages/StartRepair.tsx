@@ -93,6 +93,16 @@ const StartRepair = () => {
   const isAddingNewPair = selectedPairId === null;
   const [newPairName, setNewPairName] = useState("");
 
+  // Red validation state for the pair field (2026-07-29, Danielle's call):
+  // customers were reaching the recommendations screen without naming a
+  // pair, then hitting a quietly-disabled checkout button with no clear
+  // reason why. Since a repair is always one-pair-at-a-time, the pair field
+  // is now a hard gate on "See my recommendations" itself — not just
+  // checkout — and failing that gate flags the field red right where the
+  // customer is looking, instead of a muted note they'd have to go find.
+  const [pairError, setPairError] = useState(false);
+  const isPairFilled = selectedPairId !== null || newPairName.trim().length > 0;
+
   // Free-form notes for this specific repair (2026-07-27, Danielle's call) —
   // collected here on the recommendations screen rather than in a separate
   // popup step. Distinct from the pair's own name/identity: this is about the
@@ -363,6 +373,11 @@ const StartRepair = () => {
   // depends on the answer.
   const onSeeRecommendationsClick = () => {
     if (!services || !anyChecked) return;
+    if (!isPairFilled) {
+      setPairError(true);
+      document.getElementById("pair-field")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (needsSoleQuestion || needsInsoleQuestion) {
       setSoleInsoleOpen(true);
       return;
@@ -432,7 +447,7 @@ const StartRepair = () => {
   // Required so either button below always has a pair to attach these
   // services to — either an existing selected pair, or a name typed into the
   // new-pair field.
-  const canFinalize = cartLines.length > 0 && (selectedPairId !== null || newPairName.trim().length > 0);
+  const canFinalize = cartLines.length > 0 && isPairFilled;
 
   // Adds the current recommendation set to the bag under whichever pair is
   // active — creating a new saved pair first if one was typed rather than
@@ -555,7 +570,7 @@ const StartRepair = () => {
                   over whatever was checked for the last one. Sits below the
                   H1/subtext and above the category pills (2026-07-27,
                   Danielle's call) rather than above the H1. */}
-              <div className="mt-6">
+              <div className="mt-6" id="pair-field">
                 <p className="text-sm font-medium mb-1.5" style={{ color: "#7a5c40" }}>
                   Which pair needs attention? <span style={{ color: "#a32d2d" }}>*</span>
                 </p>
@@ -563,9 +578,14 @@ const StartRepair = () => {
                   {showPairDropdown && (
                     <select
                       aria-label="Which pair needs attention?"
+                      aria-invalid={pairError && !isPairFilled}
                       value={selectedPairId ?? ""}
-                      onChange={(e) => setSelectedPairId(e.target.value || null)}
-                      className="text-sm border border-border rounded-md px-3 py-2 text-primary bg-white"
+                      onChange={(e) => {
+                        setSelectedPairId(e.target.value || null);
+                        setPairError(false);
+                      }}
+                      className="text-sm rounded-md px-3 py-2 text-primary bg-white"
+                      style={{ border: pairError && !isPairFilled ? "1.5px solid #a32d2d" : "1px solid hsl(var(--border))" }}
                     >
                       <option value="">Add a new pair</option>
                       {pairs.map((p) => (
@@ -578,17 +598,28 @@ const StartRepair = () => {
                   {isAddingNewPair && (
                     <input
                       type="text"
+                      aria-invalid={pairError && !isPairFilled}
                       value={newPairName}
-                      onChange={(e) => setNewPairName(e.target.value)}
+                      onChange={(e) => {
+                        setNewPairName(e.target.value);
+                        if (e.target.value.trim().length > 0) setPairError(false);
+                      }}
                       placeholder="e.g. Black loafers"
-                      className="text-sm border border-border rounded-md px-3 py-2 text-primary flex-1 min-w-[200px]"
+                      className="text-sm rounded-md px-3 py-2 text-primary flex-1 min-w-[200px]"
+                      style={{ border: pairError && !isPairFilled ? "1.5px solid #a32d2d" : "1px solid hsl(var(--border))" }}
                     />
                   )}
                 </div>
-                {isAddingNewPair && (
-                  <p className="text-xs mt-1.5" style={{ color: "#8a7a68" }}>
-                    Add shoe details to help us match services when you send in multiple pairs.
+                {pairError && !isPairFilled ? (
+                  <p className="text-xs mt-1.5 font-medium" style={{ color: "#a32d2d" }}>
+                    Tell us which pair this is for before continuing — each repair is for one pair of shoes.
                   </p>
+                ) : (
+                  isAddingNewPair && (
+                    <p className="text-xs mt-1.5" style={{ color: "#8a7a68" }}>
+                      Add shoe details to help us match services when you send in multiple pairs.
+                    </p>
+                  )
                 )}
               </div>
 

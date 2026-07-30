@@ -10,12 +10,14 @@ import { Label } from "@/components/ui/label";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { apiFetchJson } from "@/integrations/api/client";
 import { toast } from "@/hooks/use-toast";
 import { useAssessment } from "@/context/AssessmentContext";
 import { createPreviewUrl } from "@/lib/heicPreview";
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Requires at least 2 characters after the last dot (e.g. "gmail.co" but not
+// "gmail.c") — still permissive about actual domain names, just catches
+// obviously-truncated/mistyped addresses (Danielle's call, 2026-07-30).
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 const MAX_FILES = 10;
 const MAX_SIZE = 50 * 1024 * 1024;
@@ -87,7 +89,7 @@ const AssessmentUpload = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isGuest = !user;
-  const { setUploads, setAiPrefill, reset } = useAssessment();
+  const { setUploads, reset } = useAssessment();
   const [files, setFiles] = useState<Picked[]>([]);
   const [description, setDescription] = useState("");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -216,11 +218,14 @@ const AssessmentUpload = () => {
    *  details" step entirely — shoe type/color/brand aren't asked for here.
    *  Brand still matters for exact resole pricing, but that gets collected
    *  later (at proposal/pricing time) rather than up front; asking for it
-   *  here just adds friction to a step that's only "send us photos." We
-   *  still run the AI photo analysis in the background and store whatever
-   *  it infers on the assessment record — useful context for the cobbler
-   *  preparing the proposal — but nothing about it is shown to or confirmed
-   *  by the customer. */
+   *  here just adds friction to a step that's only "send us photos."
+   *
+   *  AI photo analysis is OFF for now (2026-07-29, Danielle's call) — we're
+   *  not running the AI photo flow at the moment, just storing the raw
+   *  upload. shoeType/colors/brand are left null/empty rather than inferred.
+   *  A real AI-assisted photo flow is planned for later; when that happens,
+   *  restore the /analyze-shoe-photos/ call this replaced (see git history)
+   *  rather than rebuilding it from scratch. */
   const onSubmit = async () => {
     if (!canSubmit || busy) return;
     setBusy(true);
@@ -239,25 +244,12 @@ const AssessmentUpload = () => {
       const videoPaths = results.filter((r) => r.kind === "video").map((r) => r.path);
       setUploads(photoPaths, videoPaths);
 
-      let aiPrefill: { shoeType: string | null; colors: string[]; brand: string | null } = {
+      // AI photo analysis is off for now — see the comment above onSubmit.
+      const aiPrefill: { shoeType: string | null; colors: string[]; brand: string | null } = {
         shoeType: null,
         colors: [],
         brand: null,
       };
-      try {
-        const data = await apiFetchJson<{ shoeType?: string | null; colors?: string[]; brand?: string | null }>(
-          "/analyze-shoe-photos/",
-          { method: "POST", body: JSON.stringify({ photoPaths }) },
-        );
-        aiPrefill = {
-          shoeType: data?.shoeType ?? null,
-          colors: Array.isArray(data?.colors) ? data.colors : [],
-          brand: data?.brand ?? null,
-        };
-        setAiPrefill(aiPrefill);
-      } catch (e) {
-        console.warn("AI prefill failed", e);
-      }
 
       const pair = {
         photoPaths,
@@ -299,7 +291,7 @@ const AssessmentUpload = () => {
         <div className="container max-w-2xl">
           <h1 className="font-display text-3xl md:text-4xl text-primary">Show us your shoes</h1>
           <p className="mt-2 text-primary/80">
-            Upload photos or a short video and we'll recommend the right repairs.
+            Upload photos or a short video of your shoes <span className="text-destructive">*</span> and we'll recommend the right repairs.
           </p>
 
           {/* Library picker — used by the desktop dropzone below, and by the
@@ -358,7 +350,13 @@ const AssessmentUpload = () => {
           >
             <Plus className="mx-auto mb-2" />
             <p className="font-medium text-primary">
-              {dragOver ? "Drop files to upload" : "Upload photos or a short video of your shoes"}
+              {dragOver ? (
+                "Drop files to upload"
+              ) : (
+                <>
+                  Upload photos or a short video of your shoes <span className="text-destructive">*</span>
+                </>
+              )}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               JPG, PNG, HEIC, MP4, MOV · up to {MAX_FILES} files · 50MB max each
