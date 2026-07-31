@@ -589,6 +589,30 @@ export type Database = {
         }
         Relationships: []
       }
+      repair_packages: {
+        Row: {
+          is_active: boolean
+          name: string
+          price_cents: number
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          is_active?: boolean
+          name: string
+          price_cents: number
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          is_active?: boolean
+          name?: string
+          price_cents?: number
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string

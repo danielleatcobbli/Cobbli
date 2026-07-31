@@ -36,13 +36,21 @@ import {
   type PickupWindow,
 } from "@/components/cobbli/PickupScheduler";
 import { calculateTaxCents } from "@/lib/tax";
+import { apiFetchJson } from "@/integrations/api/client";
 
 type Step = "contact" | "address" | "pickup" | "payment";
+
+type CanonicalTotals = {
+  repairsSubtotalCents: number;
+  courierFeeCents: number;
+  taxCents: number;
+  totalCents: number;
+};
 
 const Checkout = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user: authUser } = useAuth();
+  const { user: authUser, session: authSession } = useAuth();
   const { isServiceable } = useServiceableZips();
   const pricing = usePricingConfig();
   const { pairs: rawPairs, clear } = useBag();
@@ -136,6 +144,8 @@ const Checkout = () => {
   const [openStep, setOpenStep] = useState<Step>("contact");
   const [placing, setPlacing] = useState(false);
   const [cartPayload, setCartPayload] = useState<unknown | null>(null);
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [canonicalTotals, setCanonicalTotals] = useState<CanonicalTotals | null>(null);
   const [showStripe, setShowStripe] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -143,6 +153,12 @@ const Checkout = () => {
   // the Payment step, rather than re-firing on every render while its
   // dependencies happen to still be satisfied.
   const attemptedPaymentPrepRef = useRef(false);
+  // Invalidates an in-flight preparation if the customer leaves Payment.
+  const paymentPrepGenerationRef = useRef(0);
+  const displayedRepairsSubtotal = canonicalTotals?.repairsSubtotalCents ?? subtotal;
+  const displayedCourierFee = canonicalTotals?.courierFeeCents ?? courierFee;
+  const displayedTax = canonicalTotals?.taxCents ?? taxCents;
+  const displayedTotal = canonicalTotals?.totalCents ?? orderSubtotal;
 
   useEffect(() => {
     if (!selectedAddrId && defaultAddrId) setSelectedAddrId(defaultAddrId);
@@ -227,8 +243,6 @@ const Checkout = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [returningSessionId]);
 
-  if (pairs.length === 0 && !returningSessionId) return <Navigate to="/bag" replace />;
-
   // ----- handlers -----
   const saveContact = () => {
     if (!contactValid) return;
@@ -298,51 +312,10 @@ const Checkout = () => {
 
   const placeOrder = async () => {
     if (!paymentDone || !selectedAddress || !authUser || placing) return;
+    const prepGeneration = ++paymentPrepGenerationRef.current;
     setPlacing(true);
     setPaymentError(null);
     try {
-      // --- Re-validate the pickup window against live Cal.com availability ---
-      // This guards against the race condition where two customers select the
-      // same window simultaneously. We re-fetch and confirm the slot is still
-      // listed before proceeding to payment.
-      if (selectedWindow) {
-        const now = new Date();
-        // Must cover the same range PickupScheduler.tsx now offers (14 days,
-        // +1 day buffer — see that file for why the buffer exists). Falling
-        // short here would make this re-check falsely report "no longer
-        // available" for a perfectly valid window the customer picked
-        // anywhere in the back half of that 14-day range.
-        const endDate = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
-        const { data: availData, error: availErr } =
-          await supabase.functions.invoke("cal-availability", {
-            body: {
-              start_time: now.toISOString(),
-              end_time: endDate.toISOString(),
-            },
-          });
-
-        if (availErr || availData?.error) {
-          // Non-fatal: surface a warning but don't block checkout if the
-          // availability check itself fails (e.g. Calendly is temporarily down).
-          console.warn("Pickup re-validation failed:", availErr ?? availData?.error);
-        } else {
-          const stillAvailable = (availData?.windows ?? []).some(
-            (w: { start_time: string }) =>
-              w.start_time === selectedWindow.start_time,
-          );
-          if (!stillAvailable) {
-            // The window was taken — reset selection and ask the customer to
-            // pick another time before continuing.
-            setPickupConflict(true);
-            setSelectedWindow(null);
-            setPickupKey((k) => k + 1); // force PickupScheduler to re-fetch
-            setOpenStep("pickup");
-            setPlacing(false);
-            return;
-          }
-        }
-      }
-
       // --- No Cal.com booking is created here anymore ---
       // Previously this called cal-book the moment the customer opened the
       // Payment step, which meant a real booking existed on Danielle's
@@ -389,19 +362,96 @@ const Checkout = () => {
               id: s.id,
               name: s.name,
               ...(s.paintConsent ? { paint_consent: s.paintConsent } : {}),
+              ...(s.soleMaterial ? { sole_material: s.soleMaterial } : {}),
+              premium: s.premium === true,
             },
             price_cents: s.price,
           })),
         ),
       };
+
+      // Revalidate the selected pickup window and create the Stripe Checkout
+      // Session concurrently. The payment UI remains hidden until both finish,
+      // but neither network request has to wait for the other.
+      const accessToken = authSession?.access_token;
+      if (!accessToken) {
+        throw new Error("Your session expired. Please sign in again.");
+      }
+      const authorization = `Bearer ${accessToken}`;
+      const availabilityPromise = selectedWindow
+        ? supabase.functions.invoke("cal-availability", {
+            headers: { Authorization: authorization },
+            body: {
+              start_time: new Date().toISOString(),
+              end_time: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+            },
+          })
+        : Promise.resolve({ data: null, error: null });
+      const checkoutPromise = apiFetchJson<
+        { clientSecret?: string } & Partial<CanonicalTotals>
+      >("/checkout/", {
+        method: "POST",
+        headers: { Authorization: authorization },
+        body: JSON.stringify({
+          kind: "cart",
+          cartPayload: payload,
+          returnUrl,
+        }),
+      });
+
+      const [
+        { data: availData, error: availErr },
+        checkoutData,
+      ] = await Promise.all([availabilityPromise, checkoutPromise]);
+
+      // Ignore results from preparation that completed after Payment was closed.
+      if (prepGeneration !== paymentPrepGenerationRef.current) return;
+
+      if (selectedWindow) {
+        if (availErr || availData?.error) {
+          // Non-fatal: don't block checkout if Cal.com is temporarily down.
+          console.warn("Pickup re-validation failed:", availErr ?? availData?.error);
+        } else {
+          const stillAvailable = (availData?.windows ?? []).some(
+            (w: { start_time: string }) =>
+              w.start_time === selectedWindow.start_time,
+          );
+          if (!stillAvailable) {
+            // The concurrently-created Stripe Session is harmless and expires
+            // automatically; no payment or order has been created.
+            setPickupConflict(true);
+            setSelectedWindow(null);
+            setPickupKey((k) => k + 1);
+            setOpenStep("pickup");
+            setPlacing(false);
+            return;
+          }
+        }
+      }
+
+      if (!checkoutData.clientSecret) {
+        throw new Error("Failed to create checkout session");
+      }
+      const confirmedTotals = {
+        repairsSubtotalCents: checkoutData.repairsSubtotalCents,
+        courierFeeCents: checkoutData.courierFeeCents,
+        taxCents: checkoutData.taxCents,
+        totalCents: checkoutData.totalCents,
+      };
+      if (Object.values(confirmedTotals).some((value) => typeof value !== "number")) {
+        throw new Error("Checkout did not return confirmed pricing");
+      }
+
       setCartPayload(payload);
+      setCanonicalTotals(confirmedTotals as CanonicalTotals);
+      setCheckoutClientSecret(checkoutData.clientSecret);
       setShowStripe(true);
+      setPlacing(false);
     } catch (e: unknown) {
+      if (prepGeneration !== paymentPrepGenerationRef.current) return;
       const message = e instanceof Error ? e.message : "Please try again.";
       console.error("place order failed", e);
       setPaymentError(message);
-      // Allow the auto-prepare effect to try again once the user hits "Try again".
-      attemptedPaymentPrepRef.current = false;
       toast({
         title: "Could not start checkout",
         description: message,
@@ -429,8 +479,13 @@ const Checkout = () => {
   // Payment is reopened.
   useEffect(() => {
     if (openStep !== "payment") {
+      paymentPrepGenerationRef.current += 1;
       attemptedPaymentPrepRef.current = false;
       setShowStripe(false);
+      setCartPayload(null);
+      setCheckoutClientSecret(null);
+      setCanonicalTotals(null);
+      setPlacing(false);
       return;
     }
     if (showStripe || placing || attemptedPaymentPrepRef.current) return;
@@ -441,6 +496,10 @@ const Checkout = () => {
   }, [openStep, paymentDone, selectedAddress, authUser, showStripe, placing]);
 
   const returnUrl = `${window.location.origin}/checkout?session_id={CHECKOUT_SESSION_ID}`;
+
+  if (pairs.length === 0 && !returningSessionId) {
+    return <Navigate to="/bag" replace />;
+  }
 
   if (returningSessionId && finalizing) {
     return (
@@ -790,16 +849,17 @@ const Checkout = () => {
                     </>
                   )}
 
-                  {showStripe && cartPayload && (
+                  {showStripe && cartPayload && checkoutClientSecret && (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">
-                        Total <span className="font-medium text-foreground">{formatPrice(orderSubtotal)}</span> — payment is processed securely by Stripe.
+                        Total <span className="font-medium text-foreground">{formatPrice(displayedTotal)}</span> — payment is processed securely by Stripe.
                       </p>
                       <div className="rounded-lg border border-border overflow-hidden bg-card">
                         <StripeEmbeddedCheckoutPanel
                           kind="cart"
                           cartPayload={cartPayload}
                           returnUrl={returnUrl}
+                          clientSecret={checkoutClientSecret}
                         />
                       </div>
                     </div>
@@ -816,19 +876,19 @@ const Checkout = () => {
                 <dl className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Repairs</dt>
-                    <dd>{formatPrice(subtotal)}</dd>
+                    <dd>{formatPrice(displayedRepairsSubtotal)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Delivery &amp; Pickup Service</dt>
-                    <dd>{courierFee === 0 ? "Free" : formatPrice(courierFee)}</dd>
+                    <dd>{displayedCourierFee === 0 ? "Free" : formatPrice(displayedCourierFee)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Taxes</dt>
-                    <dd>{taxCents === 0 ? "Free" : formatPrice(taxCents)}</dd>
+                    <dd>{displayedTax === 0 ? "Free" : formatPrice(displayedTax)}</dd>
                   </div>
                   <div className="border-t border-border pt-3 flex justify-between font-semibold text-base">
                     <dt>Subtotal</dt>
-                    <dd>{formatPrice(orderSubtotal)}</dd>
+                    <dd>{formatPrice(displayedTotal)}</dd>
                   </div>
                 </dl>
                 <p className="mt-3 text-xs text-muted-foreground">

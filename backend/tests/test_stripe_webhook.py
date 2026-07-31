@@ -166,6 +166,7 @@ def test_cart_checkout_session_creates_order_and_items(client):
         "delivery_address": {"line1": "1 Main"},
         "repairs_subtotal_cents": 5000,
         "courier_fee_cents": 1000,
+        "tax_cents": 0,
         "total_cents": 6000,
         "items": [
             {
@@ -189,6 +190,7 @@ def test_cart_checkout_session_creates_order_and_items(client):
             object={
                 "id": "cs_cart_1",
                 "payment_status": "paid",
+                "amount_total": 6000,
                 "payment_intent": "pi_cart_1",
                 "metadata": metadata,
             }
@@ -267,6 +269,56 @@ def test_cart_checkout_session_creates_order_and_items(client):
     orders_table.update.assert_called_once()
     update_args = orders_table.update.call_args[0][0]
     assert update_args == {"status": "placed"}
+
+
+def test_cart_amount_mismatch_does_not_create_order(client):
+    payload = {
+        "contact_email": "c@example.com",
+        "contact_phone": "+1",
+        "delivery_address": {"line1": "1 Main"},
+        "repairs_subtotal_cents": 5000,
+        "courier_fee_cents": 1000,
+        "tax_cents": 0,
+        "total_cents": 6000,
+        "items": [],
+    }
+    event = SimpleNamespace(
+        type="checkout.session.completed",
+        data=SimpleNamespace(
+            object={
+                "id": "cs_cart_mismatch",
+                "payment_status": "paid",
+                "amount_total": 50,
+                "payment_intent": "pi_cart_mismatch",
+                "metadata": {
+                    "kind": "cart",
+                    "userId": "u-1",
+                    "cart_0": json.dumps(payload),
+                },
+            }
+        ),
+    )
+    orders_table = MagicMock()
+    orders_table.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value = MagicMock(
+        data=None, error=None
+    )
+    sb = MagicMock()
+    sb.table.return_value = orders_table
+
+    with patch(
+        "app.routes.stripe_webhook.stripe.Webhook.construct_event",
+        return_value=event,
+    ), patch(
+        "app.routes.stripe_webhook.get_supabase_admin", return_value=sb
+    ):
+        res = client.post(
+            "/stripe/webhook",
+            content=b"{}",
+            headers={"stripe-signature": "t=1,v1=ok"},
+        )
+
+    assert res.status_code == 200
+    orders_table.insert.assert_not_called()
 
 
 def test_cart_session_idempotent_when_order_exists(client):

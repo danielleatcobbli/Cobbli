@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useServices } from "@/hooks/useServices";
+import { canonicalPackageSlug, usePackagePrices } from "@/hooks/usePackagePrices";
 import { fullResolePrice, priceForShoeType, type ShoeType } from "@/types/service";
 import type { BagPair, BagService } from "@/context/BagContext";
 
@@ -13,6 +14,7 @@ import type { BagPair, BagService } from "@/context/BagContext";
  */
 export const useLivePricedBag = (pairs: BagPair[]) => {
   const { data: services, isLoading } = useServices();
+  const { data: packagePrices, isLoading: packagePricesLoading } = usePackagePrices();
 
   return useMemo(() => {
     const bySlug = new Map((services ?? []).map((s) => [s.slug, s]));
@@ -20,6 +22,13 @@ export const useLivePricedBag = (pairs: BagPair[]) => {
     const livePairs = pairs.map((p) => {
       const shoeType = p.shoeType as ShoeType | undefined;
       const liveServices: BagService[] = p.services.map((svc) => {
+        if (svc.id.startsWith("bundle-")) {
+          const packageSlug = canonicalPackageSlug(svc.id.slice("bundle-".length));
+          const packagePrice = packagePrices?.[packageSlug];
+          return typeof packagePrice === "number"
+            ? { ...svc, id: `bundle-${packageSlug}`, price: packagePrice }
+            : svc;
+        }
         const live = bySlug.get(svc.id);
         if (!live || !shoeType) return svc;
         let priceDollars: number | null = null;
@@ -37,6 +46,10 @@ export const useLivePricedBag = (pairs: BagPair[]) => {
       0,
     );
 
-    return { pairs: livePairs, subtotal, isLoading };
-  }, [pairs, services, isLoading]);
+    return {
+      pairs: livePairs,
+      subtotal,
+      isLoading: isLoading || packagePricesLoading,
+    };
+  }, [pairs, services, packagePrices, isLoading, packagePricesLoading]);
 };

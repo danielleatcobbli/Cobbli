@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import statistics
+from copy import deepcopy
+from time import perf_counter, sleep
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.auth import AuthUser, require_user
+from app.pricing import CartQuote
 
 
 @pytest.fixture
@@ -19,6 +23,29 @@ def authed_client(client, auth_user):
     client.app.dependency_overrides[require_user] = lambda: auth_user
     yield client
     client.app.dependency_overrides.pop(require_user, None)
+
+
+@pytest.fixture(autouse=True)
+def canonical_quote():
+    def quote(payload):
+        canonical = deepcopy(payload)
+        canonical["items"] = [
+            {**item, "price_cents": 5000} for item in canonical.get("items", [])
+        ]
+        canonical["repairs_subtotal_cents"] = 5000
+        canonical["courier_fee_cents"] = 500
+        canonical["tax_cents"] = 0
+        canonical["total_cents"] = 5500
+        return CartQuote(
+            payload=canonical,
+            repairs_subtotal_cents=5000,
+            courier_fee_cents=500,
+            tax_cents=0,
+            total_cents=5500,
+        )
+
+    with patch("app.routes.create_checkout.quote_cart", side_effect=quote) as mocked:
+        yield mocked
 
 
 def _stripe_session(session_id: str = "cs_test_1", client_secret: str = "cs_test_secret"):  # noqa: S107
@@ -277,7 +304,13 @@ def test_cart_creates_session_and_chunks_metadata(authed_client):
         )
 
     assert res.status_code == 200, res.text
-    assert res.json() == {"clientSecret": "secret_c"}
+    assert res.json() == {
+        "clientSecret": "secret_c",
+        "repairsSubtotalCents": 5000,
+        "courierFeeCents": 500,
+        "taxCents": 0,
+        "totalCents": 5500,
+    }
 
     md = create_session.call_args.kwargs["metadata"]
     assert md["userId"] == "user-123"
@@ -289,7 +322,11 @@ def test_cart_creates_session_and_chunks_metadata(authed_client):
     )
     assert chunks, "expected cart_N chunks"
     rebuilt = "".join(md[k] for k in chunks)
-    assert json.loads(rebuilt) == payload
+    canonical_payload = json.loads(rebuilt)
+    assert canonical_payload["total_cents"] == 5500
+    assert canonical_payload["courier_fee_cents"] == 500
+    assert canonical_payload["tax_cents"] == 0
+    assert canonical_payload["items"][0]["price_cents"] == 5000
 
 
 def test_cart_invalid_email(authed_client):
@@ -306,18 +343,24 @@ def test_cart_invalid_email(authed_client):
     assert res.status_code == 400
 
 
-def test_cart_total_too_low(authed_client):
+def test_cart_client_total_too_low_is_ignored(authed_client):
     bad = _valid_cart()
     bad["total_cents"] = 10
     with patch("app.routes.create_checkout.get_supabase_admin"), patch(
         "app.routes.create_checkout.stripe.Customer.search",
         return_value=SimpleNamespace(data=[SimpleNamespace(id="cus_x")]),
-    ):
+    ), patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        return_value=_stripe_session(),
+    ) as create_session:
         res = authed_client.post(
             "/checkout/",
             json={"kind": "cart", "returnUrl": "https://x", "cartPayload": bad},
         )
-    assert res.status_code == 400
+    assert res.status_code == 200
+    assert create_session.call_args.kwargs["line_items"][0]["price_data"][
+        "unit_amount"
+    ] == 5500
 
 
 def test_cart_no_items(authed_client):
@@ -402,3 +445,184 @@ def test_resolve_customer_by_email_updates_metadata(authed_client):
     md = modify.call_args.kwargs["metadata"]
     assert md["userId"] == "user-123"
     assert md["foo"] == "bar"
+
+
+def test_cart_uses_cached_customer_and_exposes_server_timing(
+    authed_client, auth_user
+):
+    auth_user.app_metadata = {
+        "role": "customer",
+        "stripe_customer_id": "cus_cached",
+    }
+    auth_user.stripe_customer_id = "cus_cached"
+    sb, _c, _u = _make_supabase_mock(SimpleNamespace(data=None, error=None))
+
+    with patch(
+        "app.routes.create_checkout.get_supabase_admin", return_value=sb
+    ), patch(
+        "app.routes.create_checkout.stripe.Customer.search"
+    ) as customer_search, patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        return_value=_stripe_session("cs_cached", "secret_cached"),
+    ) as create_session:
+        res = authed_client.post(
+            "/checkout/",
+            json={
+                "kind": "cart",
+                "returnUrl": "https://x/done",
+                "cartPayload": _valid_cart(),
+            },
+        )
+
+    assert res.status_code == 200, res.text
+    customer_search.assert_not_called()
+    assert create_session.call_args.kwargs["customer"] == "cus_cached"
+    timing = res.headers["server-timing"]
+    assert "auth;dur=" in timing
+    assert "customer;dur=" in timing
+    assert "pricing;dur=" in timing
+    assert "stripe_session;dur=" in timing
+    assert "total;dur=" in timing
+    sb.auth.admin.update_user_by_id.assert_not_called()
+
+
+def test_cart_backfills_customer_id_without_replacing_app_metadata(
+    authed_client, auth_user
+):
+    auth_user.app_metadata = {"role": "customer"}
+    auth_user.stripe_customer_id = None
+    sb, _c, _u = _make_supabase_mock(SimpleNamespace(data=None, error=None))
+
+    with patch(
+        "app.routes.create_checkout.get_supabase_admin", return_value=sb
+    ), patch(
+        "app.routes.create_checkout.stripe.Customer.search",
+        return_value=SimpleNamespace(data=[SimpleNamespace(id="cus_backfill")]),
+    ), patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        return_value=_stripe_session(),
+    ):
+        res = authed_client.post(
+            "/checkout/",
+            json={
+                "kind": "cart",
+                "returnUrl": "https://x/done",
+                "cartPayload": _valid_cart(),
+            },
+        )
+
+    assert res.status_code == 200, res.text
+    sb.auth.admin.update_user_by_id.assert_called_once_with(
+        "user-123",
+        {
+            "app_metadata": {
+                "role": "customer",
+                "stripe_customer_id": "cus_backfill",
+            }
+        },
+    )
+
+
+def test_five_repeat_checkouts_keep_customer_lookup_off_critical_path(
+    authed_client, auth_user
+):
+    auth_user.app_metadata = {"stripe_customer_id": "cus_repeat"}
+    auth_user.stripe_customer_id = "cus_repeat"
+    sb, _c, _u = _make_supabase_mock(SimpleNamespace(data=None, error=None))
+
+    with patch(
+        "app.routes.create_checkout.get_supabase_admin", return_value=sb
+    ), patch(
+        "app.routes.create_checkout.stripe.Customer.search"
+    ) as customer_search, patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        return_value=_stripe_session(),
+    ):
+        responses = [
+            authed_client.post(
+                "/checkout/",
+                json={
+                    "kind": "cart",
+                    "returnUrl": "https://x/done",
+                    "cartPayload": _valid_cart(),
+                },
+            )
+            for _ in range(5)
+        ]
+
+    assert all(response.status_code == 200 for response in responses)
+    customer_search.assert_not_called()
+    total_durations = [
+        float(
+            next(
+                metric
+                for metric in response.headers["server-timing"].split(", ")
+                if metric.startswith("total;")
+            ).split("=")[1]
+        )
+        for response in responses
+    ]
+    assert len(total_durations) == 5
+    assert statistics.median(total_durations) >= 0
+
+
+def test_five_request_medians_show_cached_customer_latency_reduction(
+    authed_client, auth_user
+):
+    sb, _c, _u = _make_supabase_mock(SimpleNamespace(data=None, error=None))
+    request_json = {
+        "kind": "cart",
+        "returnUrl": "https://x/done",
+        "cartPayload": _valid_cart(),
+    }
+
+    def delayed_customer_lookup(**_kwargs):
+        sleep(0.05)
+        return "cus_benchmark"
+
+    def delayed_session_create(**_kwargs):
+        sleep(0.005)
+        return _stripe_session()
+
+    def total_duration(response):
+        return float(
+            next(
+                metric
+                for metric in response.headers["server-timing"].split(", ")
+                if metric.startswith("total;")
+            ).split("=")[1]
+        )
+
+    def run_five():
+        endpoint_durations = []
+        backend_durations = []
+        for _ in range(5):
+            started = perf_counter()
+            response = authed_client.post("/checkout/", json=request_json)
+            endpoint_durations.append((perf_counter() - started) * 1000)
+            assert response.status_code == 200, response.text
+            backend_durations.append(total_duration(response))
+        return backend_durations, endpoint_durations
+
+    auth_user.app_metadata = {}
+    auth_user.stripe_customer_id = None
+    with patch(
+        "app.routes.create_checkout.get_supabase_admin", return_value=sb
+    ), patch(
+        "app.routes.create_checkout.resolve_or_create_customer",
+        side_effect=delayed_customer_lookup,
+    ) as customer_lookup, patch(
+        "app.routes.create_checkout.stripe.checkout.Session.create",
+        side_effect=delayed_session_create,
+    ):
+        uncached_backend, uncached_endpoint = run_five()
+        assert customer_lookup.call_count == 5
+
+        auth_user.app_metadata = {"stripe_customer_id": "cus_benchmark"}
+        auth_user.stripe_customer_id = "cus_benchmark"
+        cached_backend, cached_endpoint = run_five()
+
+    # The controlled 50 ms customer lookup must disappear from both the
+    # backend's own timing and the caller-observed endpoint duration.
+    assert statistics.median(uncached_backend) - statistics.median(cached_backend) >= 40
+    assert statistics.median(uncached_endpoint) - statistics.median(cached_endpoint) >= 40

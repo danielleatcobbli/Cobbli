@@ -44,6 +44,8 @@ import {
   type IncludedCategoryKey,
 } from "@/data/bundles";
 import { trackEvent } from "@/lib/analytics";
+import { formatPrice } from "@/context/BagContext";
+import { usePackagePrices } from "@/hooks/usePackagePrices";
 
 // ---------------------------------------------------------------------------
 // Cross-package comparison table
@@ -125,6 +127,7 @@ const PackageDetail = () => {
   const { slug = "" } = useParams();
   const bundle = bundleBySlug(slug);
   const { setPaintConsent, openPairFlow } = useRepairFlow();
+  const packagePrices = usePackagePrices();
   const [consentOpen, setConsentOpen] = useState(false);
   const [brandsOpen, setBrandsOpen] = useState(false);
 
@@ -138,13 +141,26 @@ const PackageDetail = () => {
   if (!bundle) return <Navigate to="/services" replace />;
 
   const included = INCLUDED_CATEGORIES.filter((c) => bundle.includedCategories.includes(c.key));
+  const authoritativePrice = packagePrices.data?.[bundle.slug];
+  const displayedPrice =
+    typeof authoritativePrice === "number"
+      ? formatPrice(authoritativePrice)
+      : bundle.price;
+  const packageUnavailable =
+    !packagePrices.isLoading
+    && !packagePrices.isError
+    && typeof authoritativePrice !== "number";
 
   // Opens the shared pair popup (PairFlowDialog, mounted in App.tsx) with
   // this bundle as a single flat-priced line item, instead of navigating to
   // a separate page — same change as ServiceDetail.tsx's goToPick.
   const goToPick = () => {
-    const bundleSlug = `bundle-${bundle.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
-    openPairFlow([{ id: bundleSlug, name: bundle.name, price: bundlePriceToCents(bundle.price) }]);
+    if (packageUnavailable) return;
+    openPairFlow([{
+      id: `bundle-${bundle.slug}`,
+      name: bundle.name,
+      price: authoritativePrice ?? bundlePriceToCents(bundle.price),
+    }]);
   };
 
   const onStart = () => {
@@ -213,7 +229,7 @@ const PackageDetail = () => {
               <div className="mb-6">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[28px] font-bold leading-none" style={{ color: "#3d1700" }}>
-                    {bundle.price}
+                    {displayedPrice}
                   </span>
                   <span className="text-sm text-muted-foreground">per pair</span>
                 </div>
@@ -223,10 +239,11 @@ const PackageDetail = () => {
                 type="button"
                 size="lg"
                 onClick={onStart}
+                disabled={packageUnavailable}
                 className="w-full"
                 style={{ backgroundColor: "#3d1700", color: "white" }}
               >
-                Start a repair
+                {packageUnavailable ? "Currently unavailable" : "Start a repair"}
               </Button>
 
               {bundle.unsupportedBrands.length > 0 && (

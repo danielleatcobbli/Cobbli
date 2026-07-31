@@ -29,10 +29,14 @@ export async function apiFetch(
     throw new ApiError(0, null, "VITE_API_URL not configured");
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
   const headers = new Headers(init.headers ?? {});
-  if (session?.access_token) {
-    headers.set("Authorization", `Bearer ${session.access_token}`);
+  // Callers that already hold the current session can provide its token and
+  // avoid another asynchronous auth lookup on latency-sensitive request paths.
+  if (!headers.has("Authorization")) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers.set("Authorization", `Bearer ${session.access_token}`);
+    }
   }
   // Let the browser set multipart boundaries for FormData bodies; only default
   // to JSON for other (string) bodies.

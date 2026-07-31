@@ -23,6 +23,7 @@ interface CartPayload {
   delivery_address: unknown;
   repairs_subtotal_cents: number;
   courier_fee_cents: number;
+  tax_cents: number;
   total_cents: number;
   /** Set by Checkout.tsx when the customer selected a pickup window.
    * start/end are ISO 8601 UTC strings. No booking exists yet at this point —
@@ -147,32 +148,48 @@ async function createOrderFromCart(
   meta: Record<string, string>,
   sessionId: string | null,
   paymentIntentId: string | null,
+  paidAmountCents: number | null,
 ) {
   const userId = meta.userId;
   if (!userId) {
-    console.error("cart webhook missing userId metadata");
-    return;
+    throw new Error("cart webhook missing userId metadata");
   }
 
-  // Idempotency: skip if a row already exists for this PI or session.
   const lookupCol = paymentIntentId ? "stripe_payment_intent_id" : "stripe_session_id";
   const lookupVal = paymentIntentId ?? sessionId;
-  if (lookupVal) {
-    const { data: existing } = await supabase
-      .from("orders")
-      .select("id")
-      .eq(lookupCol, lookupVal)
-      .maybeSingle();
-    if (existing) {
-      console.log("order already exists for", lookupCol, lookupVal);
-      return;
-    }
+  if (!lookupVal) {
+    throw new Error("cart webhook missing Stripe payment identifiers");
+  }
+
+  // A retry can arrive after the order insert succeeded but a later item/status
+  // write failed. Resume pending orders instead of treating every existing row
+  // as fully processed.
+  const { data: existing, error: lookupErr } = await supabase
+    .from("orders")
+    .select("id,status")
+    .eq(lookupCol, lookupVal)
+    .maybeSingle();
+  if (lookupErr) {
+    throw new Error(`failed to check existing cart order: ${lookupErr.message}`);
+  }
+  if (existing?.status === "placed") {
+    console.log("placed order already exists for", lookupCol, lookupVal);
+    return;
   }
 
   const payload = reassembleCart(meta);
   if (!payload) {
-    console.error("cart webhook missing/invalid payload metadata");
-    return;
+    throw new Error("cart webhook missing/invalid payload metadata");
+  }
+  if (
+    !Number.isInteger(payload.total_cents)
+    || typeof paidAmountCents !== "number"
+    || !Number.isInteger(paidAmountCents)
+    || payload.total_cents !== paidAmountCents
+  ) {
+    throw new Error(
+      `cart amount mismatch: metadata=${payload.total_cents} paid=${paidAmountCents}`,
+    );
   }
 
   const nowIso = new Date().toISOString();
@@ -186,101 +203,135 @@ async function createOrderFromCart(
     ? formatNyTimeRange(payload.pickup_window.start, payload.pickup_window.end)
     : null;
 
-  // Create the real Cal.com booking now — payment has just succeeded, so
-  // this is the one and only moment a booking should be made (see
-  // bookPickup() above). Never blocks order creation if it fails.
-  const pickupCalendlyEventUri = payload.pickup_window
-    ? await bookPickup(
-        payload.pickup_window,
-        payload.contact_name || payload.contact_email.split("@")[0] || "Customer",
-        payload.contact_email,
-        payload.contact_phone,
-      )
-    : null;
-
-  // Plain INSERT — the partial unique indexes on stripe_payment_intent_id and
-  // stripe_session_id will reject duplicates from concurrent webhook deliveries
-  // (checkout.session.completed + payment_intent.succeeded). On unique
-  // violation (23505), the other delivery wins and this one bails out.
-  const { data: inserted, error: orderErr } = await supabase
-    .from("orders")
-    .insert({
-      user_id: userId,
-      status: "pending_payment",
-      delivery_method: "door-to-door",
-      delivery_address: payload.delivery_address as never,
-      contact_email: payload.contact_email,
-      contact_phone: payload.contact_phone,
-      payment_method_snapshot: null,
-      repairs_subtotal_cents: payload.repairs_subtotal_cents,
-      courier_fee_cents: payload.courier_fee_cents,
-      tax_cents: 0,
-      total_cents: payload.total_cents,
-      payment_status: "paid",
-      paid_at: nowIso,
-      stripe_session_id: sessionId,
-      stripe_payment_intent_id: paymentIntentId,
-      pickup_date: pickupDate,
-      pickup_time_label: pickupTimeLabel,
-      // Persist the Cal.com booking UID so the reschedule flow (cal-cancel)
-      // can cancel this booking before creating a new one. Null if no window
-      // was selected, or if bookPickup() above failed — a failed booking
-      // never blocks the order itself from being created.
-      pickup_calendly_event_uri: pickupCalendlyEventUri,
-    })
-    .select("id")
-    .maybeSingle();
-
-  if (orderErr) {
-    if ((orderErr as { code?: string }).code === "23505") {
-      console.log("order already exists (unique violation); skipping items");
-      return;
-    }
-    console.error("failed to insert order from cart", orderErr);
-    return;
-  }
-  const orderRow = inserted;
+  let orderRow = existing;
   if (!orderRow) {
-    console.error("insert returned no row; aborting");
-    return;
+    // Create the booking only for a new order. A retry of a pending order
+    // resumes its database writes without creating another Cal.com event.
+    const pickupCalendlyEventUri = payload.pickup_window
+      ? await bookPickup(
+          payload.pickup_window,
+          payload.contact_name || payload.contact_email.split("@")[0] || "Customer",
+          payload.contact_email,
+          payload.contact_phone,
+        )
+      : null;
+
+    const { data: inserted, error: orderErr } = await supabase
+      .from("orders")
+      .insert({
+        user_id: userId,
+        status: "pending_payment",
+        delivery_method: "door-to-door",
+        delivery_address: payload.delivery_address as never,
+        contact_email: payload.contact_email,
+        contact_phone: payload.contact_phone,
+        payment_method_snapshot: null,
+        repairs_subtotal_cents: payload.repairs_subtotal_cents,
+        courier_fee_cents: payload.courier_fee_cents,
+        tax_cents: payload.tax_cents ?? 0,
+        total_cents: payload.total_cents,
+        payment_status: "paid",
+        paid_at: nowIso,
+        stripe_session_id: sessionId,
+        stripe_payment_intent_id: paymentIntentId,
+        pickup_date: pickupDate,
+        pickup_time_label: pickupTimeLabel,
+        pickup_calendly_event_uri: pickupCalendlyEventUri,
+      })
+      .select("id,status")
+      .maybeSingle();
+
+    if (orderErr) {
+      if ((orderErr as { code?: string }).code !== "23505") {
+        throw new Error(`failed to insert order from cart: ${orderErr.message}`);
+      }
+
+      // The other concurrent webhook delivery won the insert. Load that row
+      // and either accept its completed work or resume its pending work.
+      const { data: racedOrder, error: raceLookupErr } = await supabase
+        .from("orders")
+        .select("id,status")
+        .eq(lookupCol, lookupVal)
+        .maybeSingle();
+      if (raceLookupErr || !racedOrder) {
+        throw new Error(
+          `duplicate cart order could not be loaded: ${raceLookupErr?.message ?? "no row"}`,
+        );
+      }
+      if (racedOrder.status === "placed") {
+        return;
+      }
+      orderRow = racedOrder;
+    } else {
+      orderRow = inserted;
+    }
+  }
+
+  if (!orderRow) {
+    throw new Error("cart order insert returned no row");
   }
 
   if (payload.items.length) {
-    const itemRows = payload.items.map((it) => ({
-      order_id: orderRow.id,
-      pair_snapshot: it.pair_snapshot as never,
-      service_snapshot: it.service_snapshot as never,
-      price_cents: it.price_cents,
-    }));
-    const { error: itemsErr } = await supabase.from("order_items").insert(itemRows);
-    if (itemsErr) console.error("failed to insert order_items", itemsErr);
+    const { data: existingItems, error: itemsLookupErr } = await supabase
+      .from("order_items")
+      .select("id")
+      .eq("order_id", orderRow.id)
+      .limit(1);
+    if (itemsLookupErr) {
+      throw new Error(`failed to check existing order_items: ${itemsLookupErr.message}`);
+    }
+
+    if (!existingItems?.length) {
+      const itemRows = payload.items.map((it) => ({
+        order_id: orderRow.id,
+        pair_snapshot: it.pair_snapshot as never,
+        service_snapshot: it.service_snapshot as never,
+        price_cents: it.price_cents,
+      }));
+      const { error: itemsErr } = await supabase.from("order_items").insert(itemRows);
+      if (itemsErr) {
+        throw new Error(`failed to insert order_items: ${itemsErr.message}`);
+      }
+    }
   }
 
-  const { error: statusErr } = await supabase
+  const { data: placedOrder, error: statusErr } = await supabase
     .from("orders")
     .update({ status: "placed" })
-    .eq("id", orderRow.id);
-  if (statusErr) console.error("failed to flip order to placed", statusErr);
+    .eq("id", orderRow.id)
+    .select("id")
+    .maybeSingle();
+  if (statusErr || !placedOrder) {
+    throw new Error(
+      `failed to flip order to placed: ${statusErr?.message ?? "no matching row"}`,
+    );
+  }
 }
 
 async function markPaid(
   meta: Record<string, string>,
   sessionId: string | null,
   paymentIntentId: string | null,
+  paidAmountCents: number | null,
 ) {
   if (meta.kind === "cart") {
-    await createOrderFromCart(meta, sessionId, paymentIntentId);
+    await createOrderFromCart(meta, sessionId, paymentIntentId, paidAmountCents);
   } else if (meta.kind === "deposit" && meta.assessmentId) {
-    await supabase
+    const { data, error } = await supabase
       .from("assessments")
       .update({
         deposit_status: "paid",
         deposit_paid_at: new Date().toISOString(),
         stripe_payment_intent_id: paymentIntentId,
       })
-      .eq("id", meta.assessmentId);
+      .eq("id", meta.assessmentId)
+      .select("id")
+      .maybeSingle();
+    if (error || !data) {
+      throw new Error(`failed to mark deposit paid: ${error?.message ?? "no matching row"}`);
+    }
   } else if (meta.kind === "order" && meta.orderId) {
-    await supabase
+    const { data, error } = await supabase
       .from("orders")
       .update({
         payment_status: "paid",
@@ -288,21 +339,36 @@ async function markPaid(
         stripe_payment_intent_id: paymentIntentId,
         status: "placed",
       })
-      .eq("id", meta.orderId);
+      .eq("id", meta.orderId)
+      .select("id")
+      .maybeSingle();
+    if (error || !data) {
+      throw new Error(`failed to mark order paid: ${error?.message ?? "no matching row"}`);
+    }
   }
 }
 
 async function markFailed(meta: Record<string, string>) {
   if (meta.kind === "deposit" && meta.assessmentId) {
-    await supabase
+    const { data, error } = await supabase
       .from("assessments")
       .update({ deposit_status: "failed" })
-      .eq("id", meta.assessmentId);
+      .eq("id", meta.assessmentId)
+      .select("id")
+      .maybeSingle();
+    if (error || !data) {
+      throw new Error(`failed to mark deposit failed: ${error?.message ?? "no matching row"}`);
+    }
   } else if (meta.kind === "order" && meta.orderId) {
-    await supabase
+    const { data, error } = await supabase
       .from("orders")
       .update({ payment_status: "failed" })
-      .eq("id", meta.orderId);
+      .eq("id", meta.orderId)
+      .select("id")
+      .maybeSingle();
+    if (error || !data) {
+      throw new Error(`failed to mark order failed: ${error?.message ?? "no matching row"}`);
+    }
   }
   // kind === "cart": no row exists yet — nothing to mark.
 }
@@ -333,14 +399,14 @@ Deno.serve(async (req) => {
             ? session.payment_intent
             : session.payment_intent?.id ?? null;
         if (session.payment_status === "paid") {
-          await markPaid(meta, session.id, paymentIntentId);
+          await markPaid(meta, session.id, paymentIntentId, session.amount_total);
         }
         break;
       }
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
         const meta = (pi.metadata ?? {}) as Record<string, string>;
-        await markPaid(meta, null, pi.id);
+        await markPaid(meta, null, pi.id, pi.amount_received);
         break;
       }
       case "payment_intent.payment_failed": {

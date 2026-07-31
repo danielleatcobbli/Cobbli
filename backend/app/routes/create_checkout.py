@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import json
+import logging
+from time import perf_counter
 from typing import Any
 
 import stripe
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from app.auth import CurrentUser
+from app.pricing import CartQuote, quote_cart
 from app.settings import get_settings
 from app.stripe_customers import resolve_or_create_customer
 from app.supabase_client import get_supabase_admin
 
 router = APIRouter(prefix="/checkout", tags=["checkout"])
+logger = logging.getLogger(__name__)
 
 DEPOSIT_AMOUNT_CENTS = 2000
 META_CHUNK_SIZE = 450
@@ -28,6 +32,34 @@ class CheckoutRequest(BaseModel):
 
 class CheckoutResponse(BaseModel):
     clientSecret: str | None = Field(default=None)
+    repairsSubtotalCents: int | None = Field(default=None)
+    courierFeeCents: int | None = Field(default=None)
+    taxCents: int | None = Field(default=None)
+    totalCents: int | None = Field(default=None)
+
+
+def _persist_stripe_customer_id(
+    *,
+    user_id: str,
+    app_metadata: dict[str, object],
+    customer_id: str,
+) -> None:
+    """Backfill a trusted customer mapping after the response is sent."""
+    try:
+        sb = get_supabase_admin()
+        sb.auth.admin.update_user_by_id(
+            user_id,
+            {
+                "app_metadata": {
+                    **app_metadata,
+                    "stripe_customer_id": customer_id,
+                }
+            },
+        )
+    except Exception:
+        # A failed backfill only means the next request uses the safe Stripe
+        # search fallback again; it must never invalidate a created session.
+        logger.exception("Failed to persist Stripe customer ID for user %s", user_id)
 
 
 def _chunk_payload(payload: Any) -> dict[str, str]:
@@ -55,25 +87,21 @@ def _validate_cart(payload: Any) -> dict[str, Any]:
     addr = payload.get("delivery_address")
     if not isinstance(addr, dict):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid delivery_address")
-    total = payload.get("total_cents")
-    if not isinstance(total, int) or isinstance(total, bool) or total < 50:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid total_cents")
-    repairs = payload.get("repairs_subtotal_cents")
-    if not isinstance(repairs, int) or isinstance(repairs, bool) or repairs < 0:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Invalid repairs_subtotal_cents"
-        )
-    courier = payload.get("courier_fee_cents")
-    if not isinstance(courier, int) or isinstance(courier, bool) or courier < 0:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid courier_fee_cents")
     items = payload.get("items")
     if not isinstance(items, list) or len(items) == 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cart has no items")
     return payload
 
 
-@router.post("/", response_model=CheckoutResponse)
-async def create_checkout(body: CheckoutRequest, user: CurrentUser) -> CheckoutResponse:
+@router.post("/", response_model=CheckoutResponse, response_model_exclude_none=True)
+def create_checkout(
+    body: CheckoutRequest,
+    request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    user: CurrentUser,
+) -> CheckoutResponse:
+    route_started = perf_counter()
     stripe.api_key = get_settings().stripe_secret_key
 
     if not body.kind or not body.returnUrl:
@@ -88,7 +116,19 @@ async def create_checkout(body: CheckoutRequest, user: CurrentUser) -> CheckoutR
     if body.kind == "cart":
         _validate_cart(body.cartPayload)
 
-    customer_id = resolve_or_create_customer(email=user.email, user_id=user.id)
+    pricing_duration_ms = 0.0
+    cart_quote: CartQuote | None = None
+    if body.kind == "cart":
+        pricing_started = perf_counter()
+        cart_quote = quote_cart(body.cartPayload or {})
+        pricing_duration_ms = (perf_counter() - pricing_started) * 1000
+
+    customer_started = perf_counter()
+    customer_id = user.stripe_customer_id
+    should_persist_customer = customer_id is None
+    if customer_id is None:
+        customer_id = resolve_or_create_customer(email=user.email, user_id=user.id)
+    customer_duration_ms = (perf_counter() - customer_started) * 1000
     sb = get_supabase_admin()
 
     line_items: list[dict[str, Any]]
@@ -157,7 +197,9 @@ async def create_checkout(body: CheckoutRequest, user: CurrentUser) -> CheckoutR
         metadata = {"userId": user.id, "kind": "order", "orderId": body.rowId}
 
     elif body.kind == "cart":
-        payload = body.cartPayload or {}
+        if cart_quote is None:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Missing quote")
+        payload = cart_quote.payload
         line_items = [
             {
                 "price_data": {
@@ -177,6 +219,7 @@ async def create_checkout(body: CheckoutRequest, user: CurrentUser) -> CheckoutR
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown kind")
 
+    stripe_session_started = perf_counter()
     session = stripe.checkout.Session.create(
         line_items=line_items,
         mode="payment",
@@ -190,6 +233,7 @@ async def create_checkout(body: CheckoutRequest, user: CurrentUser) -> CheckoutR
         # from checkout itself for next time.
         saved_payment_method_options={"payment_method_save": "enabled"},
     )
+    stripe_session_duration_ms = (perf_counter() - stripe_session_started) * 1000
 
     if body.kind == "deposit":
         sb.table("assessments").update(
@@ -203,4 +247,31 @@ async def create_checkout(body: CheckoutRequest, user: CurrentUser) -> CheckoutR
             "id", body.rowId
         ).execute()
 
-    return CheckoutResponse(clientSecret=session.client_secret)
+    if should_persist_customer:
+        background_tasks.add_task(
+            _persist_stripe_customer_id,
+            user_id=user.id,
+            app_metadata=user.app_metadata,
+            customer_id=customer_id,
+        )
+
+    auth_duration_ms = float(getattr(request.state, "auth_duration_ms", 0.0))
+    route_duration_ms = (perf_counter() - route_started) * 1000
+    response.headers["Server-Timing"] = ", ".join(
+        (
+            f"auth;dur={auth_duration_ms:.2f}",
+            f"customer;dur={customer_duration_ms:.2f}",
+            f"pricing;dur={pricing_duration_ms:.2f}",
+            f"stripe_session;dur={stripe_session_duration_ms:.2f}",
+            f"total;dur={auth_duration_ms + route_duration_ms:.2f}",
+        )
+    )
+    return CheckoutResponse(
+        clientSecret=session.client_secret,
+        repairsSubtotalCents=(
+            cart_quote.repairs_subtotal_cents if cart_quote else None
+        ),
+        courierFeeCents=cart_quote.courier_fee_cents if cart_quote else None,
+        taxCents=cart_quote.tax_cents if cart_quote else None,
+        totalCents=cart_quote.total_cents if cart_quote else None,
+    )
