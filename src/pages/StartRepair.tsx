@@ -700,14 +700,18 @@ const StartRepair = () => {
               </div>
 
               <div className="mt-8 pt-6 border-t border-border">
-                {/* Renamed to "Add-ons" (2026-07-27, Danielle's call) — back
-                    from "Preventative care," which undersold Shoe shine and
-                    now Lace replacement (neither is really "preventative").
+                {/* Back to "Preventative care" 2026-07-31 (Danielle's call) —
+                    it was renamed to "Add-ons" 2026-07-27 specifically
+                    because Shoe shine and Lace replacement didn't fit that
+                    frame. Lace replacement is gone now (see ADDONS above)
+                    and Shoe shine's description was reworded to lean into
+                    protection, so every remaining item is genuinely
+                    preventative — the original objection no longer applies.
                     Prices shown here come from the live catalog
                     (serviceBySlug/cardPriceLabel) so they can never drift
                     from what's shown on the service's own card/detail page. */}
-                <p className="text-sm font-semibold text-primary mb-1">Add-ons</p>
-                <p className="text-xs text-primary/70 mb-3">A little extra care while we're already working on your shoes.</p>
+                <p className="text-sm font-semibold text-primary mb-1">Preventative care</p>
+                <p className="text-xs text-primary/70 mb-3">A little protection now helps your shoes last longer — easy to add while we're already working on them.</p>
                 {/* Grid instead of flex-wrap (2026-07-22, Danielle's call:
                     "evenly spaced") — flex-wrap let each item's width follow
                     its own text length, so the three columns didn't line up.

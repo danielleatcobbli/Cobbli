@@ -144,11 +144,20 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
   { serviceCategory: "Color & stains", conditions: [
     { label: "Faded or streaky color", slug: "color-restoration" },
     { label: "Stains", slug: "color-restoration", imageUrl: "/condition-photos/stains.jpg", afterImageUrl: "/condition-photos/stains-after.jpg" },
-    { label: "Water stains", slug: "color-restoration", imageUrl: "/condition-photos/water-stains.jpg", afterImageUrl: "/condition-photos/water-stains-after.png" } ] },
+    // "Water stains" removed 2026-07-31 (MVP scope-down, Danielle's call).
+    // Different from the other removals in this pass: color-restoration
+    // itself is NOT marked is_coming_soon, since Faded or streaky color,
+    // Stains, and Scratches all still route to it live — only this specific
+    // condition entry point is being pulled, not the underlying service.
+  ] },
   { serviceCategory: "Insole & interior", conditions: [
     { label: "Worn or damaged insole", slug: "insole-replacement", imageUrl: "/condition-photos/worn-or-damaged-insole.jpg" },
-    { label: "Loose or detached insole", slug: "gluing", imageUrl: "/condition-photos/loose-or-detached-insole.jpg" },
-    { label: "Damage on inner lining", slug: "lining-repair", imageUrl: "/condition-photos/damage-on-inner-lining.jpg" } ] },
+    // "Damage on inner lining" removed 2026-07-31 (MVP scope-down, Danielle's
+    // call) — lining-repair is now is_coming_soon. Note this makes the
+    // "interior-repair" PACKAGE_RULES custom rule below unreachable (it
+    // required this label); harmless since PACKAGES_ENABLED is already
+    // false, but flagging for whenever that gets revisited.
+    { label: "Loose or detached insole", slug: "gluing", imageUrl: "/condition-photos/loose-or-detached-insole.jpg" } ] },
   // Distinct from Color & stains on purpose — this is about the material's
   // physical condition (drying out, losing its finish), not its color, and
   // maps to the real leather-or-suede-conditioning service (a more involved
@@ -158,39 +167,41 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
   // category's only other condition) was removed — see the file header.
   { serviceCategory: "Material & finish", conditions: [
     { label: "Material is dull or dry", slug: "leather-or-suede-conditioning", imageUrl: "/condition-photos/material-is-dull-or-dry.jpg" } ] },
-  { serviceCategory: "Scuffs & holes", conditions: [
-    { label: "Scuffs or scratches", slug: "scuff-repair", imageUrl: "/condition-photos/scuffs-or-scratches.jpg" },
-    // "Damage on heel tab" removed 2026-07-27 (Danielle's call) — not
-    // supporting this initially, coming back later. Its old photo actually
-    // depicted inner lining damage, not a heel tab, and has been moved to
-    // "Damage on inner lining" above.
-    // Danielle's conditional rule ("can't do if we're not doing a resole,
-    // toe area only if we are") isn't enforced anywhere yet — she's adding
-    // that logic separately. This condition is fully selectable for now.
-    { label: "Hole on outside of shoe", slug: "patch-repair" } ] },
+  // Renamed from "Scuffs & holes" 2026-07-31 (Danielle's call, MVP
+  // scope-down) — "Hole on outside of shoe" (patch-repair) is removed below
+  // now that patch-repair is is_coming_soon, leaving only Scuffs and
+  // Scratches, so "holes" no longer fits. See ServiceCategory in
+  // types/service.ts for the full rename (applies to the Services page too).
+  { serviceCategory: "Scuffs & scratches", conditions: [
+    // Split from the old combined "Scuffs or scratches" condition
+    // (2026-07-31, Danielle's call) — scuffs tend to need more involved
+    // work, sometimes leather replacement, while scratches are usually just
+    // a color touch-up. Scuffs keeps the existing photo and slug; Scratches
+    // is new and routes to Color correction (slug still color-restoration,
+    // see services.name rename) instead of Scuff repair.
+    { label: "Scuffs", slug: "scuff-repair", imageUrl: "/condition-photos/scuffs-or-scratches.jpg" },
+    { label: "Scratches", slug: "color-restoration" } ] },
   { serviceCategory: "Sole & heel", conditions: [
     { label: "Worn or damaged sole", slug: "full-resole", imageUrl: "/condition-photos/worn-or-damaged-sole.jpg" },
     { label: "Sole separating from shoe", slug: "gluing", imageUrl: "/condition-photos/sole-separating-from-shoe.jpg" },
     { label: "Sole worn at the heel", slug: "partial-resole", imageUrl: "/condition-photos/sole-worn-at-the-heel.jpg" },
     { label: "Sole worn on front", slug: "partial-resole", imageUrl: "/condition-photos/sole-worn-on-front.jpg" },
-    { label: "Loose or detached heel", slug: "heel-reattachment", imageUrl: "/condition-photos/loose-or-detached-heel.jpg", afterImageUrl: "/condition-photos/loose-or-detached-heel-after.png" },
+    // "Loose or detached heel" removed 2026-07-31 (MVP scope-down, Danielle's
+    // call) — heel-reattachment is now is_coming_soon, and it was only ever
+    // reached from this one condition.
     { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement", imageUrl: "/condition-photos/worn-or-missing-heel-tip.jpg" } ] },
-  { serviceCategory: "Stitching & seams", conditions: [
-    { label: "Loose or detached strap", slug: "stitching" },
-    { label: "Loose or detached buckle", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-buckle.jpg" },
-    { label: "Loose or detached hardware", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-hardware.jpg" },
-    { label: "Loose seam", slug: "stitching" } ] },
-  { serviceCategory: "Straps, buckles, & hardware", conditions: [
-    { label: "Loose or detached strap", slug: "stitching" },
-    { label: "Loose or detached buckle", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-buckle.jpg" },
-    { label: "Loose or detached hardware", slug: "stitching", imageUrl: "/condition-photos/loose-or-detached-hardware.jpg" } ] },
-  // "Broken zipper" and "Zipper separating from shoe" removed 2026-07-27
-  // (Danielle's call) — not supporting zipper-replacement initially, coming
-  // back later (see is_coming_soon on that service in Supabase). "Broken or
-  // detached zipper slider" stays — it's a separate, currently-supported
-  // service (zipper-slider-replacement).
-  { serviceCategory: "Zipper", conditions: [
-    { label: "Broken or detached zipper slider", slug: "zipper-slider-replacement" } ] },
+  // "Stitching & seams" and "Straps, buckles, & hardware" groups removed
+  // entirely 2026-07-31 (MVP scope-down, Danielle's call) — every condition
+  // in both routed to "stitching", which is now is_coming_soon. Both
+  // categories still exist in ServiceCategory (types/service.ts) and stay
+  // browsable/votable on the Services page; they're just no longer reachable
+  // from this checklist since nothing under them is bookable right now.
+  //
+  // "Zipper" group removed too, same reasoning — "Broken zipper" and
+  // "Zipper separating from shoe" were already removed 2026-07-27 when
+  // zipper-replacement went coming-soon; "Broken or detached zipper slider"
+  // (zipper-slider-replacement) was the last live condition here and is now
+  // coming-soon as well, so the whole category is gone from the checklist.
 ];
 
 /** Conditions Danielle has seen come up most often in real repairs to date,
@@ -202,7 +213,12 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
  *  like, it's just something that comes up a lot. */
 export const COMMON_CONDITION_LABELS: string[] = [
   "Worn or damaged sole",
-  "Scuffs or scratches",
+  // "Scuffs or scratches" split into "Scuffs" and "Scratches" 2026-07-31 —
+  // carrying the old combined condition's "Common" status over to Scuffs
+  // only, since the original frequency data was for the combined pair, not
+  // either half individually. Add "Scratches" here too if it turns out to
+  // be just as frequent on its own.
+  "Scuffs",
   "Worn or damaged insole",
   "Loose or detached insole",
   "Shoes are dirty",
@@ -353,12 +369,14 @@ const CONDITION_PKG_CAT: Record<string, IncludedCategoryKey> = {
 export type Addon = { label: string; slug: string; pkgCat: IncludedCategoryKey | null; description: string };
 
 export const ADDONS: Addon[] = [
-  { label: "Shoe shine", slug: "shoe-shine", pkgCat: null, description: "Restores gloss" },
+  // Lace replacement removed 2026-07-31 (Danielle's call) — pulled entirely
+  // for now (no lace source lined up yet) and marked is_coming_soon in
+  // Supabase rather than staying listed here. It never really fit this
+  // section anyway ("laces are worn or dirty" reads as something being
+  // wrong, not preventative care) — see the section heading note below.
+  { label: "Shoe shine", slug: "shoe-shine", pkgCat: null, description: "Restores shine and conditions the leather to help prevent drying and cracking" },
   { label: "Waterproofing", slug: "waterproofing", pkgCat: "preventative", description: "Protect shoes from rain and moisture" },
   { label: "Protective soles", slug: "protective-full-sole", pkgCat: "preventative", description: "Guard against wear so your soles last longer" },
-  // Added 2026-07-27 (Danielle's call) — new real catalog service, not a
-  // placeholder. $15 card_price_label is a guess pending her confirmation.
-  { label: "Lace replacement", slug: "lace-replacement", pkgCat: null, description: "We replace your laces with a new matching pair so your shoes look and feel fresh." },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -396,7 +414,7 @@ export const PACKAGE_RULES: PackageRule[] = [
     cats: ["surface"],
     custom: (checked) =>
       checked.has("Material is dull or dry") &&
-      (checked.has("Faded or streaky color") || checked.has("Scuffs or scratches")),
+      (checked.has("Faded or streaky color") || checked.has("Scuffs") || checked.has("Scratches")),
   },
   {
     bundleSlug: "interior-repair",

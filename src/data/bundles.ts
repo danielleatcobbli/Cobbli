@@ -31,7 +31,7 @@ export type IncludedCategory = {
 };
 
 export const INCLUDED_CATEGORIES: IncludedCategory[] = [
-  { key: "surface", label: "Surface restoration", items: "Leather or suede conditioning, scuff repair, color restoration" },
+  { key: "surface", label: "Surface restoration", items: "Leather or suede conditioning, scuff repair, color correction" },
   { key: "sole", label: "Sole repair", items: "Resole (includes heel tip repair if applicable)" },
   { key: "interior", label: "Interior repair", items: "Insole replacement, Lining repair" },
   { key: "stitching", label: "Stitching & securing", items: "Stitching, zipper repair" },

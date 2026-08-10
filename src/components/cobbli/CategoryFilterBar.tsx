@@ -2,9 +2,6 @@ import iconAll from "@/assets/category-icons/all.svg";
 import iconBottom from "@/assets/category-icons/bottom.svg";
 import iconColor from "@/assets/category-icons/color.svg";
 import iconInside from "@/assets/category-icons/inside.svg";
-import iconStraps from "@/assets/category-icons/straps.svg";
-import iconTears from "@/assets/category-icons/tears.svg";
-import iconZipper from "@/assets/category-icons/zipper.svg";
 import iconScratch from "@/assets/category-icons/scratch.svg";
 import iconLeather from "@/assets/category-icons/leather.svg";
 import iconShoeshine from "@/assets/category-icons/shoeshine.svg";
@@ -18,19 +15,18 @@ export type CategoryFilter = (typeof FILTER_BAR_CATEGORIES)[number];
  *  a category shows up (Services page filter bar, homepage, and the Start a
  *  Repair checklist all read from this same map, since the two taxonomies
  *  were unified into one on 2026-07-23 — see ServiceCategory in
- *  types/service.ts). "Stitching & seams" still borrows iconTears as a
- *  PLACEHOLDER — flagged, needs a real icon commissioned once Danielle's
- *  ready to prioritize it. */
+ *  types/service.ts). "Stitching & seams" / "Straps, buckles, & hardware" /
+ *  "Zipper" entries removed 2026-07-31 along with the categories themselves
+ *  (see types/service.ts) — re-add (with real icons, not the old iconTears/
+ *  iconStraps/iconZipper placeholders) once any service in one of those
+ *  categories is live again. */
 export const CATEGORY_ICONS: Record<string, string> = {
   [ALL_CATEGORIES_LABEL]: iconAll,
   "Sole & heel": iconBottom,
-  "Scuffs & holes": iconScratch,
+  "Scuffs & scratches": iconScratch,
   "Color & stains": iconColor,
   "Material & finish": iconLeather,
   "Insole & interior": iconInside,
-  "Stitching & seams": iconTears,
-  "Straps, buckles, & hardware": iconStraps,
-  "Zipper": iconZipper,
   "Cleaning & odor": iconShoeshine,
 };
 
@@ -38,16 +34,14 @@ const ICONS = CATEGORY_ICONS;
 
 /** Display text override, shared by this filter bar and the Start a Repair
  *  checklist (StartRepair.tsx) so a category reads the same way in both
- *  places. "Straps, buckles, & hardware" is shortened to fit the filter-bar
- *  button width (2026-07-15) — display-only, the underlying ServiceCategory
- *  value (used for matching against a service's real category tags, and as
- *  the CATEGORY_ICONS key) is untouched. The other three overrides that used
- *  to live here (Color/scuffs/shine, Inside of shoe, Tears & holes) were
- *  removed with the 2026-07-23 category unification — those categories don't
- *  exist anymore, replaced by the checklist's own (already-short) names. */
-const CATEGORY_DISPLAY_LABELS: Partial<Record<ServiceCategory, string>> = {
-  "Straps, buckles, & hardware": "Straps & hardware",
-};
+ *  places. Empty for now: the one override that used to live here ("Straps,
+ *  buckles, & hardware" -> "Straps & hardware", added 2026-07-15) was removed
+ *  2026-07-31 along with the category itself (see types/service.ts). The
+ *  other three overrides that used to live here (Color/scuffs/shine, Inside
+ *  of shoe, Tears & holes) were removed with the 2026-07-23 category
+ *  unification — those categories don't exist anymore, replaced by the
+ *  checklist's own (already-short) names. */
+const CATEGORY_DISPLAY_LABELS: Partial<Record<ServiceCategory, string>> = {};
 
 /** The text to show for a category, anywhere it's displayed — see
  *  CATEGORY_DISPLAY_LABELS above for which categories get overridden and why. */

@@ -385,16 +385,19 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
       { value: "good", label: "Good" },
       { value: "dull", label: "Dull, no damage", service: "Shoe shine" },
       { value: "scuffs", label: "Scuffs present", service: "Scuff repair" },
-      { value: "scratches", label: "Scratches present", service: "Scuff repair" },
-      { value: "stains", label: "Stains present", service: "Color restoration" },
+      // Matches the customer checklist split (2026-07-31, Danielle's call):
+      // scuffs tend to need more involved work, scratches are usually a
+      // color touch-up — same distinction, same routing, on the staff side.
+      { value: "scratches", label: "Scratches present", service: "Color correction" },
+      { value: "stains", label: "Stains present", service: "Color correction" },
     ],
   },
   {
     key: "color", label: "color", multi: true, exclusiveValues: ["good"],
     options: [
       { value: "good", label: "Good" },
-      { value: "faded", label: "Faded or streaky", service: "Color restoration" },
-      { value: "discolored", label: "Discolored", service: "Color restoration" },
+      { value: "faded", label: "Faded or streaky", service: "Color correction" },
+      { value: "discolored", label: "Discolored", service: "Color correction" },
     ],
   },
   {

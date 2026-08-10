@@ -44,13 +44,29 @@ export const SHOE_TYPES: ShoeType[] = [
 // now that every sole/heel service is tagged "Sole & heel" directly.
 export type ServiceCategory =
   | "Sole & heel"
-  | "Scuffs & holes"
+  // Renamed from "Scuffs & holes" 2026-07-31 (Danielle's call) — patch
+  // repair and lining repair (the "holes"/lining side of this category)
+  // went is_coming_soon as part of the MVP launch scope-down, leaving only
+  // Scuffs and Scratches live on the checklist. Same category value used
+  // for Services-page filtering, so coming-soon services tagged here still
+  // show up there (with the existing coming-soon + vote treatment), just
+  // under the new name.
+  | "Scuffs & scratches"
   | "Color & stains"
   | "Material & finish"
   | "Insole & interior"
-  | "Stitching & seams"
-  | "Straps, buckles, & hardware"
-  | "Zipper"
+  // "Stitching & seams", "Straps, buckles, & hardware", and "Zipper" removed
+  // 2026-07-31 (Danielle's call, MVP scope-down) — every service under all
+  // three (stitching, zipper-replacement, zipper-slider-replacement) is now
+  // is_coming_soon, so there are no live services left to browse or filter
+  // by in any of them. Unlike the earlier pass (which only pulled these from
+  // the checklist), this removes them from the Services page filter bar too
+  // — no category should exist with zero live services in it. The services
+  // themselves are untouched in Supabase (including their old category
+  // tags); they just won't have a dedicated filter pill until one of these
+  // three categories comes back. Re-add here (and to CATEGORIES_ORDERED /
+  // CategoryFilterBar's CATEGORY_ICONS) once any service in a category is
+  // live again.
   | "Cleaning & odor";
 
 // Alphabetical (2026-07-23, Danielle's call — categories should be
@@ -62,11 +78,8 @@ export const CATEGORIES_ORDERED: ServiceCategory[] = [
   "Color & stains",
   "Insole & interior",
   "Material & finish",
-  "Scuffs & holes",
+  "Scuffs & scratches",
   "Sole & heel",
-  "Stitching & seams",
-  "Straps, buckles, & hardware",
-  "Zipper",
 ];
 
 /** Premium brands shown in the "Which brands are premium?" expandable on detail pages. */
