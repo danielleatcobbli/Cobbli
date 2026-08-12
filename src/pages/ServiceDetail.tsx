@@ -137,7 +137,10 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
       setSoleOpen(true);
       return;
     }
-    navigate("/start-repair");
+    // Carry the service through so the checklist lands with its matching
+    // condition(s) already checked instead of blank (2026-08-11, Danielle's
+    // report) — see StartRepair's presetSlug handling.
+    navigate("/start-repair", { state: { presetSlug: service.slug } });
   };
 
   return (

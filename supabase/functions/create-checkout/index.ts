@@ -56,6 +56,131 @@ async function resolveOrCreateCustomer(
   return created.id;
 }
 
+// ---------------------------------------------------------------------------
+// Server-side price recomputation (2026-08-11, security fix) — the "cart"
+// branch below used to trust payload.total_cents and each item's
+// payload.price_cents wholesale, both for the actual Stripe charge AND for
+// the metadata the webhook later reads to create the order/order_items rows.
+// Since both numbers came from the same untouched client payload, they were
+// self-consistent even when tampered with (e.g. via devtools), so nothing
+// ever caught it. Every item's price is now recomputed here from the live
+// Supabase catalog and used for both the charge and the metadata, mirroring
+// the same lookup rules the frontend uses (fullResolePrice / resolePriceForKey
+// / priceForShoeType in src/types/service.ts, usePackagePrices.ts) so the
+// price a customer sees on screen still matches what they're charged.
+// ---------------------------------------------------------------------------
+
+const LEGACY_PACKAGE_ALIASES: Record<string, string> = {
+  "standard-repair-sole-upper-interior": "standard-service",
+  "exterior-repair-sole-upper": "full-exterior-repair",
+};
+const canonicalPackageSlug = (slug: string) => LEGACY_PACKAGE_ALIASES[slug] ?? slug;
+
+const SHOE_TYPE_VARIANT_KEY: Record<string, string> = {
+  Boots: "boots",
+  "Ankle boots": "ankle_boots",
+};
+
+type VariantRow = { variant_key: string; standard_cents: number; premium_cents: number | null; rank: number };
+type ServiceRow = { slug: string; service_variants: VariantRow[] };
+
+/** Authoritative price (cents) for one cart item, given the live catalog row
+ *  for its slug. Mirrors, in order: full-resole priced by brand, full-resole
+ *  priced by sole material, then the general shoe-type/premium variant
+ *  lookup every other service uses. Throws rather than returning 0 for
+ *  anything unrecognized -- an unknown variant should never silently become
+ *  a free line item. */
+function priceForItem(
+  service: ServiceRow,
+  item: { pair_snapshot: unknown; service_snapshot: Record<string, unknown> },
+): number {
+  const variants = [...service.service_variants].sort((a, b) => a.rank - b.rank);
+  if (variants.length === 0) throw new Error(`Service ${service.slug} has no priced variants`);
+
+  const snap = item.service_snapshot ?? {};
+  const premium = snap.premium === true;
+  const withPremium = (v: VariantRow) => (premium && v.premium_cents != null ? v.premium_cents : v.standard_cents);
+
+  if (service.slug === "full-resole" && typeof snap.resole_brand === "string") {
+    const v = variants.find((x) => x.variant_key === snap.resole_brand);
+    if (!v) throw new Error(`Unknown resole brand variant: ${snap.resole_brand}`);
+    return v.standard_cents;
+  }
+  if (service.slug === "full-resole" && typeof snap.sole_material === "string") {
+    const key = (snap.sole_material as string).toLowerCase();
+    const v = variants.find((x) => x.variant_key === key);
+    if (!v) throw new Error(`Unknown sole material variant: ${snap.sole_material}`);
+    return withPremium(v);
+  }
+
+  const shoeType = (item.pair_snapshot as { shoeType?: string } | null)?.shoeType;
+  const wanted = shoeType ? (SHOE_TYPE_VARIANT_KEY[shoeType] ?? "other") : "other";
+  const byShoe = variants.find((x) => x.variant_key === wanted);
+  return withPremium(byShoe ?? variants[0]);
+}
+
+/** Recomputes every item's price and the cart totals from the live catalog,
+ *  ignoring whatever the client sent for price_cents/total_cents/
+ *  repairs_subtotal_cents. Returns a corrected payload, used for both the
+ *  Stripe line item and the metadata the webhook reads. */
+async function repriceCartPayload(payload: CartPayload): Promise<CartPayload> {
+  const serviceSlugs = new Set<string>();
+  const bundleSlugs = new Set<string>();
+  for (const item of payload.items) {
+    const id = item.service_snapshot.id;
+    if (id.startsWith("bundle-")) bundleSlugs.add(canonicalPackageSlug(id.slice("bundle-".length)));
+    else serviceSlugs.add(id);
+  }
+
+  const [servicesRes, packagesRes] = await Promise.all([
+    serviceSlugs.size
+      ? supabase.from("services").select("slug, service_variants(variant_key, standard_cents, premium_cents, rank)").in("slug", Array.from(serviceSlugs))
+      : Promise.resolve({ data: [] as ServiceRow[], error: null }),
+    bundleSlugs.size
+      ? supabase.from("repair_packages").select("slug, price_cents").eq("is_active", true).in("slug", Array.from(bundleSlugs))
+      : Promise.resolve({ data: [] as { slug: string; price_cents: number }[], error: null }),
+  ]);
+  if (servicesRes.error) throw servicesRes.error;
+  if (packagesRes.error) throw packagesRes.error;
+
+  const serviceBySlug = new Map((servicesRes.data as ServiceRow[]).map((s) => [s.slug, s]));
+  const packageBySlug = new Map((packagesRes.data ?? []).map((p) => [p.slug, p.price_cents]));
+
+  let repairsSubtotalCents = 0;
+  const items = payload.items.map((item) => {
+    const id = item.service_snapshot.id;
+    let priceCents: number;
+    if (id.startsWith("bundle-")) {
+      const slug = canonicalPackageSlug(id.slice("bundle-".length));
+      const price = packageBySlug.get(slug);
+      if (price === undefined) throw new Error(`Unknown or inactive package: ${slug}`);
+      priceCents = price;
+    } else {
+      const service = serviceBySlug.get(id);
+      if (!service) throw new Error(`Unknown or inactive service: ${id}`);
+      priceCents = priceForItem(service, item);
+    }
+    repairsSubtotalCents += priceCents;
+    return { ...item, price_cents: priceCents };
+  });
+
+  const { data: feeRows, error: feeError } = await supabase
+    .from("pricing_config")
+    .select("key, value_cents")
+    .in("key", ["courier_fee_cents", "free_courier_threshold_cents"]);
+  if (feeError) throw feeError;
+  const fee = (key: string, fallback: number) => feeRows?.find((r) => r.key === key)?.value_cents ?? fallback;
+  const courierFeeCents = repairsSubtotalCents >= fee("free_courier_threshold_cents", 10000) ? 0 : fee("courier_fee_cents", 1500);
+
+  return {
+    ...payload,
+    items,
+    repairs_subtotal_cents: repairsSubtotalCents,
+    courier_fee_cents: courierFeeCents,
+    total_cents: repairsSubtotalCents + courierFeeCents,
+  };
+}
+
 function chunkPayload(payload: unknown): Record<string, string> {
   const json = JSON.stringify(payload);
   const out: Record<string, string> = {};
@@ -77,7 +202,14 @@ interface CartPayload {
   total_cents: number;
   items: Array<{
     pair_snapshot: unknown;
-    service_snapshot: { id: string; name: string };
+    service_snapshot: {
+      id: string;
+      name: string;
+      sole_material?: string;
+      resole_brand?: string;
+      premium?: boolean;
+      [key: string]: unknown;
+    };
     price_cents: number;
   }>;
 }
@@ -194,8 +326,18 @@ Deno.serve(async (req) => {
       description = `Cobbli order ${row.order_number}`;
       metadata = { userId: user.id, kind, orderId: rowId };
     } else if (kind === "cart") {
-      const payload = body.cartPayload;
-      validateCartPayload(payload);
+      const rawPayload = body.cartPayload;
+      validateCartPayload(rawPayload);
+      // Recomputed from the live catalog -- see repriceCartPayload above.
+      // rawPayload's own price_cents/total_cents are never used past this
+      // point; only the corrected payload feeds the Stripe charge and the
+      // metadata the webhook uses to create the order.
+      const payload = await repriceCartPayload(rawPayload);
+      if (payload.total_cents !== rawPayload.total_cents) {
+        console.warn(
+          `create-checkout: cart total mismatch, client=${rawPayload.total_cents} recomputed=${payload.total_cents} user=${user.id}`,
+        );
+      }
 
       lineItems = [{
         price_data: {

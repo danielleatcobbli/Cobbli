@@ -9,8 +9,16 @@ export type BagService = {
   price: number;
   /** For services that require dye/paint consent (e.g. faded-or-patchy-color, color-restoration). */
   paintConsent?: "yes" | "no";
-  /** For services that require sole material selection (e.g. full-resole). */
+  /** For services that require sole material selection (e.g. full-resole).
+   *  "Rubber" also covers a lug-sole pick — lug is priced the same as
+   *  standard rubber (2026-08-11, Danielle's call), so it isn't its own
+   *  value here, just a different photo/label at selection time. */
   soleMaterial?: "Leather" | "Rubber";
+  /** For full-resole picked via a specialty brand (Birkenstock, Golden
+   *  Goose) instead of a sole material — fixed brand pricing, mutually
+   *  exclusive with soleMaterial. Matches the brand's full-resole variant_key
+   *  in Supabase (e.g. "golden-goose"). */
+  resoleBrand?: string;
   /** Care tier snapshot — used by the live pricer to pick the correct variant column. */
   premium?: boolean;
 };

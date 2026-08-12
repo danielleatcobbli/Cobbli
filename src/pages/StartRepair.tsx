@@ -29,8 +29,8 @@
  * Route: /start-repair
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { X, Camera } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -46,6 +46,7 @@ import { formatPrice, useBag } from "@/context/BagContext";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { useAuth } from "@/context/AuthContext";
 import type { ShoeType } from "@/types/service";
+import { resolePriceForKey, type ResolePriceKey } from "@/types/service";
 import { CHECKLIST_GROUPS, ADDONS, computeRecommendation, COMMON_CONDITION_LABELS, SLUG_TO_CONDITION_LABELS } from "@/data/starterRepairConditions";
 import { CATEGORY_ICONS, categoryDisplayLabel } from "@/components/cobbli/CategoryFilterBar";
 import BeforeAfterImage from "@/components/cobbli/BeforeAfterImage";
@@ -54,6 +55,10 @@ import SoleInsoleConditionDialog, {
   INSOLE_CONDITION_LABEL,
   type SoleInsoleAction,
 } from "@/components/cobbli/SoleInsoleConditionDialog";
+import SoleSelectionDialog, {
+  RESOLE_CONDITION_LABEL,
+  type SoleSelectionResult,
+} from "@/components/cobbli/SoleSelectionDialog";
 import { trackEvent } from "@/lib/analytics";
 import iconOdor from "@/assets/category-icons/odor.svg";
 
@@ -70,6 +75,12 @@ type CartLine = {
    *  only came from an add-on (e.g. waterproofing), which isn't tied to a
    *  condition. */
   addresses: string[];
+  /** Carried through to the bag when this line is full-resole priced by sole
+   *  material (or lug, which shares rubber's price/variant) — see BagService. */
+  soleMaterial?: "Leather" | "Rubber";
+  /** Carried through to the bag when this line is full-resole priced by
+   *  specialty brand instead — see BagService. */
+  resoleBrand?: string;
 };
 
 const LABEL_TO_SLUG = new Map<string, string>();
@@ -77,6 +88,15 @@ CHECKLIST_GROUPS.forEach((group) => group.conditions.forEach((c) => LABEL_TO_SLU
 
 const StartRepair = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Arriving from a service's own page via "Start a repair" (ServiceDetail's
+  // onStart) should land here with that service's checklist condition(s)
+  // already checked, not a blank checklist — Danielle's report, 2026-08-11:
+  // this was never wired up. presetAppliedRef makes sure it only applies once
+  // on this page's first load, not every time a fresh "new pair" is started
+  // afterward (e.g. via "Add another pair to my order").
+  const presetSlug = (location.state as { presetSlug?: string } | null)?.presetSlug;
+  const presetAppliedRef = useRef(false);
   const { data: services, isLoading } = useServices();
   const { selectedPairId, setSelectedPairId } = useRepairFlow();
   const { pairs, addPair: addSavedPair, getPair } = usePairs();
@@ -126,6 +146,20 @@ const StartRepair = () => {
   const needsSoleQuestion = checkedLabels.has(SOLE_CONDITION_LABEL);
   const needsInsoleQuestion = checkedLabels.has(INSOLE_CONDITION_LABEL);
 
+  // Resole brand/sole-type follow-up (2026-08-11, Danielle's call) — gates
+  // "See my recommendations" the same way the sole/insole question above
+  // does, whenever "Worn or damaged sole" is checked, since full-resole's
+  // price (and whether it's even offered for this pair) now depends on the
+  // answer. Runs after the sole/insole question when both apply — see
+  // onSoleInsoleConfirm — so pendingSoleInsoleAnswers holds that answer while
+  // this one is being asked.
+  const [soleSelectionOpen, setSoleSelectionOpen] = useState(false);
+  const needsResoleQuestion = checkedLabels.has(RESOLE_CONDITION_LABEL);
+  const [pendingSoleInsoleAnswers, setPendingSoleInsoleAnswers] = useState<{
+    sole?: SoleInsoleAction;
+    insole?: SoleInsoleAction;
+  }>({});
+
   // Bug fix (2026-07-27, Danielle's report): looping back to "add more
   // services" for a pair that already has services in the bag used to show a
   // blank checklist — nothing pre-checked — and the pair switcher below was
@@ -150,7 +184,12 @@ const StartRepair = () => {
     if (selectedPairId) setNewPairName("");
     const existing = selectedPairId ? findByPairId(selectedPairId) : undefined;
     if (!existing) {
-      setCheckedLabels(new Set());
+      if (!presetAppliedRef.current && presetSlug) {
+        presetAppliedRef.current = true;
+        setCheckedLabels(new Set(SLUG_TO_CONDITION_LABELS.get(presetSlug) ?? []));
+      } else {
+        setCheckedLabels(new Set());
+      }
       setCheckedAddons(new Set());
       return;
     }
@@ -369,8 +408,10 @@ const StartRepair = () => {
   const anyChecked = checkedLabels.size > 0 || checkedAddons.size > 0;
 
   // Entry point for the "See my recommendations" button — routes through the
-  // sole/insole follow-up first when needed, since the recommendation itself
-  // depends on the answer.
+  // sole/insole follow-up, then the resole brand/sole-type follow-up, only
+  // when each is actually needed, since the recommendation itself depends on
+  // the answer(s). The two follow-ups are independent (different conditions),
+  // so they're shown one at a time rather than together.
   const onSeeRecommendationsClick = () => {
     if (!services || !anyChecked) return;
     if (!isPairFilled) {
@@ -382,21 +423,53 @@ const StartRepair = () => {
       setSoleInsoleOpen(true);
       return;
     }
+    if (needsResoleQuestion) {
+      setSoleSelectionOpen(true);
+      return;
+    }
     seeRecommendations({});
   };
 
-  const seeRecommendations = (answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction }) => {
+  // Sole/insole confirmed — chain into the resole question if this pair also
+  // needs it, rather than computing recommendations twice.
+  const onSoleInsoleConfirm = (answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction }) => {
+    if (needsResoleQuestion) {
+      setPendingSoleInsoleAnswers(answers);
+      setSoleSelectionOpen(true);
+      return;
+    }
+    seeRecommendations(answers);
+  };
+
+  const onSoleSelectionConfirm = (result: SoleSelectionResult) => {
+    seeRecommendations(pendingSoleInsoleAnswers, result);
+    setPendingSoleInsoleAnswers({});
+  };
+
+  const seeRecommendations = (
+    answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction },
+    resoleAnswer?: SoleSelectionResult,
+  ) => {
     if (!services || !anyChecked) return;
     const requiredSlugs = new Set<string>();
     // slug -> every checked condition label that maps to it, so each
     // resulting service/package line can show which symptom(s) it addresses.
     const slugToLabels = new Map<string, string[]>();
+    // Set when the resole follow-up came back blocked (unsupported brand or
+    // cup sole) — "full-resole" is deliberately left out of requiredSlugs in
+    // that case, so it's never priced or added; it's surfaced as its own
+    // not-offered card instead (see below).
+    let resoleBlockedLabel: string | null = null;
     checkedLabels.forEach((label) => {
       let slug = LABEL_TO_SLUG.get(label);
       // Override the default checklist mapping (both point at "gluing") once
       // the customer has told us the part actually needs replacing instead.
       if (label === SOLE_CONDITION_LABEL && answers.sole === "replace") slug = "full-resole";
       if (label === INSOLE_CONDITION_LABEL && answers.insole === "replace") slug = "insole-replacement";
+      if (label === RESOLE_CONDITION_LABEL && resoleAnswer?.kind === "blocked") {
+        resoleBlockedLabel = resoleAnswer.label;
+        slug = undefined;
+      }
       if (slug) {
         requiredSlugs.add(slug);
         const existing = slugToLabels.get(slug);
@@ -411,7 +484,7 @@ const StartRepair = () => {
       condition_count: checkedLabels.size,
       addon_count: checkedAddons.size,
       package: result.package?.bundleSlug ?? null,
-      not_offered_count: result.notOffered.length,
+      not_offered_count: result.notOffered.length + (resoleBlockedLabel ? 1 : 0),
     });
 
     const addressesFor = (slugs: string[]): string[] => {
@@ -432,10 +505,26 @@ const StartRepair = () => {
       });
     }
     result.individual.forEach((s) => {
-      lines.push({ id: s.slug, name: s.name, price: s.price, kind: "service", slug: s.slug, addresses: addressesFor([s.slug]) });
+      const line: CartLine = { id: s.slug, name: s.name, price: s.price, kind: "service", slug: s.slug, addresses: addressesFor([s.slug]) };
+      // Override the catalog's default full-resole price with whatever the
+      // resole follow-up resolved to — a specialty brand's fixed price, or
+      // the material/lug variant the customer matched their sole to.
+      if (s.slug === "full-resole" && resoleAnswer && resoleAnswer.kind !== "blocked") {
+        const live = (services ?? []).find((svc) => svc.slug === "full-resole");
+        const priced = live ? resolePriceForKey(live, resoleAnswer.variantKey as ResolePriceKey) : null;
+        if (priced !== null) line.price = priced * 100;
+        line.name = `Resole — ${resoleAnswer.label}`;
+        if (resoleAnswer.kind === "brand") line.resoleBrand = resoleAnswer.variantKey;
+        if (resoleAnswer.kind === "material") line.soleMaterial = resoleAnswer.variantKey === "leather" ? "Leather" : "Rubber";
+      }
+      lines.push(line);
     });
 
-    setNotOffered(result.notOffered);
+    const notOfferedCombined = resoleBlockedLabel
+      ? [...result.notOffered, { slug: "full-resole", name: `Resole — ${resoleBlockedLabel}` }]
+      : result.notOffered;
+
+    setNotOffered(notOfferedCombined);
     setCartLines(lines);
     setStep("results");
   };
@@ -457,7 +546,13 @@ const StartRepair = () => {
   // between).
   const commitPairToBag = (): boolean => {
     if (!canFinalize) return false;
-    const items: BagService[] = cartLines.map((l) => ({ id: l.id, name: l.name, price: l.price }));
+    const items: BagService[] = cartLines.map((l) => ({
+      id: l.id,
+      name: l.name,
+      price: l.price,
+      ...(l.soleMaterial ? { soleMaterial: l.soleMaterial } : {}),
+      ...(l.resoleBrand ? { resoleBrand: l.resoleBrand } : {}),
+    }));
 
     let pair = selectedPairId ? getPair(selectedPairId) : undefined;
     if (!pair) {
@@ -897,7 +992,14 @@ const StartRepair = () => {
         onOpenChange={setSoleInsoleOpen}
         showSole={needsSoleQuestion}
         showInsole={needsInsoleQuestion}
-        onConfirm={(answers) => seeRecommendations(answers)}
+        onConfirm={onSoleInsoleConfirm}
+      />
+
+      <SoleSelectionDialog
+        open={soleSelectionOpen}
+        onOpenChange={setSoleSelectionOpen}
+        excludedBrands={(services ?? []).find((s) => s.slug === "full-resole")?.excludedBrands ?? []}
+        onConfirm={onSoleSelectionConfirm}
       />
     </main>
   );

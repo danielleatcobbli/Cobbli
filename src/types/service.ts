@@ -138,6 +138,11 @@ export type Service = {
   categories: ServiceCategory[];
   rank: number;
   isComingSoon: boolean;
+  /** Brands this service can't currently be booked for (2026-08-11, resole
+   *  brand gating) — e.g. full-resole excludes Louboutin and Maison Margiela
+   *  since Cobbli doesn't have the right sole source for them yet. Empty for
+   *  services with no brand restriction. */
+  excludedBrands: string[];
   variants: ServiceVariant[];
   qa?: QAConfig;
   /** Representative "before" photo for this service's card/detail page.
@@ -189,4 +194,20 @@ export const fullResolePrice = (
   const v = s.variants.find((x) => x.key === material.toLowerCase());
   if (!v) return null;
   return premium && v.premium !== undefined ? v.premium : v.standard;
+};
+
+/** Every variant key full-resole can be priced by, once a customer has gone
+ *  through the brand-then-sole picker (2026-08-11) — "lug" isn't its own
+ *  catalog variant (it's priced the same as standard rubber, Danielle's
+ *  call), so callers should resolve a "lug" pick to "rubber" before calling
+ *  this. Brand keys are lowercase-kebab to match variant_key in Supabase. */
+export type ResolePriceKey = "leather" | "rubber" | "birkenstock" | "golden-goose";
+
+/** Price (in dollars) for full-resole by variant key directly — the general
+ *  form of fullResolePrice above, covering the brand-specific variants
+ *  (Birkenstock, Golden Goose) that a Leather/Rubber-only lookup can't
+ *  reach. Returns null when the key has no matching variant yet. */
+export const resolePriceForKey = (s: Service, key: ResolePriceKey): number | null => {
+  const v = s.variants.find((x) => x.key === key);
+  return v ? v.standard : null;
 };

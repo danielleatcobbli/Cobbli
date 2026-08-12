@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useServices } from "@/hooks/useServices";
 import { canonicalPackageSlug, usePackagePrices } from "@/hooks/usePackagePrices";
-import { fullResolePrice, priceForShoeType, type ShoeType } from "@/types/service";
+import { fullResolePrice, priceForShoeType, resolePriceForKey, type ResolePriceKey, type ShoeType } from "@/types/service";
 import type { BagPair, BagService } from "@/context/BagContext";
 
 /**
@@ -32,7 +32,9 @@ export const useLivePricedBag = (pairs: BagPair[]) => {
         const live = bySlug.get(svc.id);
         if (!live || !shoeType) return svc;
         let priceDollars: number | null = null;
-        if (live.slug === "full-resole" && svc.soleMaterial) {
+        if (live.slug === "full-resole" && svc.resoleBrand) {
+          priceDollars = resolePriceForKey(live, svc.resoleBrand as ResolePriceKey);
+        } else if (live.slug === "full-resole" && svc.soleMaterial) {
           priceDollars = fullResolePrice(live, !!svc.premium, svc.soleMaterial);
         }
         if (priceDollars === null) priceDollars = priceForShoeType(live, shoeType);

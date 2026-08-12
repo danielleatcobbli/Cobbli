@@ -363,6 +363,7 @@ const Checkout = () => {
               name: s.name,
               ...(s.paintConsent ? { paint_consent: s.paintConsent } : {}),
               ...(s.soleMaterial ? { sole_material: s.soleMaterial } : {}),
+              ...(s.resoleBrand ? { resole_brand: s.resoleBrand } : {}),
               premium: s.premium === true,
             },
             price_cents: s.price,
