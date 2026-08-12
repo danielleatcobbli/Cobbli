@@ -383,8 +383,8 @@ export const ADDONS: Addon[] = [
   // section anyway ("laces are worn or dirty" reads as something being
   // wrong, not preventative care) — see the section heading note below.
   { label: "Shoe shine", slug: "shoe-shine", pkgCat: null, description: "Restores shine and conditions the leather to help prevent drying and cracking" },
-  { label: "Waterproofing", slug: "waterproofing", pkgCat: "preventative", description: "Protect shoes from rain and moisture" },
-  { label: "Protective soles", slug: "protective-full-sole", pkgCat: "preventative", description: "Guard against wear so your soles last longer" },
+  { label: "Waterproofing", slug: "waterproofing", pkgCat: "preventative", description: "Protects shoes from rain and moisture" },
+  { label: "Protective soles", slug: "protective-full-sole", pkgCat: "preventative", description: "Guards against wear so your soles last longer" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

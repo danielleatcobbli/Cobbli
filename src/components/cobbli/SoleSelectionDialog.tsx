@@ -100,12 +100,10 @@ const SOLE_OPTIONS: SoleOption[] = [
   },
 ];
 
-/** Simple schematic line art for leather/rubber — Danielle doesn't have real
- *  photos for these two yet (she does for lug and cup, see /public/condition-
- *  photos/sole-types). Deliberately generic/illustrative rather than a real
- *  photo standing in for a different sole, which would just be misleading.
- *  Swap for real photos (same treatment as lug/cup below) as soon as she has
- *  them — see SOLE_PHOTO below for the two that already use real images. */
+/** Simple schematic line art fallback for any sole type without a real photo
+ *  yet — kept defensively (all four now have real photos as of 2026-08-12,
+ *  see SOLE_PHOTO below) so a future new sole type degrades gracefully
+ *  instead of breaking if a photo isn't ready when it's added. */
 const SoleIcon = ({ variant }: { variant: "leather" | "rubber" }) => (
   <svg width="48" height="34" viewBox="0 0 48 34" aria-hidden="true" className="shrink-0">
     <path
@@ -129,10 +127,15 @@ const SoleIcon = ({ variant }: { variant: "leather" | "rubber" }) => (
 );
 
 /** Real photos, dropped into public/condition-photos/sole-types by Danielle
- *  (2026-08-11) — only these two exist so far. */
+ *  (lug/cup 2026-08-11, leather/rubber 2026-08-12 — all four re-saved to a
+ *  matching 624x416 crop so the tiles are visually consistent regardless of
+ *  the wildly different source sizes she dropped in, e.g. the rubber source
+ *  photo was ~5MB at 2400x1792). */
 const SOLE_PHOTO: Partial<Record<SoleOption["key"], string>> = {
   lug: "/condition-photos/sole-types/lug-sole.png",
   cup: "/condition-photos/sole-types/cup-sole.png",
+  leather: "/condition-photos/sole-types/leather-sole.png",
+  rubber: "/condition-photos/sole-types/rubber-sole.png",
 };
 
 export type SoleSelectionResult =

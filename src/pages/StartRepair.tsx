@@ -806,7 +806,7 @@ const StartRepair = () => {
                     (serviceBySlug/cardPriceLabel) so they can never drift
                     from what's shown on the service's own card/detail page. */}
                 <p className="text-sm font-semibold text-primary mb-1">Preventative care</p>
-                <p className="text-xs text-primary/70 mb-3">A little protection now helps your shoes last longer — easy to add while we're already working on them.</p>
+                <p className="text-xs text-primary/70 mb-3">Make your shoes last longer</p>
                 {/* Grid instead of flex-wrap (2026-07-22, Danielle's call:
                     "evenly spaced") — flex-wrap let each item's width follow
                     its own text length, so the three columns didn't line up.
