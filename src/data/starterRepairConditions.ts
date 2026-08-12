@@ -142,7 +142,7 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
     // odor.
     { label: "Shoes smell", slug: "deodorizing-treatment", imageUrl: iconOdor } ] },
   { serviceCategory: "Color & stains", conditions: [
-    { label: "Faded or streaky color", slug: "color-restoration" },
+    { label: "Faded or streaky color", slug: "color-restoration", imageUrl: "/condition-photos/faded-or-streaky-color.png" },
     { label: "Stains", slug: "color-restoration", imageUrl: "/condition-photos/stains.jpg", afterImageUrl: "/condition-photos/stains-after.jpg" },
     // "Water stains" removed 2026-07-31 (MVP scope-down, Danielle's call).
     // Different from the other removals in this pass: color-restoration
