@@ -16,7 +16,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, Circle, Clock, FileText, MapPin, MessageSquare, Phone, User, XCircle } from "lucide-react";
-import { fetchOrderDetail, uploadPairPhoto, removePairPhoto } from "./adminData";
+import {
+  fetchOrderDetail,
+  uploadPairPhoto,
+  removePairPhoto,
+  updateServiceDone,
+  saveIntakeForm,
+  saveOuttakeForm,
+  submitQcResult,
+} from "./adminData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { printPairTags } from "./printPairTags";
@@ -41,6 +49,14 @@ type OrderStatus =
   | "rework-request-denied";
 
 type FormStatus = "not-started" | "in-progress" | "complete";
+/** Quality control verdict for a pair, independent of intake/outtake's
+ * FormStatus. "pending" means outtake is complete and this pair is sitting
+ * in Danielle's QC queue — nobody gets a ready-for-return notification
+ * until every pair on the order is "passed" (see the `sync_qc_and_completion_status`
+ * / `maybe_mark_order_ready_for_return` DB triggers, which own this
+ * automation end to end). "failed" auto-bounces completionStatus back to
+ * "in-progress" via the same trigger. */
+export type QcStatus = "not-started" | "pending" | "passed" | "failed";
 type DetailView = "workshop" | "dispatch";
 
 type ServiceLine = {
@@ -132,6 +148,18 @@ export type ShoePair = {
   intakeNotes?: string;
   /** Free-text notes from the Outtake form. */
   outtakeNotes?: string;
+  /** Quality control verdict — set to "pending" automatically the moment
+   * outtake is marked complete; nothing downstream (the customer
+   * notification) fires until this is "passed". */
+  qcStatus: QcStatus;
+  /** Required when qcStatus is "failed" — the reason/what needs rework,
+   * per Danielle's call. Cleared automatically when a new QC round starts. */
+  qcNotes?: string;
+  qcReviewedAt?: string;
+  /** Evidence photo(s) documenting the specific defect, required alongside
+   * qcNotes to fail QC — distinct from the general before/after set so
+   * whoever picks the pair back up can see exactly what to fix. */
+  qcFailPhotos: CapturedPhoto[];
 };
 
 /** One answer option within a condition component — "Good"/"Not applicable"
@@ -384,11 +412,14 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
     options: [
       { value: "good", label: "Good" },
       { value: "dull", label: "Dull, no damage", service: "Shoe shine" },
-      { value: "scuffs", label: "Scuffs present", service: "Scuff repair" },
-      // Matches the customer checklist split (2026-07-31, Danielle's call):
-      // scuffs tend to need more involved work, scratches are usually a
-      // color touch-up — same distinction, same routing, on the staff side.
-      { value: "scratches", label: "Scratches present", service: "Color correction" },
+      { value: "scuffs", label: "Scuffs present", service: "Scuff and scratch repair" },
+      // Scuffs and Scratches stay separate checkboxes here on purpose — this
+      // is per-condition training data, not service routing, so capturing
+      // both independently is more useful than merging them the way the
+      // customer checklist does. Service annotation updated 2026-08-12 to
+      // match the merged "Scuff and scratch repair" service both now map to
+      // (Danielle's call — reverses the 2026-07-31 split).
+      { value: "scratches", label: "Scratches present", service: "Scuff and scratch repair" },
       { value: "stains", label: "Stains present", service: "Color correction" },
     ],
   },
@@ -1209,6 +1240,56 @@ function FormStatusBadge({ status, label }: { status: FormStatus; label: string 
   );
 }
 
+function QcStatusBadge({ status }: { status: QcStatus }) {
+  const cfg: Record<QcStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
+    "not-started": { label: "Not started", color: "#9ca3af", bg: "#f3f4f6", icon: <Circle size={13} /> },
+    "pending":     { label: "Awaiting QC",  color: "#92400e", bg: "#fef3c7", icon: <Clock size={13} /> },
+    "passed":      { label: "Passed",       color: "#166534", bg: "#dcfce7", icon: <CheckCircle2 size={13} /> },
+    "failed":      { label: "Failed — rework needed", color: "#991b1b", bg: "#fee2e2", icon: <XCircle size={13} /> },
+  };
+  const c = cfg[status];
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, backgroundColor: c.bg, color: c.color, padding: "3px 9px", borderRadius: 999, fontSize: 11, fontWeight: 600 }}>
+      {c.icon}
+      {c.label}
+    </span>
+  );
+}
+
+/** Real before/after thumbnails for the QC reviewer — pulled straight from
+ * the same pair_photos rows staff already uploaded during Intake and
+ * Outtake (see beforePhotos/afterPhotos in PairCard), not a separate
+ * upload step. Confirms Danielle's question: yes, this is what was already
+ * captured, reused here rather than re-requested. */
+function QcPhotoReview({ before, after }: { before: PhotoSet; after: PhotoSet }) {
+  const row = (label: string, set: PhotoSet) => (
+    <div>
+      <p style={{ margin: "0 0 6px", fontSize: 11, color: "#9ca3af" }}>{label}</p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {REQUIRED_PHOTO_ANGLES.map(a => {
+          const photo = set.angles[a.key];
+          return photo ? (
+            <img key={a.key} src={photo.previewUrl} alt={`${label} — ${a.label}`} title={a.label} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid #e0d8cc" }} />
+          ) : (
+            <div key={a.key} title={`${a.label} — missing`} style={{ width: 56, height: 56, borderRadius: 6, border: "1px dashed #e0d8cc", backgroundColor: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Camera size={16} style={{ color: "#d1d5db" }} />
+            </div>
+          );
+        })}
+        {set.damageCloseUps.map(p => (
+          <img key={p.id} src={p.previewUrl} alt={`${label} close-up`} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid #e0d8cc" }} />
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {row("Before (intake)", before)}
+      {row("After (outtake)", after)}
+    </div>
+  );
+}
+
 /** Generic section card — optionally takes a headerAction (e.g. a single CTA
  * button shown to the right of the title, instead of buttons buried in the
  * body of the card). */
@@ -1678,6 +1759,7 @@ function IntakeFormModal({
   onNotesChange,
   onClose,
   onSave,
+  saving,
 }: {
   pair: ShoePair;
   services: ServiceLine[];
@@ -1692,6 +1774,7 @@ function IntakeFormModal({
   onNotesChange: (value: string) => void;
   onClose: () => void;
   onSave: (status: FormStatus) => void;
+  saving?: boolean;
 }) {
   const photosComplete = photoSetComplete(photos);
   const conditionsComplete = allConditionsAnswered(answers);
@@ -1804,23 +1887,24 @@ function IntakeFormModal({
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button
               type="button"
+              disabled={saving}
               onClick={() => onSave("in-progress")}
-              style={{ padding: "8px 16px", backgroundColor: "#fff", color: "#374151", border: "1px solid #e0d8cc", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+              style={{ padding: "8px 16px", backgroundColor: "#fff", color: "#374151", border: "1px solid #e0d8cc", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}
             >
               Save &amp; finish later
             </button>
             <button
               type="button"
-              disabled={!canComplete}
+              disabled={!canComplete || saving}
               onClick={() => onSave("complete")}
               style={{
                 padding: "8px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                backgroundColor: canComplete ? "#3d1700" : "#d1d5db",
+                backgroundColor: canComplete && !saving ? "#3d1700" : "#d1d5db",
                 color: "#fff",
-                cursor: canComplete ? "pointer" : "not-allowed",
+                cursor: canComplete && !saving ? "pointer" : "not-allowed",
               }}
             >
-              Complete intake
+              {saving ? "Saving…" : "Complete intake"}
             </button>
           </div>
         </div>
@@ -1848,6 +1932,7 @@ function OuttakeFormModal({
   onNotesChange,
   onClose,
   onSave,
+  saving,
 }: {
   pair: ShoePair;
   services: ServiceLine[];
@@ -1860,6 +1945,7 @@ function OuttakeFormModal({
   onNotesChange: (value: string) => void;
   onClose: () => void;
   onSave: (status: FormStatus) => void;
+  saving?: boolean;
 }) {
   const photosComplete = photoSetComplete(photos);
   const allServicesDone = services.length > 0 && services.every(s => s.done);
@@ -1962,23 +2048,24 @@ function OuttakeFormModal({
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button
               type="button"
+              disabled={saving}
               onClick={() => onSave("in-progress")}
-              style={{ padding: "8px 16px", backgroundColor: "#fff", color: "#374151", border: "1px solid #e0d8cc", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+              style={{ padding: "8px 16px", backgroundColor: "#fff", color: "#374151", border: "1px solid #e0d8cc", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}
             >
               Save &amp; finish later
             </button>
             <button
               type="button"
-              disabled={!canComplete}
+              disabled={!canComplete || saving}
               onClick={() => onSave("complete")}
               style={{
                 padding: "8px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                backgroundColor: canComplete ? "#3d1700" : "#d1d5db",
+                backgroundColor: canComplete && !saving ? "#3d1700" : "#d1d5db",
                 color: "#fff",
-                cursor: canComplete ? "pointer" : "not-allowed",
+                cursor: canComplete && !saving ? "pointer" : "not-allowed",
               }}
             >
-              Complete outtake
+              {saving ? "Saving…" : "Complete outtake"}
             </button>
           </div>
         </div>
@@ -2010,16 +2097,41 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
   const [afterPhotos, setAfterPhotos] = useState<PhotoSet>(pair.photos.after);
   const [intakeModalOpen, setIntakeModalOpen] = useState(false);
   const [outtakeModalOpen, setOuttakeModalOpen] = useState(false);
+  const [intakeSaving, setIntakeSaving] = useState(false);
+  const [outtakeSaving, setOuttakeSaving] = useState(false);
+
+  // Quality control — set by Danielle (or another admin) after outtake is
+  // complete; nothing notifies the customer their shoes are ready until this
+  // lands on "passed" (see order_pairs_sync_qc_and_completion_status /
+  // maybe_mark_order_ready_for_return DB triggers, which own that automation).
+  const [qcStatus, setQcStatus] = useState<QcStatus>(pair.qcStatus);
+  const [qcNotes, setQcNotes] = useState(pair.qcNotes ?? "");
+  const [qcReviewedAt, setQcReviewedAt] = useState(pair.qcReviewedAt);
+  const [qcFailPhotos, setQcFailPhotos] = useState<CapturedPhoto[]>(pair.qcFailPhotos);
+  const [qcFailPanelOpen, setQcFailPanelOpen] = useState(false);
+  const [qcFailDraftNotes, setQcFailDraftNotes] = useState("");
+  const [qcSubmitting, setQcSubmitting] = useState(false);
 
   const intakeDone = intakeStatus === "complete";
   const outtakeDone = completionStatus === "complete";
 
-  const toggleService = (id: string) => {
+  const toggleService = async (id: string) => {
     // Guard the handler itself, not just the UI — a service can't be marked
     // done on a pair whose intake isn't complete yet (Danielle's bug report:
     // she was able to check off "Heel replacement" before intake started).
     if (!intakeDone) return;
-    setServices(prev => prev.map(s => (s.id === id ? { ...s, done: !s.done } : s)));
+    const target = services.find(s => s.id === id);
+    if (!target) return;
+    const nextDone = !target.done;
+    setServices(prev => prev.map(s => (s.id === id ? { ...s, done: nextDone } : s)));
+    try {
+      await updateServiceDone(id, nextDone);
+    } catch (err) {
+      console.error("Failed to update service:", err);
+      // Roll back on failure so the checkbox never lies about what's saved.
+      setServices(prev => prev.map(s => (s.id === id ? { ...s, done: !nextDone } : s)));
+      toast({ title: "Couldn't save that", description: "Please try checking it off again.", variant: "destructive" });
+    }
   };
 
   // Good/Not-applicable is an all-or-nothing reset; beyond that, single-select
@@ -2117,13 +2229,109 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
   const uploadAfterPhoto = (angle: RequiredPhotoAngle, file: File) => uploadPhoto(setAfterPhotos, "after", angle, file);
   const removeAfterPhoto = (angle: RequiredPhotoAngle) => removePhoto(afterPhotos, setAfterPhotos, angle);
 
-  const saveIntake = (status: FormStatus) => {
-    setIntakeStatus(status);
-    setIntakeModalOpen(false);
+  const saveIntake = async (status: FormStatus) => {
+    if (status === "not-started") return; // modal never calls onSave with this
+    setIntakeSaving(true);
+    try {
+      await saveIntakeForm(pair.id, { status, notes: intakeNotes, conditionAssessment: conditionAnswers });
+      setIntakeStatus(status);
+      setIntakeModalOpen(false);
+    } catch (err) {
+      console.error("Failed to save intake:", err);
+      toast({ title: "Couldn't save intake", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setIntakeSaving(false);
+    }
   };
-  const saveOuttake = (status: FormStatus) => {
-    setCompletionStatus(status);
-    setOuttakeModalOpen(false);
+  const saveOuttake = async (status: FormStatus) => {
+    if (status === "not-started") return;
+    setOuttakeSaving(true);
+    try {
+      await saveOuttakeForm(pair.id, { status, notes: outtakeNotes });
+      setCompletionStatus(status);
+      // Completing outtake queues this pair for QC automatically (the
+      // order_pairs_sync_qc_and_completion_status DB trigger sets
+      // qc_status = 'pending' and clears any stale note/timestamp from a
+      // previous round the moment completion_status lands on "complete").
+      if (status === "complete") {
+        setQcStatus("pending");
+        setQcNotes("");
+        setQcReviewedAt(undefined);
+      }
+      setOuttakeModalOpen(false);
+    } catch (err) {
+      console.error("Failed to save outtake:", err);
+      toast({ title: "Couldn't save outtake", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setOuttakeSaving(false);
+    }
+  };
+
+  // ── Quality control ──────────────────────────────────────────────────────
+  const passQc = async () => {
+    setQcSubmitting(true);
+    try {
+      await submitQcResult(pair.id, { status: "passed", notes: "" });
+      setQcStatus("passed");
+      setQcNotes("");
+      setQcReviewedAt(new Date().toISOString());
+      toast({ title: "QC passed", description: "Once every pair on this order has passed, the customer is notified automatically." });
+    } catch (err) {
+      console.error("Failed to pass QC:", err);
+      toast({ title: "Couldn't record QC result", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setQcSubmitting(false);
+    }
+  };
+
+  const uploadQcFailPhoto = async (file: File) => {
+    try {
+      const photo = await uploadPairPhoto({ orderId, pairId: pair.id, side: "qc_fail", angle: null, file });
+      setQcFailPhotos(prev => [...prev, photo]);
+    } catch (err) {
+      console.error("Failed to upload QC evidence photo:", err);
+      toast({ title: "Couldn't upload that photo", description: "Please try again.", variant: "destructive" });
+    }
+  };
+  const removeQcFailPhoto = async (photo: CapturedPhoto) => {
+    if (!photo.storagePath) return;
+    try {
+      await removePairPhoto(photo, photo.storagePath);
+      setQcFailPhotos(prev => prev.filter(p => p.id !== photo.id));
+    } catch (err) {
+      console.error("Failed to remove QC evidence photo:", err);
+      toast({ title: "Couldn't remove that photo", description: "Please try again.", variant: "destructive" });
+    }
+  };
+
+  // Required: a reason (what needs rework) AND at least one evidence photo
+  // documenting the specific defect — Danielle's call, distinct from the
+  // general before/after set so whoever picks this back up can see exactly
+  // what to fix.
+  const canSubmitFail = qcFailDraftNotes.trim().length > 0 && qcFailPhotos.length > 0;
+
+  const failQc = async () => {
+    if (!canSubmitFail) return;
+    setQcSubmitting(true);
+    try {
+      await submitQcResult(pair.id, { status: "failed", notes: qcFailDraftNotes.trim() });
+      setQcStatus("failed");
+      setQcNotes(qcFailDraftNotes.trim());
+      setQcReviewedAt(new Date().toISOString());
+      // Mirrors the sync_qc_and_completion_status DB trigger, which bounces
+      // completion_status back to "in-progress" the moment qc_status lands
+      // on "failed" — this pair reopens as an outstanding Outtake, not a
+      // separate customer-driven rework path.
+      setCompletionStatus("in-progress");
+      setQcFailPanelOpen(false);
+      setQcFailDraftNotes("");
+      toast({ title: "QC failed — sent back for rework", description: "Outtake for this pair has reopened." });
+    } catch (err) {
+      console.error("Failed to fail QC:", err);
+      toast({ title: "Couldn't record QC result", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setQcSubmitting(false);
+    }
   };
 
   const servicesTotal = services.reduce((s, l) => s + l.priceCents, 0);
@@ -2233,6 +2441,145 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
             {!allServicesDone && services.length > 0 ? " All services must be checked off before outtake can be marked complete." : ""}
           </p>
         </div>
+
+        {qcStatus !== "not-started" && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #f0ece5" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Quality control
+              </p>
+              <QcStatusBadge status={qcStatus} />
+            </div>
+
+            {qcStatus === "failed" && (
+              <div
+                role="alert"
+                style={{
+                  padding: "8px 10px", marginBottom: 10, borderRadius: 6,
+                  backgroundColor: "#fef2f2", border: "1px solid #fecaca",
+                }}
+              >
+                <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600, color: "#991b1b", display: "flex", alignItems: "center", gap: 6 }}>
+                  <AlertTriangle size={13} /> Needs rework
+                </p>
+                {qcNotes && <p style={{ margin: "0 0 6px", fontSize: 12, color: "#7f1d1d" }}>{qcNotes}</p>}
+                {qcFailPhotos.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                    {qcFailPhotos.map(p => (
+                      <img key={p.id} src={p.previewUrl} alt="QC evidence" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid #fecaca" }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {qcStatus === "pending" && !qcFailPanelOpen && (
+              <>
+                <p style={{ margin: "0 0 10px", fontSize: 12, color: "#9ca3af" }}>
+                  Review the before &amp; after photos below, then pass or fail this pair. Nothing notifies the customer
+                  their shoes are ready until every pair on this order has passed.
+                </p>
+                <QcPhotoReview before={beforePhotos} after={afterPhotos} />
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    disabled={qcSubmitting}
+                    onClick={passQc}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", backgroundColor: "#166534",
+                      color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                      cursor: qcSubmitting ? "not-allowed" : "pointer", opacity: qcSubmitting ? 0.6 : 1, fontFamily: "inherit",
+                    }}
+                  >
+                    <CheckCircle2 size={14} /> Pass QC
+                  </button>
+                  <button
+                    type="button"
+                    disabled={qcSubmitting}
+                    onClick={() => setQcFailPanelOpen(true)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", backgroundColor: "#fff",
+                      color: "#991b1b", border: "1px solid #fecaca", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                      cursor: qcSubmitting ? "not-allowed" : "pointer", opacity: qcSubmitting ? 0.6 : 1, fontFamily: "inherit",
+                    }}
+                  >
+                    <XCircle size={14} /> Fail QC
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Passed doesn't lock the pair — a defect caught later (paint not
+             * fully cured, transferring after the fact, etc.) needs a way back
+             * in without a developer, per Danielle's call: QC should stay
+             * reversible right up until the pair is actually packaged, not
+             * just up until "passed" is clicked. Reopening reuses the exact
+             * same reason+photo requirement as a first-time fail, and (see
+             * the maybe_unmark_order_ready_for_return DB trigger) pulls the
+             * order back out of "ready for return" if it had already gotten
+             * there so Dispatch doesn't act on stale readiness. */}
+            {qcStatus === "passed" && !qcFailPanelOpen && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <p style={{ margin: 0, fontSize: 12, color: "#166534" }}>
+                  Passed{qcReviewedAt ? ` · ${fmtTimestamp(qcReviewedAt)}` : ""}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setQcFailPanelOpen(true)}
+                  style={{ padding: "5px 10px", backgroundColor: "#fff", color: "#991b1b", border: "1px solid #fecaca", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+                >
+                  Reopen — flag an issue
+                </button>
+              </div>
+            )}
+
+            {(qcStatus === "pending" || qcStatus === "passed") && qcFailPanelOpen && (
+              <div style={{ padding: 12, borderRadius: 8, border: "1px solid #fecaca", backgroundColor: "#fef2f2" }}>
+                <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 600, color: "#991b1b" }}>
+                  Reason for failing QC — what needs rework
+                </p>
+                <textarea
+                  value={qcFailDraftNotes}
+                  onChange={e => setQcFailDraftNotes(e.target.value)}
+                  placeholder="e.g. Left sole edge not fully sealed, needs reglued"
+                  rows={2}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #fca5a5", fontFamily: "inherit", fontSize: 13, resize: "vertical", boxSizing: "border-box", marginBottom: 8 }}
+                />
+                <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 600, color: "#991b1b" }}>
+                  Evidence photo — required, shows exactly what needs rework
+                </p>
+                <DamageCloseUpRow photos={qcFailPhotos} onAdd={uploadQcFailPhoto} onRemove={id => {
+                  const target = qcFailPhotos.find(p => p.id === id);
+                  if (target) removeQcFailPhoto(target);
+                }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    disabled={qcSubmitting}
+                    onClick={() => { setQcFailPanelOpen(false); setQcFailDraftNotes(""); }}
+                    style={{ padding: "7px 14px", backgroundColor: "#fff", color: "#374151", border: "1px solid #e0d8cc", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canSubmitFail || qcSubmitting}
+                    onClick={failQc}
+                    title={!canSubmitFail ? "A reason and at least one evidence photo are required to fail QC." : undefined}
+                    style={{
+                      padding: "7px 14px", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                      backgroundColor: canSubmitFail && !qcSubmitting ? "#991b1b" : "#d1d5db",
+                      color: "#fff",
+                      cursor: canSubmitFail && !qcSubmitting ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    {qcSubmitting ? "Submitting…" : "Fail this pair"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       {intakeModalOpen && (
@@ -2250,6 +2597,7 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
           onNotesChange={setIntakeNotes}
           onClose={() => setIntakeModalOpen(false)}
           onSave={saveIntake}
+          saving={intakeSaving}
         />
       )}
 
@@ -2266,6 +2614,7 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
           onNotesChange={setOuttakeNotes}
           onClose={() => setOuttakeModalOpen(false)}
           onSave={saveOuttake}
+          saving={outtakeSaving}
         />
       )}
     </>

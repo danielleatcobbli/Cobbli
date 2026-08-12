@@ -113,6 +113,21 @@ async function fetchReworkOrderIds(orderIds: string[]): Promise<Set<string>> {
   return new Set((data ?? []).map(r => r.order_id));
 }
 
+/** Orders with at least one pair currently sitting at qc_status = "failed"
+ * — drives the Workshop queue's priority sort (see sortByDue in
+ * AdminDashboard.tsx). Distinct from fetchReworkOrderIds: this is an
+ * internal QC catch, not a customer-initiated rework request. */
+async function fetchFailedQcOrderIds(orderIds: string[]): Promise<Set<string>> {
+  if (orderIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from("order_pairs")
+    .select("order_id")
+    .eq("qc_status", "failed")
+    .in("order_id", orderIds);
+  if (error) throw error;
+  return new Set((data ?? []).map(r => r.order_id));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminDashboard — orders list
 // ─────────────────────────────────────────────────────────────────────────────
@@ -140,6 +155,7 @@ function mapOrderRow(
   r: OrderRow,
   profiles: Map<string, ProfileRow>,
   reworkOrderIds: Set<string>,
+  failedQcOrderIds: Set<string>,
 ): Order {
   const pickupSlot: ScheduleSlot | undefined =
     r.pickup_date && r.pickup_time_label ? { date: r.pickup_date, timeLabel: r.pickup_time_label } : undefined;
@@ -159,6 +175,7 @@ function mapOrderRow(
     workshopAssignee: r.workshop_assignee ? initialsFromProfile(profiles.get(r.workshop_assignee)) : "",
     dispatchAssignee: r.dispatch_assignee ? initialsFromProfile(profiles.get(r.dispatch_assignee)) : "",
     isRework: reworkOrderIds.has(r.id),
+    hasFailedQc: failedQcOrderIds.has(r.id),
     actionRequiredBy: r.action_required_by ? toDateOnly(r.action_required_by) : null,
     lastContactedAt: r.last_contacted_at ? toDateOnly(r.last_contacted_at) : null,
     pickupSlot,
@@ -182,12 +199,14 @@ export async function fetchOrders(): Promise<Order[]> {
   const rows = (data ?? []) as OrderRow[];
 
   const userIds = rows.flatMap(r => [r.user_id, r.workshop_assignee, r.dispatch_assignee].filter((x): x is string => !!x));
-  const [profiles, reworkOrderIds] = await Promise.all([
+  const orderIds = rows.map(r => r.id);
+  const [profiles, reworkOrderIds, failedQcOrderIds] = await Promise.all([
     fetchProfileMap(userIds),
-    fetchReworkOrderIds(rows.map(r => r.id)),
+    fetchReworkOrderIds(orderIds),
+    fetchFailedQcOrderIds(orderIds),
   ]);
 
-  return rows.map(r => mapOrderRow(r, profiles, reworkOrderIds));
+  return rows.map(r => mapOrderRow(r, profiles, reworkOrderIds, failedQcOrderIds));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -210,6 +229,9 @@ type OrderPairRow = {
   condition_assessment: Record<string, string[]> | null;
   intake_notes: string | null;
   outtake_notes: string | null;
+  qc_status: string;
+  qc_notes: string | null;
+  qc_reviewed_at: string | null;
 };
 
 type OrderItemRow = {
@@ -264,6 +286,14 @@ async function buildPhotoSet(rows: PairPhotoRow[]): Promise<PhotoSet> {
   return set;
 }
 
+/** QC-fail evidence photos aren't a six-angle PhotoSet like before/after —
+ * just a flat, open-ended list, same shape as damage close-ups. */
+async function buildFlatPhotoList(rows: PairPhotoRow[]): Promise<CapturedPhoto[]> {
+  const photos: CapturedPhoto[] = [];
+  for (const row of rows) photos.push(await toCapturedPhoto(row));
+  return photos;
+}
+
 /** Replaces the ORDER_DETAILS[id] lookup in AdminOrderDetail.tsx. Returns
  * null if the order doesn't exist (caller falls back to its own
  * buildFallback(), same as the not-found path already handled). */
@@ -283,7 +313,7 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
     supabase
       .from("order_pairs")
       .select(
-        "id, order_id, shoe_type, shoe_brand, shoe_color_material, customer_notes, intake_status, completion_status, condition_assessment, intake_notes, outtake_notes",
+        "id, order_id, shoe_type, shoe_brand, shoe_color_material, customer_notes, intake_status, completion_status, condition_assessment, intake_notes, outtake_notes, qc_status, qc_notes, qc_reviewed_at",
       )
       .eq("order_id", id),
     supabase
@@ -317,7 +347,12 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
     const pairItems = items.filter(i => i.order_pair_id === p.id);
     const beforeRows = photoRowsList.filter(ph => ph.order_pair_id === p.id && ph.side === "before");
     const afterRows = photoRowsList.filter(ph => ph.order_pair_id === p.id && ph.side === "after");
-    const [before, after] = await Promise.all([buildPhotoSet(beforeRows), buildPhotoSet(afterRows)]);
+    const qcFailRows = photoRowsList.filter(ph => ph.order_pair_id === p.id && ph.side === "qc_fail");
+    const [before, after, qcFailPhotos] = await Promise.all([
+      buildPhotoSet(beforeRows),
+      buildPhotoSet(afterRows),
+      buildFlatPhotoList(qcFailRows),
+    ]);
 
     shoePairs.push({
       id: p.id,
@@ -344,6 +379,10 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
       conditionAssessment: p.condition_assessment ?? undefined,
       intakeNotes: p.intake_notes ?? undefined,
       outtakeNotes: p.outtake_notes ?? undefined,
+      qcStatus: (p.qc_status as ShoePair["qcStatus"]) ?? "not-started",
+      qcNotes: p.qc_notes ?? undefined,
+      qcReviewedAt: p.qc_reviewed_at ?? undefined,
+      qcFailPhotos,
     });
   }
 
@@ -409,7 +448,7 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
  * cobbli-requirements.md Section 12: {order_id}/{pair_id}/{before|after}/
  * {angle}.jpg for the six required angles, .../closeup-{uuid}.jpg for
  * damage close-ups. */
-function storageKey(orderId: string, pairId: string, side: "before" | "after", slot: RequiredPhotoAngle | "closeup", ext: string): string {
+function storageKey(orderId: string, pairId: string, side: "before" | "after" | "qc_fail", slot: RequiredPhotoAngle | "closeup", ext: string): string {
   const name = slot === "closeup" ? `closeup-${crypto.randomUUID()}` : slot;
   return `${orderId}/${pairId}/${side}/${name}.${ext}`;
 }
@@ -427,7 +466,7 @@ function extensionFor(file: File): string {
 export async function uploadPairPhoto(params: {
   orderId: string;
   pairId: string;
-  side: "before" | "after";
+  side: "before" | "after" | "qc_fail";
   angle: RequiredPhotoAngle | null;
   file: File;
 }): Promise<CapturedPhoto> {
@@ -458,6 +497,79 @@ export async function removePairPhoto(photo: CapturedPhoto, storagePath: string)
   if (removeErr) throw removeErr;
   const { error: deleteErr } = await supabase.from("pair_photos").delete().eq("id", photo.id);
   if (deleteErr) throw deleteErr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Real mutations — services-done, intake/outtake save, QC pass/fail.
+// Previously local-state-only; now real writes so the whole intake → repair
+// → outtake → QC → ready-for-return chain (driven by DB triggers) actually
+// runs (Danielle, 2026-08-12: "the website isn't live today, so let's just
+// go ahead and wire up everything").
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Checks/unchecks a single service line as done. `order_items.id` is the
+ * ServiceLine's own id (see fetchOrderDetail's mapping). */
+export async function updateServiceDone(itemId: string, done: boolean): Promise<void> {
+  const { error } = await supabase.from("order_items").update({ done }).eq("id", itemId);
+  if (error) throw error;
+}
+
+/** Saves the Intake form — either "in-progress" (Save & finish later) or
+ * "complete". Writing intake_status is what the
+ * `order_pairs_sync_qc_and_completion_status` trigger and the rest of this
+ * page's gating (services checklist, Outtake) key off of. */
+export async function saveIntakeForm(
+  pairId: string,
+  params: { status: "in-progress" | "complete"; notes: string; conditionAssessment: Record<string, string[]> },
+): Promise<void> {
+  const { error } = await supabase
+    .from("order_pairs")
+    .update({
+      intake_status: params.status,
+      intake_notes: params.notes || null,
+      condition_assessment: params.conditionAssessment,
+    })
+    .eq("id", pairId);
+  if (error) throw error;
+}
+
+/** Saves the Outtake form. Marking "complete" is the real entry point into
+ * QC — the `order_pairs_sync_qc_and_completion_status` trigger flips
+ * qc_status to "pending" the moment completion_status lands on "complete",
+ * which is what makes this pair show up in the QC section below. */
+export async function saveOuttakeForm(
+  pairId: string,
+  params: { status: "in-progress" | "complete"; notes: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from("order_pairs")
+    .update({
+      completion_status: params.status,
+      outtake_notes: params.notes || null,
+    })
+    .eq("id", pairId);
+  if (error) throw error;
+}
+
+/** Records a QC verdict. Passing (once every pair on the order has passed)
+ * triggers `maybe_mark_order_ready_for_return`, which flips the order to
+ * "ready-for-return" and fires the customer notification — nothing else in
+ * the app does that, by design (Danielle's call: no one should be notified
+ * their shoes are ready until QC has signed off). Failing bounces
+ * completion_status back to "in-progress" via the same DB trigger, so the
+ * pair reappears as an open Outtake rather than a separate rework path. */
+export async function submitQcResult(
+  pairId: string,
+  params: { status: "passed" | "failed"; notes: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from("order_pairs")
+    .update({
+      qc_status: params.status,
+      qc_notes: params.notes || null,
+    })
+    .eq("id", pairId);
+  if (error) throw error;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

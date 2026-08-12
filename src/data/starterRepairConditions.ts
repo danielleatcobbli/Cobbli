@@ -157,7 +157,11 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
     // "interior-repair" PACKAGE_RULES custom rule below unreachable (it
     // required this label); harmless since PACKAGES_ENABLED is already
     // false, but flagging for whenever that gets revisited.
-    { label: "Loose or detached insole", slug: "gluing", imageUrl: "/condition-photos/loose-or-detached-insole.jpg" } ] },
+    // "Loose or detached insole" removed 2026-08-12 (Danielle's call) — it
+    // routed to Gluing, which isn't being offered at launch. Note "Sole
+    // separating from shoe" (under Sole & heel, below) also routes to
+    // Gluing and is still on the checklist — flagged separately.
+  ] },
   // Distinct from Color & stains on purpose — this is about the material's
   // physical condition (drying out, losing its finish), not its color, and
   // maps to the real leather-or-suede-conditioning service (a more involved
@@ -173,23 +177,33 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
   // Scratches, so "holes" no longer fits. See ServiceCategory in
   // types/service.ts for the full rename (applies to the Services page too).
   { serviceCategory: "Scuffs & scratches", conditions: [
-    // Split from the old combined "Scuffs or scratches" condition
-    // (2026-07-31, Danielle's call) — scuffs tend to need more involved
-    // work, sometimes leather replacement, while scratches are usually just
-    // a color touch-up. Scuffs keeps the existing photo and slug; Scratches
-    // is new and routes to Color correction (slug still color-restoration,
-    // see services.name rename) instead of Scuff repair.
+    // Scuffs and Scratches stay separate, selectable conditions on the
+    // checklist (2026-08-12, Danielle's follow-up call) — she still wants to
+    // know which one a customer has, that's just no longer what determines
+    // the service. Both now route to the same "Scuff and scratch repair"
+    // service (still slug scuff-repair) instead of Scratches going to Color
+    // correction, since in practice customers often have both and a deep
+    // scratch can need some of the same filling work a scuff does.
     { label: "Scuffs", slug: "scuff-repair", imageUrl: "/condition-photos/scuffs-or-scratches.jpg" },
-    { label: "Scratches", slug: "color-restoration" } ] },
+    { label: "Scratches", slug: "scuff-repair", imageUrl: "/condition-photos/scratches.jpg" } ] },
   { serviceCategory: "Sole & heel", conditions: [
-    { label: "Worn or damaged sole", slug: "full-resole", imageUrl: "/condition-photos/worn-or-damaged-sole.jpg" },
+    // Swapped to Danielle's brown-booties before/after photos, 2026-08-12.
+    { label: "Worn or damaged sole", slug: "full-resole", imageUrl: "/condition-photos/worn-or-damaged-sole-before.jpg", afterImageUrl: "/condition-photos/worn-or-damaged-sole-after.jpg" },
     { label: "Sole separating from shoe", slug: "gluing", imageUrl: "/condition-photos/sole-separating-from-shoe.jpg" },
-    { label: "Sole worn at the heel", slug: "partial-resole", imageUrl: "/condition-photos/sole-worn-at-the-heel.jpg" },
-    { label: "Sole worn on front", slug: "partial-resole", imageUrl: "/condition-photos/sole-worn-on-front.jpg" },
+    // "Sole worn at the heel" and "Sole worn on front" removed 2026-08-12
+    // (Danielle's call) -- both folded into "Worn or damaged sole" once the
+    // brand + sole-type picker (SoleSelectionDialog) shipped, which asks
+    // about sole type/construction directly rather than needing separate
+    // checklist conditions for where on the sole it's worn. These two had
+    // been pointing at "Partial resole" (see the 2026-07-27 note above) from
+    // before that flow existed and were never cleaned up when it landed.
     // "Loose or detached heel" removed 2026-07-31 (MVP scope-down, Danielle's
     // call) — heel-reattachment is now is_coming_soon, and it was only ever
     // reached from this one condition.
-    { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement", imageUrl: "/condition-photos/worn-or-missing-heel-tip.jpg" } ] },
+    // Danielle renamed the source file to the before/after convention
+    // 2026-08-12 (worn-or-missing-heel-tip.jpg -> -before.jpg, plus a new
+    // -after.jpg) — updated to match, same pattern as "Stains" above.
+    { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement", imageUrl: "/condition-photos/worn-or-missing-heel-tip-before.jpg", afterImageUrl: "/condition-photos/worn-or-missing-heel-tip-after.jpg" } ] },
   // "Stitching & seams" and "Straps, buckles, & hardware" groups removed
   // entirely 2026-07-31 (MVP scope-down, Danielle's call) — every condition
   // in both routed to "stitching", which is now is_coming_soon. Both
@@ -213,14 +227,8 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
  *  like, it's just something that comes up a lot. */
 export const COMMON_CONDITION_LABELS: string[] = [
   "Worn or damaged sole",
-  // "Scuffs or scratches" split into "Scuffs" and "Scratches" 2026-07-31 —
-  // carrying the old combined condition's "Common" status over to Scuffs
-  // only, since the original frequency data was for the combined pair, not
-  // either half individually. Add "Scratches" here too if it turns out to
-  // be just as frequent on its own.
   "Scuffs",
   "Worn or damaged insole",
-  "Loose or detached insole",
   "Shoes are dirty",
   "Worn or missing heel tip",
 ];

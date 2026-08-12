@@ -65,6 +65,14 @@ export type Order = {
   workshopAssignee: string;
   dispatchAssignee: string;
   isRework: boolean;
+  /** True when at least one pair on this order currently has qc_status =
+   * "failed" — i.e. it's sitting back with the workshop for rework after
+   * quality control, not because the customer asked. Drives the priority
+   * sort in sortByDue (Danielle's call, 2026-08-12: failed QC jumps the
+   * queue ahead of even customer rework requests — it's already in-house
+   * and usually a fast fix, so clearing it quickly is what keeps the
+   * ready-for-return pipeline moving). */
+  hasFailedQc: boolean;
   actionRequiredBy: string | null;
   /** Date of the last contact attempt (automated link/reminder send, or a
    * manual call) — replaces the earlier categorical "contact status" badge.
@@ -153,6 +161,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: "2026-07-05", // 3 days overdue
   },
   {
@@ -165,6 +174,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: "2026-07-08", // due today
   },
   {
@@ -177,6 +187,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: null,
     lastContactedAt: "2026-07-06",
     pickupSlot: { date: "2026-07-08", timeLabel: "10:00 – 11:30 AM" },
@@ -197,6 +208,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "OB",
     dispatchAssignee: "DO",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: "2026-07-08", // automated reminders exhausted — due today
     lastContactedAt: "2026-07-06", // day-2 automated reminder — customer still hasn't scheduled
   },
@@ -210,6 +222,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: true,
+    hasFailedQc: false,
     actionRequiredBy: "2026-07-06", // 2 days overdue
     notes: "Customer says stitching separated after first wear",
   },
@@ -223,6 +236,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: true,
+    hasFailedQc: false,
     actionRequiredBy: null,
     notes: "Dispute escalated to owner — see Slack thread",
   },
@@ -236,6 +250,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "OB",
     dispatchAssignee: "DO",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: null,
     lastContactedAt: "2026-07-05",
     returnSlot: { date: "2026-07-08", timeLabel: "2:00 – 3:30 PM" },
@@ -251,6 +266,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: null,
   },
   {
@@ -263,6 +279,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "OB",
     dispatchAssignee: "DO",
     isRework: true,
+    hasFailedQc: false,
     actionRequiredBy: "2026-07-08", // reminders exhausted — needs dispatch follow-up
     lastContactedAt: "2026-07-06", // day-2 automated reminder — customer still hasn't scheduled
     notes: "Approved re-stitch on left heel — awaiting pickup scheduling",
@@ -277,6 +294,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: "2026-07-11", // upcoming
   },
   {
@@ -289,6 +307,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "DO",
     dispatchAssignee: "OB",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: null, // ball's in the customer's court, no SLA
   },
   {
@@ -301,6 +320,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "OB",
     dispatchAssignee: "DO",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: null, // ball's in the customer's court, no SLA
   },
   {
@@ -313,6 +333,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "DO",
     dispatchAssignee: "DO",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: null,
     lastContactedAt: "2026-07-08",
     pickupSlot: { date: "2026-07-09", timeLabel: "9:00 – 10:30 AM" }, // tomorrow
@@ -328,6 +349,7 @@ const ORDERS: Order[] = [
     workshopAssignee: "OB",
     dispatchAssignee: "OB",
     isRework: false,
+    hasFailedQc: false,
     actionRequiredBy: null,
     lastContactedAt: "2026-07-07",
     returnSlot: { date: "2026-07-11", timeLabel: "1:00 – 2:30 PM" }, // a few days out — populates "All scheduled" beyond today/tomorrow
@@ -389,16 +411,25 @@ function dispatchAction(order: Order): string | null {
   }
 }
 
-/** Sort overdue-first (most overdue first), then due-today, then upcoming
- * (soonest first), then no-date-set last. Applied everywhere action-required
- * style tables render so staff close out the oldest overdue items first. */
+/** Sort failed-QC first, then open customer reworks, then overdue (most
+ * overdue first), then due-today, then upcoming (soonest first), then
+ * no-date-set last. Applied everywhere action-required style tables render.
+ *
+ * Priority ranking is Danielle's call (2026-08-12): a pair that failed our
+ * own quality control jumps ahead of even a customer-initiated rework
+ * request — it's already in-house, the customer doesn't know yet, and it's
+ * usually a fast fix, so clearing it quickly is what keeps the
+ * ready-for-return pipeline moving. A customer rework request comes next
+ * (someone's already waiting on it), then everything else by due date. */
 function sortByDue(orders: Order[]): Order[] {
   const bucket = (o: Order): number => {
+    if (o.hasFailedQc) return 0;
+    if (REWORK_OPEN_STATUSES.includes(o.status)) return 1;
     const t = dueTiming(o.actionRequiredBy);
-    if (t === "overdue") return 0;
-    if (t === "today") return 1;
-    if (t === "upcoming") return 2;
-    return 3;
+    if (t === "overdue") return 2;
+    if (t === "today") return 3;
+    if (t === "upcoming") return 4;
+    return 5;
   };
   return [...orders].sort((a, b) => {
     const ba = bucket(a);
@@ -942,8 +973,8 @@ function WorkshopTable({ orders, actionFn = workshopAction, onRowClick, refetch,
                 onClick={() => onRowClick?.(o.id)}
                 style={{
                   borderBottom: i < orders.length - 1 ? "1px solid #f0ece5" : "none",
-                  borderLeft: `3px solid ${borderCol}`,
-                  backgroundColor: o.isRework ? "#fffbeb" : "#fff",
+                  borderLeft: `3px solid ${o.hasFailedQc ? "#991b1b" : borderCol}`,
+                  backgroundColor: o.hasFailedQc ? "#fef2f2" : o.isRework ? "#fffbeb" : "#fff",
                   cursor: "pointer",
                   transition: "background 0.1s",
                 }}
@@ -951,6 +982,9 @@ function WorkshopTable({ orders, actionFn = workshopAction, onRowClick, refetch,
                 <td style={TD}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <span style={{ color: "#2563eb", fontWeight: 500, fontSize: 12 }}>{o.orderNumber}</span>
+                    {o.hasFailedQc && (
+                      <span style={{ backgroundColor: "#fee2e2", color: "#991b1b", fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: 4 }}>Failed QC</span>
+                    )}
                     {o.isRework && (
                       <span style={{ backgroundColor: "#fef3c7", color: "#92400e", fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: 4 }}>Rework</span>
                     )}
