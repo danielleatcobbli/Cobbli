@@ -188,7 +188,8 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
     { label: "Scratches", slug: "scuff-repair", imageUrl: "/condition-photos/scratches.jpg" } ] },
   { serviceCategory: "Sole & heel", conditions: [
     // Swapped to Danielle's brown-booties before/after photos, 2026-08-12.
-    { label: "Worn or damaged sole", slug: "full-resole", imageUrl: "/condition-photos/worn-or-damaged-sole-before.jpg", afterImageUrl: "/condition-photos/worn-or-damaged-sole-after.jpg" },
+    // Danielle replaced the after photo 2026-08-13 — new file is a .png.
+    { label: "Worn or damaged sole", slug: "full-resole", imageUrl: "/condition-photos/worn-or-damaged-sole-before.jpg", afterImageUrl: "/condition-photos/worn-or-damaged-sole-after.png" },
     { label: "Sole separating from shoe", slug: "gluing", imageUrl: "/condition-photos/sole-separating-from-shoe.jpg" },
     // "Sole worn at the heel" and "Sole worn on front" removed 2026-08-12
     // (Danielle's call) -- both folded into "Worn or damaged sole" once the
@@ -203,7 +204,8 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
     // Danielle renamed the source file to the before/after convention
     // 2026-08-12 (worn-or-missing-heel-tip.jpg -> -before.jpg, plus a new
     // -after.jpg) — updated to match, same pattern as "Stains" above.
-    { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement", imageUrl: "/condition-photos/worn-or-missing-heel-tip-before.jpg", afterImageUrl: "/condition-photos/worn-or-missing-heel-tip-after.jpg" } ] },
+    // Danielle replaced the after photo again 2026-08-13 — new file is a .png.
+    { label: "Worn or missing heel tip", slug: "high-heel-tip-replacement", imageUrl: "/condition-photos/worn-or-missing-heel-tip-before.jpg", afterImageUrl: "/condition-photos/worn-or-missing-heel-tip-after.png" } ] },
   // "Stitching & seams" and "Straps, buckles, & hardware" groups removed
   // entirely 2026-07-31 (MVP scope-down, Danielle's call) — every condition
   // in both routed to "stitching", which is now is_coming_soon. Both
