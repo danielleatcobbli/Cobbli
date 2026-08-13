@@ -686,6 +686,12 @@ const OrderConfirmation = () => {
             </div>
           </div>
 
+          {!user && (
+            <p className="text-xs text-destructive text-center">
+              You'll need to be signed in to submit a rework request.
+            </p>
+          )}
+
           <DialogFooter>
             <Button variant="ghost" onClick={() => setReworkOpen(false)} disabled={submitting}>
               Cancel

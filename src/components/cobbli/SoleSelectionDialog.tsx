@@ -188,22 +188,47 @@ const SoleSelectionDialog = ({ open, onOpenChange, excludedBrands, onConfirm }: 
         {step === "brand" ? (
           <>
             <DialogHeader>
-              <DialogTitle className="text-2xl">Which brand is this pair?</DialogTitle>
+              <DialogTitle className="text-2xl">Do any of these brands make your pair?</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground -mt-2">
-              These brands have their own resole pricing — pick one if it matches, or skip ahead.
+              These brands use specialty soles, so pricing differs from our standard resole.
             </p>
             <div className="grid grid-cols-2 gap-2.5 mt-2">
-              {RESOLE_BRAND_OPTIONS.map((opt) => (
-                <button
-                  key={opt.label}
-                  type="button"
-                  onClick={() => pickBrand(opt)}
-                  className="rounded-md border border-border px-3 py-2.5 text-sm font-medium text-primary text-left hover:border-primary/60 transition-colors"
-                >
-                  {opt.label}
-                </button>
-              ))}
+              {RESOLE_BRAND_OPTIONS.map((opt) => {
+                // Blocked covers both the two brands with no variantKey at
+                // all (Louboutin/Margiela — no sole source yet) and any
+                // brand excludedBrands picks up dynamically later, so a
+                // priced brand that gets paused shows the same "coming
+                // soon," disabled treatment automatically. Danielle's call
+                // (2026-08-12): rather than letting someone pick a blocked
+                // brand and only finding out afterward, gray it out and stop
+                // the click before it goes anywhere.
+                const blocked = !opt.variantKey || excludedBrands.includes(opt.matchKey);
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    disabled={blocked}
+                    aria-disabled={blocked}
+                    onClick={() => { if (!blocked) pickBrand(opt); }}
+                    className={
+                      blocked
+                        ? "rounded-md border border-border px-3 py-2.5 text-sm font-medium text-left opacity-50 cursor-not-allowed"
+                        : "rounded-md border border-border px-3 py-2.5 text-sm font-medium text-primary text-left hover:border-primary/60 transition-colors"
+                    }
+                  >
+                    <span className={blocked ? "text-muted-foreground" : undefined}>{opt.label}</span>
+                    {blocked && (
+                      <span
+                        className="block text-[10px] font-medium mt-0.5 px-1.5 py-0.5 rounded-full w-fit"
+                        style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
+                      >
+                        Coming soon
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
             <button
               type="button"

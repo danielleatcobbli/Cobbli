@@ -123,6 +123,14 @@ const StartRepair = () => {
   const [pairError, setPairError] = useState(false);
   const isPairFilled = selectedPairId !== null || newPairName.trim().length > 0;
 
+  // Same treatment as pairError above, for the other independent
+  // requirement (2026-08-12, Danielle's call — the two need to behave the
+  // same way): "See my recommendations" used to hard-disable on no
+  // conditions checked but stay clickable-with-a-nudge on no pair selected,
+  // which meant a customer missing *both* just saw a dead button with no clue
+  // why. Now both are always clickable and point at whichever's missing.
+  const [conditionsError, setConditionsError] = useState(false);
+
   // Free-form notes for this specific repair (2026-07-27, Danielle's call) —
   // collected here on the recommendations screen rather than in a separate
   // popup step. Distinct from the pair's own name/identity: this is about the
@@ -178,33 +186,57 @@ const StartRepair = () => {
   // instead of lossy. Switching to a different pair (or to "new pair," a null
   // id) starts that pair's own selection fresh rather than carrying over
   // whatever was checked for the last one.
+  // Tracks the *previous* selectedPairId so the effect below can tell "the
+  // customer just picked a pair for the first time, while mid-checklist"
+  // apart from "the customer is switching between two already-selected
+  // pairs" — see the bug note inside the effect.
+  const prevSelectedPairIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     // Switching to an existing saved pair means whatever was typed for a new
     // pair no longer applies — clear it so it can't get sent along by mistake.
     if (selectedPairId) setNewPairName("");
     const existing = selectedPairId ? findByPairId(selectedPairId) : undefined;
-    if (!existing) {
-      if (!presetAppliedRef.current && presetSlug) {
-        presetAppliedRef.current = true;
-        setCheckedLabels(new Set(SLUG_TO_CONDITION_LABELS.get(presetSlug) ?? []));
-      } else {
-        setCheckedLabels(new Set());
-      }
+    const cameFromNoPairSelected = prevSelectedPairIdRef.current === null;
+    prevSelectedPairIdRef.current = selectedPairId;
+
+    if (existing) {
+      const labels = new Set<string>();
+      const addons = new Set<string>();
+      const addonSlugs = new Set(ADDONS.map((a) => a.slug));
+      existing.services.forEach((svc) => {
+        if (addonSlugs.has(svc.id)) {
+          addons.add(svc.id);
+        } else {
+          (SLUG_TO_CONDITION_LABELS.get(svc.id) ?? []).forEach((label) => labels.add(label));
+        }
+      });
+      setCheckedLabels(labels);
+      setCheckedAddons(addons);
+      return;
+    }
+
+    if (!presetAppliedRef.current && presetSlug) {
+      presetAppliedRef.current = true;
+      setCheckedLabels(new Set(SLUG_TO_CONDITION_LABELS.get(presetSlug) ?? []));
       setCheckedAddons(new Set());
       return;
     }
-    const labels = new Set<string>();
-    const addons = new Set<string>();
-    const addonSlugs = new Set(ADDONS.map((a) => a.slug));
-    existing.services.forEach((svc) => {
-      if (addonSlugs.has(svc.id)) {
-        addons.add(svc.id);
-      } else {
-        (SLUG_TO_CONDITION_LABELS.get(svc.id) ?? []).forEach((label) => labels.add(label));
-      }
-    });
-    setCheckedLabels(labels);
-    setCheckedAddons(addons);
+
+    // Nothing in the bag yet for whatever's selected now (a brand-new pair,
+    // or a saved pair that hasn't had services picked on this order). Bug
+    // fix (2026-08-12, Danielle's report): this used to unconditionally
+    // reset to an empty checklist here, which wiped out conditions the
+    // customer had already checked *before* naming a pair — check "Worn or
+    // damaged sole," then pick a pair, and it silently unchecked itself.
+    // Only reset when this is a genuine switch away from a different,
+    // already-selected pair; if we just came from "no pair chosen yet,"
+    // leave whatever's checked alone so it carries over to the pair that
+    // was just picked.
+    if (!cameFromNoPairSelected) {
+      setCheckedLabels(new Set());
+      setCheckedAddons(new Set());
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPairId]);
 
@@ -394,6 +426,7 @@ const StartRepair = () => {
       else next.add(label);
       return next;
     });
+    setConditionsError(false);
   };
 
   const toggleAddon = (slug: string) => {
@@ -403,6 +436,7 @@ const StartRepair = () => {
       else next.add(slug);
       return next;
     });
+    setConditionsError(false);
   };
 
   const anyChecked = checkedLabels.size > 0 || checkedAddons.size > 0;
@@ -413,10 +447,21 @@ const StartRepair = () => {
   // the answer(s). The two follow-ups are independent (different conditions),
   // so they're shown one at a time rather than together.
   const onSeeRecommendationsClick = () => {
-    if (!services || !anyChecked) return;
-    if (!isPairFilled) {
-      setPairError(true);
+    if (!services) return;
+    // Both requirements validated together (not one-at-a-time) so a customer
+    // missing both sees both flagged on the first click, not just the first
+    // one — then scroll to whichever comes first on the page (the pair field
+    // sits above the checklist) so there's still one clear next step.
+    const pairMissing = !isPairFilled;
+    const conditionsMissing = !anyChecked;
+    setPairError(pairMissing);
+    setConditionsError(conditionsMissing);
+    if (pairMissing) {
       document.getElementById("pair-field")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (conditionsMissing) {
+      document.getElementById("condition-tiles")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     if (needsSoleQuestion || needsInsoleQuestion) {
@@ -788,9 +833,14 @@ const StartRepair = () => {
                 })}
               </div>
 
+              {conditionsError && !anyChecked && (
+                <p className="text-xs mt-4 font-medium" style={{ color: "#a32d2d" }}>
+                  Check at least one condition (or add-on below) before continuing.
+                </p>
+              )}
               {/* Photo-forward tile grid — flat, no category headers, even for
                   "All" (see visibleConditions above for why). */}
-              <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3" id="condition-tiles">
                 {visibleConditions.map(renderConditionTile)}
               </div>
 
@@ -852,8 +902,6 @@ const StartRepair = () => {
                   type="button"
                   size="lg"
                   onClick={onSeeRecommendationsClick}
-                  disabled={!anyChecked}
-                  className={!anyChecked ? "opacity-50 cursor-not-allowed" : ""}
                 >
                   See my recommendations
                 </Button>
@@ -975,9 +1023,11 @@ const StartRepair = () => {
                 >
                   Go to checkout
                 </Button>
-                {cartLines.length > 0 && !canFinalize && (
+                {!canFinalize && (
                   <p className="text-xs text-muted-foreground text-center">
-                    Name this pair on the checklist to continue.
+                    {cartLines.length > 0
+                      ? "Name this pair on the checklist to continue."
+                      : "Select at least one condition on the checklist to continue."}
                   </p>
                 )}
               </div>
