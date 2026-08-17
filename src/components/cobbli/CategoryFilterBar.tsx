@@ -27,7 +27,7 @@ export const CATEGORY_ICONS: Record<string, string> = {
   "Color & stains": iconColor,
   "Material & finish": iconLeather,
   "Insole & interior": iconInside,
-  "Cleaning & odor": iconShoeshine,
+  "Cleaning": iconShoeshine,
 };
 
 const ICONS = CATEGORY_ICONS;

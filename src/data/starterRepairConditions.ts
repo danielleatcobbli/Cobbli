@@ -134,15 +134,21 @@ export type ChecklistGroup = { serviceCategory: ServiceCategory; conditions: Con
 // controls the category pills' own order and the fallback sort for
 // non-common items (see CHECKLIST_ORDERED_SLUGS below).
 export const CHECKLIST_GROUPS: ChecklistGroup[] = [
-  { serviceCategory: "Cleaning & odor", conditions: [
-    { label: "Shoes are dirty", slug: "deep-clean", imageUrl: "/condition-photos/shoes-are-dirty.jpg" },
-    // "Shoes smell" keeps Danielle's custom stink-lines icon (commissioned
-    // 2026-07-16) as its own condition photo rather than the shared category
-    // icon, now that the category icon itself has to represent both dirt and
-    // odor.
-    { label: "Shoes smell", slug: "deodorizing-treatment", imageUrl: iconOdor } ] },
+  { serviceCategory: "Cleaning", conditions: [
+    // After photo added 2026-08-13.
+    { label: "Shoes are dirty", slug: "deep-clean", imageUrl: "/condition-photos/shoes-are-dirty.jpg", afterImageUrl: "/condition-photos/shoes-are-dirty-after.png" },
+    // "Shoes smell" removed from the checklist 2026-08-13 (Danielle's call)
+    // — deodorizing-treatment is now archived in Supabase, no supplies for
+    // it yet. Easy to bring back once that changes: { label: "Shoes smell",
+    // slug: "deodorizing-treatment", imageUrl: iconOdor } (the custom
+    // stink-lines icon import above, iconOdor, is left in place for this).
+  ] },
   { serviceCategory: "Color & stains", conditions: [
-    { label: "Faded or streaky color", slug: "color-restoration", imageUrl: "/condition-photos/faded-or-streaky-color.png" },
+    // Before/after pair added 2026-08-13 (Danielle's photos) — before was
+    // also broken previously (pointed at a "faded-or-streaky-color.png" that
+    // no longer existed on disk after she re-uploaded under a different
+    // filename).
+    { label: "Faded or streaky color", slug: "color-restoration", imageUrl: "/condition-photos/faded-or-streaky-color-before.png", afterImageUrl: "/condition-photos/faded-or-streaky-color-after.png" },
     { label: "Stains", slug: "color-restoration", imageUrl: "/condition-photos/stains.jpg", afterImageUrl: "/condition-photos/stains-after.jpg" },
     // "Water stains" removed 2026-07-31 (MVP scope-down, Danielle's call).
     // Different from the other removals in this pass: color-restoration
@@ -151,7 +157,10 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
     // condition entry point is being pulled, not the underlying service.
   ] },
   { serviceCategory: "Insole & interior", conditions: [
-    { label: "Worn or damaged insole", slug: "insole-replacement", imageUrl: "/condition-photos/worn-or-damaged-insole.jpg" },
+    // Before/after pair added 2026-08-13 — before was also broken
+    // previously (pointed at "worn-or-damaged-insole.jpg", which doesn't
+    // exist; the real file on disk is "-before.jpg").
+    { label: "Worn or damaged insole", slug: "insole-replacement", imageUrl: "/condition-photos/worn-or-damaged-insole-before.jpg", afterImageUrl: "/condition-photos/worn-or-damaged-insole-after.jpeg" },
     // "Damage on inner lining" removed 2026-07-31 (MVP scope-down, Danielle's
     // call) — lining-repair is now is_coming_soon. Note this makes the
     // "interior-repair" PACKAGE_RULES custom rule below unreachable (it
@@ -184,13 +193,27 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
     // service (still slug scuff-repair) instead of Scratches going to Color
     // correction, since in practice customers often have both and a deep
     // scratch can need some of the same filling work a scuff does.
-    { label: "Scuffs", slug: "scuff-repair", imageUrl: "/condition-photos/scuffs-or-scratches.jpg" },
-    { label: "Scratches", slug: "scuff-repair", imageUrl: "/condition-photos/scratches.jpg" } ] },
+    // Before/after pairs added 2026-08-13 — before was also broken
+    // previously (Scuffs pointed at "scuffs-or-scratches.jpg", which doesn't
+    // exist; Scratches pointed at "scratches.jpg", also nonexistent — the
+    // real files on disk are "-before"/"-after"). "Scratches" uses a
+    // "-photo-" middle segment in the filename since the file system is
+    // case-insensitive and "Scratches-Before.jpg"/"scratches-before.jpg"
+    // would otherwise collide.
+    { label: "Scuffs", slug: "scuff-repair", imageUrl: "/condition-photos/scuffs-or-scratches-before.jpg", afterImageUrl: "/condition-photos/scuffs-or-scratches-after.png" },
+    { label: "Scratches", slug: "scuff-repair", imageUrl: "/condition-photos/scratches-photo-before.jpg", afterImageUrl: "/condition-photos/scratches-photo-after.png" } ] },
   { serviceCategory: "Sole & heel", conditions: [
     // Swapped to Danielle's brown-booties before/after photos, 2026-08-12.
     // Danielle replaced the after photo 2026-08-13 — new file is a .png.
     { label: "Worn or damaged sole", slug: "full-resole", imageUrl: "/condition-photos/worn-or-damaged-sole-before.jpg", afterImageUrl: "/condition-photos/worn-or-damaged-sole-after.png" },
-    { label: "Sole separating from shoe", slug: "gluing", imageUrl: "/condition-photos/sole-separating-from-shoe.jpg" },
+    // "Sole separating from shoe" removed 2026-08-13 (Danielle's call) — it
+    // routed to Gluing, which isn't being offered at launch (same reasoning
+    // as "Loose or detached insole," removed 2026-08-12 for the same slug).
+    // She'd rather keep the initial checklist to conditions with a real,
+    // bookable service behind them and avoid the confusion of a condition
+    // that leads nowhere. Easy to re-add once Gluing is live — just restore
+    // this line: { label: "Sole separating from shoe", slug: "gluing",
+    // imageUrl: "/condition-photos/sole-separating-from-shoe.jpg" }.
     // "Sole worn at the heel" and "Sole worn on front" removed 2026-08-12
     // (Danielle's call) -- both folded into "Worn or damaged sole" once the
     // brand + sole-type picker (SoleSelectionDialog) shipped, which asks

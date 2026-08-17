@@ -67,14 +67,21 @@ export type ServiceCategory =
   // three categories comes back. Re-add here (and to CATEGORIES_ORDERED /
   // CategoryFilterBar's CATEGORY_ICONS) once any service in a category is
   // live again.
-  | "Cleaning & odor";
+  //
+  // Renamed from "Cleaning & odor" 2026-08-13 (Danielle's call) — "Shoes
+  // smell" was removed from the checklist and deodorizing-treatment archived
+  // (no supplies for it yet), leaving only "Shoes are dirty"/deep-clean in
+  // this category. Rename back to "Cleaning & odor" (here, CATEGORIES_ORDERED,
+  // CategoryFilterBar's CATEGORY_ICONS, and starterRepairConditions.ts'
+  // CHECKLIST_GROUPS) whenever deodorizing-treatment comes back.
+  | "Cleaning";
 
 // Alphabetical (2026-07-23, Danielle's call — categories should be
 // predictable/scannable rather than frequency-ordered; must stay in sync
 // with CHECKLIST_GROUPS' own order in starterRepairConditions.ts since the
 // two taxonomies are unified).
 export const CATEGORIES_ORDERED: ServiceCategory[] = [
-  "Cleaning & odor",
+  "Cleaning",
   "Color & stains",
   "Insole & interior",
   "Material & finish",

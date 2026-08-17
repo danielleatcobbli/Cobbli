@@ -36,14 +36,12 @@ const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair, addresses }: P
             alt={s.name}
             className="absolute inset-0 w-full h-full object-cover"
           />
-          {isPopular && (
-            <span
-              className="absolute top-2 left-2 text-[10px] font-medium px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
-            >
-              Popular
-            </span>
-          )}
+          {/* "Popular" badge removed 2026-08-13 (Danielle's call) — same
+              reasoning as the checklist's "Common" tag removal: it sat on
+              top of the card photo and the catalog's still too small for the
+              distinction to matter yet. isPopular is still passed in by
+              every caller (unused for now) so this is a one-line revert if
+              it comes back. */}
         </div>
         <div className="p-4 flex flex-col gap-1 flex-1">
           <h3 className="text-[14px] font-bold leading-snug" style={{ color: "#3d1700" }}>

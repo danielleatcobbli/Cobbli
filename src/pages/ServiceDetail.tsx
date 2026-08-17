@@ -188,15 +188,10 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
             {/* ── Content ── */}
             <div>
 
-              {/* Popular tag */}
-              {isPopular && !service.isComingSoon && (
-                <span
-                  className="inline-block mb-3 text-[11px] font-medium px-2.5 py-1 rounded-full"
-                  style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
-                >
-                  Popular
-                </span>
-              )}
+              {/* Popular tag removed 2026-08-13 (Danielle's call) — same
+                  removal as ServiceCard.tsx and the checklist's "Common"
+                  tag; isPopular stays computed above (unused for now) so
+                  this is a one-line revert if it comes back. */}
 
               <h1 className="font-display text-3xl text-primary">{service.name}</h1>
               <p className="mt-3 text-muted-foreground leading-relaxed">

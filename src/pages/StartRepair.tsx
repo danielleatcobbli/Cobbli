@@ -365,7 +365,6 @@ const StartRepair = () => {
     id: string;
   }) => {
     const isChecked = checkedLabels.has(cond.label);
-    const isCommon = COMMON_CONDITION_LABELS.includes(cond.label);
     return (
       <label
         key={cond.id}
@@ -389,18 +388,14 @@ const StartRepair = () => {
             className="aspect-square w-full object-cover"
             style={{ backgroundColor: "#f5f0e8" }}
           />
-          {/* "Common" tag (2026-07-23, Danielle's call) — same visual
-              treatment as the "Popular" tag on ServiceCard, but labeled
-              differently on purpose: a problem someone's dealing with isn't
-              "popular," it's just something we see often. */}
-          {isCommon && (
-            <span
-              className="absolute top-2 left-2 text-[10px] font-medium px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
-            >
-              Common
-            </span>
-          )}
+          {/* "Common" tag removed 2026-08-13 (Danielle's call) — it sat on
+              top of the condition photo and was blocking part of the "Worn
+              or missing heel tip" image, and with the catalog still small
+              she didn't think the common/popular distinction was pulling its
+              weight yet. COMMON_CONDITION_LABELS itself is untouched, so
+              common conditions still sort to the front (see sortCommonFirst
+              above) — only the visual badge is gone. Removed the same way
+              from ServiceCard.tsx and ServiceDetail.tsx's "Popular" tag. */}
           <Checkbox
             id={cond.id}
             checked={isChecked}
