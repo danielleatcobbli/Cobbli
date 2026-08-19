@@ -408,8 +408,13 @@ export const ADDONS: Addon[] = [
   // section anyway ("laces are worn or dirty" reads as something being
   // wrong, not preventative care) — see the section heading note below.
   { label: "Shoe shine", slug: "shoe-shine", pkgCat: null, description: "Restores shine and conditions the leather to help prevent drying and cracking" },
-  { label: "Waterproofing", slug: "waterproofing", pkgCat: "preventative", description: "Protects shoes from rain and moisture" },
-  { label: "Protective soles", slug: "protective-full-sole", pkgCat: "preventative", description: "Guards against wear so your soles last longer" },
+  // Waterproofing and Protective soles removed 2026-08-13 (Danielle's call,
+  // MVP scope-down — same reasoning as the other archived services this
+  // session: fewer things to test before launch, add back later). Both
+  // archived in Supabase (is_active = false) too, not just pulled from here.
+  // Restore by re-adding:
+  // { label: "Waterproofing", slug: "waterproofing", pkgCat: "preventative", description: "Protects shoes from rain and moisture" },
+  // { label: "Protective soles", slug: "protective-full-sole", pkgCat: "preventative", description: "Guards against wear so your soles last longer" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

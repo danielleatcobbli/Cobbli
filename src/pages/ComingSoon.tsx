@@ -1,6 +1,3 @@
-import { useState } from "react";
-import { z } from "zod";
-import { supabase } from "@/integrations/supabase/client";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import logo from "@/assets/logo-cobbli.svg";
 import instagram from "@/assets/icons/instagram.svg";
@@ -12,12 +9,13 @@ import x from "@/assets/icons/x.svg";
 // a bare placeholder. Served from /public, same as Hero.tsx.
 const hero = "/assets/hero-cobbler.webp";
 
-const emailSchema = z
-  .string()
-  .trim()
-  .min(1, { message: "Please enter your email address." })
-  .max(254, { message: "Email is too long." })
-  .email({ message: "Please enter a valid email address." });
+// Public beta submission form (Danielle's Google Form) — replaces the old
+// inline email-capture form 2026-08-13 (Danielle's call). The form itself
+// already collects email, so there's no reason to also collect it here first
+// — that was just extra friction before the real intake point. Update this
+// link if the form URL ever changes.
+const BETA_FORM_URL =
+  "https://docs.google.com/forms/d/e/1FAIpQLSeABCZMUz8nf1DlQ_NvVuCCPyuvpWkoUQGfVFLayPjQHRIj-Q/viewform?usp=header";
 
 const socials = [
   {
@@ -45,42 +43,6 @@ const ComingSoon = () => {
     canonicalPath: "/",
   });
 
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-
-  const trimmed = email.trim();
-  const isValid = emailSchema.safeParse(trimmed).success;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    const parsed = emailSchema.safeParse(trimmed);
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Please enter a valid email address.");
-      return;
-    }
-
-    setSubmitting(true);
-    const { error: insertError } = await supabase
-      .from("waitlist")
-      .insert({ email: parsed.data.toLowerCase(), source: "coming_soon_page" });
-    setSubmitting(false);
-
-    // Treat duplicate as success — they're already on the list
-    if (insertError && insertError.code !== "23505") {
-      setError(
-        "Something went wrong. Please try again or contact us at support@cobbli.com.",
-      );
-      return;
-    }
-
-    setSuccess(true);
-    setEmail("");
-  };
-
   return (
     <main
       className="relative min-h-screen flex flex-col items-center justify-between px-6 py-10 text-white overflow-hidden"
@@ -103,71 +65,42 @@ const ComingSoon = () => {
         <img src={logo} alt="Cobbli" className="h-32 md:h-40 w-auto" />
       </div>
 
+      {/* Headline/subhead switched to Montserrat 2026-08-13 (Danielle's call
+          — she felt Playfair Display read as outdated, tried a Montserrat
+          mockup, preferred it). Note the old Playfair Display value was
+          actually never being loaded by index.html's Google Fonts link
+          (Frank Ruhl Libre / Albert Sans / Public Sans / Cormorant Garamond
+          only), so this page's headline was silently falling back to the
+          browser's generic serif the whole time — Montserrat is now properly
+          added to that font list, so this is also a real bug fix, not just a
+          style swap. */}
       <section className="relative z-10 flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto py-10">
         <h1
-          className="text-3xl md:text-5xl font-semibold leading-tight text-white"
-          style={{ fontFamily: "'Playfair Display', serif" }}
+          className="text-3xl md:text-5xl font-bold leading-tight text-white"
+          style={{ fontFamily: "'Montserrat', sans-serif" }}
         >
-          Expert Shoe Repair Delivered to Your Doorstep
+          Get on the list for a free repair
         </h1>
-        <p className="mt-5 text-base md:text-lg font-medium" style={{ color: "#fdb600" }}>
-          Coming soon to Manhattan — be the first to know when we launch.
+        <p
+          className="mt-5 text-base md:text-lg font-medium max-w-md"
+          style={{ fontFamily: "'Montserrat', sans-serif", color: "#fdb600" }}
+        >
+          We're selecting a limited number of shoes for a free Cobbli repair. Shoes are selected
+          on a rolling basis based on fit with the services we're launching with.
         </p>
 
-        {success ? (
-          <p
-            role="status"
-            aria-live="polite"
-            className="mt-8 text-base md:text-lg font-medium"
-            style={{ color: "#fdb600" }}
-          >
-            You're on the list! We'll be in touch soon.
-          </p>
-        ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="mt-8 w-full flex flex-col sm:flex-row gap-3"
-            noValidate
-          >
-            <label htmlFor="waitlist-email" className="sr-only">
-              Email address
-            </label>
-            <input
-              id="waitlist-email"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="Enter your email address"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (error) setError(null);
-              }}
-              aria-invalid={!!error}
-              aria-describedby={error ? "waitlist-email-error" : undefined}
-              className="flex-1 h-12 rounded-md px-4 text-base text-[#3d1700] bg-white placeholder:text-[#3d1700]/60 focus:outline-none focus:ring-2 focus:ring-[#fdb600]"
-            />
-            <button
-              type="submit"
-              disabled={!isValid || submitting}
-              className="h-12 rounded-md px-6 font-semibold transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
-            >
-              {submitting ? "Submitting…" : "Notify me"}
-            </button>
-          </form>
-        )}
-
-        {error && (
-          <p
-            id="waitlist-email-error"
-            role="alert"
-            className="mt-3 text-sm"
-            style={{ color: "#fdb600" }}
-          >
-            {error}
-          </p>
-        )}
+        {/* Replaces the old inline email-capture form (waitlist table insert)
+            2026-08-13 (Danielle's call) — sends straight to the beta
+            submission form instead, which collects email itself. */}
+        <a
+          href={BETA_FORM_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-8 inline-flex items-center justify-center h-12 rounded-md px-8 font-bold transition-opacity hover:opacity-90"
+          style={{ backgroundColor: "#fdb600", color: "#3d1700", fontFamily: "'Montserrat', sans-serif" }}
+        >
+          Get on the list
+        </a>
       </section>
 
       <div className="relative z-10 flex items-center gap-4">
