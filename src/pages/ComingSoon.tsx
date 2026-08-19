@@ -82,11 +82,12 @@ const ComingSoon = () => {
           Get on the list for a free repair
         </h1>
         <p
-          className="mt-5 text-base md:text-lg font-medium max-w-md"
-          style={{ fontFamily: "'Montserrat', sans-serif", color: "#fdb600" }}
+          className="mt-5 text-sm md:text-base font-medium max-w-md"
+          style={{ fontFamily: "'Montserrat', sans-serif", color: "#ffffff" }}
         >
-          We're selecting a limited number of shoes for a free Cobbli repair. Shoes are selected
-          on a rolling basis based on fit with the services we're launching with.
+          We're selecting a limited number of shoes for a free Cobbli repair. We'll select shoes
+          based on fit with our services and capacity. We'll reach out on a rolling basis, so if
+          you don't hear back right away, you could still be selected.
         </p>
 
         {/* Replaces the old inline email-capture form (waitlist table insert)
