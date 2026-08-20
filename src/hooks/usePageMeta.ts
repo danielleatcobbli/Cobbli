@@ -78,10 +78,18 @@ export const usePageMeta = ({
     setMeta("twitter:description", description);
     setMeta("twitter:card", "summary_large_image");
 
+    // `image` undefined (not passed at all — every page except BlogPost.tsx
+    // today) means "no per-page override, leave whatever's already set"
+    // (the site-wide default in index.html's og:image/twitter:image tags).
+    // Only an explicit `image: null` clears it. Fixed 2026-08-13 (Danielle's
+    // call, found while fixing the Lovable-branded link preview) — this used
+    // to treat "not passed" the same as "clear it," so every page without
+    // its own image was silently stripping the default og:image/
+    // twitter:image tags on load.
     if (image) {
       setMeta("og:image", image, "property");
       setMeta("twitter:image", image);
-    } else {
+    } else if (image === null) {
       removeMeta("og:image", "property");
       removeMeta("twitter:image");
     }
