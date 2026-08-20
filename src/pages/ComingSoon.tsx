@@ -84,11 +84,11 @@ const ComingSoon = () => {
         {/* Back below the headline 2026-08-13 (Danielle's call — reverted
             the earlier move-above-headline change). */}
         <p
-          className="mt-5 text-xs md:text-sm font-normal max-w-md"
+          className="mt-5 text-sm md:text-base font-normal max-w-md"
           style={{ fontFamily: "'Montserrat', sans-serif", color: "#ffffff" }}
         >
-          We're selecting a limited number of shoes for a free Cobbli repair. We'll select shoes
-          based on fit with our services and capacity on a rolling basis.
+          We're selecting a limited number of shoes for a free repair delivered to your door.
+          We'll select shoes based on fit with our services and capacity on a rolling basis.
         </p>
 
         {/* Replaces the old inline email-capture form (waitlist table insert)
