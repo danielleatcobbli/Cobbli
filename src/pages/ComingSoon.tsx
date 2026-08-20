@@ -76,18 +76,19 @@ const ComingSoon = () => {
           style swap. */}
       <section className="relative z-10 flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto py-10">
         <h1
-          className="text-3xl md:text-5xl font-bold leading-tight text-white"
+          className="text-2xl sm:text-3xl md:text-4xl font-bold leading-tight text-white md:whitespace-nowrap"
           style={{ fontFamily: "'Montserrat', sans-serif" }}
         >
           Get on the list for a free repair
         </h1>
+        {/* Back below the headline 2026-08-13 (Danielle's call — reverted
+            the earlier move-above-headline change). */}
         <p
-          className="mt-5 text-sm md:text-base font-medium max-w-md"
+          className="mt-5 text-xs md:text-sm font-normal max-w-md"
           style={{ fontFamily: "'Montserrat', sans-serif", color: "#ffffff" }}
         >
           We're selecting a limited number of shoes for a free Cobbli repair. We'll select shoes
-          based on fit with our services and capacity. We'll reach out on a rolling basis, so if
-          you don't hear back right away, you could still be selected.
+          based on fit with our services and capacity on a rolling basis.
         </p>
 
         {/* Replaces the old inline email-capture form (waitlist table insert)
