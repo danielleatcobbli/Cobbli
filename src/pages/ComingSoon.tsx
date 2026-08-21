@@ -79,7 +79,7 @@ const ComingSoon = () => {
           className="text-2xl sm:text-3xl md:text-4xl font-bold leading-tight text-white md:whitespace-nowrap"
           style={{ fontFamily: "'Montserrat', sans-serif" }}
         >
-          Get on the list for a free repair
+          Free shoe repairs to your doorstep
         </h1>
         {/* Back below the headline 2026-08-13 (Danielle's call — reverted
             the earlier move-above-headline change). */}
