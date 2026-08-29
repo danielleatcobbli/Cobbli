@@ -17,13 +17,23 @@ const OwnerSettings = () => {
     description: "Owner settings for serviced ZIP codes and pricing.",
   });
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + amber page
+  // heading only; this page still uses the shared Header/Footer shell
+  // (unlike the AdminDashboard/AdminOrders/etc. bespoke ops tools, which
+  // have their own separate chrome and were left alone — see note where
+  // admin restyling was scoped).
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
         <div className="container max-w-2xl py-12 md:py-16 space-y-12">
           <div>
-            <h1 className="text-2xl md:text-3xl font-semibold">Settings</h1>
+            <h1
+              className="text-2xl md:text-3xl uppercase"
+              style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+            >
+              Settings
+            </h1>
             <p className="text-sm text-muted-foreground">
               Manage serviced areas and pricing. Owner only.
             </p>

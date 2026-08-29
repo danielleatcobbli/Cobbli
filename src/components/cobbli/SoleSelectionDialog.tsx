@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -7,131 +5,84 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Camera } from "lucide-react";
+import { Link } from "react-router-dom";
+import { resolePriceForKey, type Service } from "@/types/service";
 
 /**
- * "Worn or damaged sole" follow-up (2026-08-11, Danielle's call) — full-resole
- * used to be one flat price for everyone; now it's priced by specialty brand
- * (fixed price, no sole question needed) or by sole type (leather costs a bit
- * more than rubber; a lug/chunky-tread sole is priced the same as rubber).
- * Some brands and cup soles aren't supported yet, so this doubles as the
- * eligibility gate — see computeResoleOutcome below for what each pick means
- * for the recommendation screen.
+ * "Worn or damaged sole" follow-up — now a single sole-type-match step
+ * (2026-08-27, Danielle's call). It used to be two steps in one dialog,
+ * brand-first-then-sole-type, so specialty brands (Birkenstock, Golden
+ * Goose priced by brand; Christian Louboutin, Maison Margiela shown but
+ * blocked) could be caught before the plain sole-photo match. Danielle
+ * dropped the brand step entirely at launch — Cobbli isn't taking on
+ * Louboutin, Maison Margiela, or any sneaker (including Golden Goose) yet,
+ * and Birkenstock's fixed-price path goes away with it (her call, rather
+ * than keeping a one-off brand chip just for Birkenstock). Lug soles are
+ * also newly unsupported, same treatment as cup soles. What's left is a
+ * single big "which sole looks closest to yours" screen, with the brand/
+ * sneaker exclusions called out as a plain disclaimer instead of a picker.
  *
- * Two steps in one dialog, brand first (2026-08-11, Danielle's call — she
- * tried a shoe-type-first version and a sole-photo-only version before
- * landing here): most of the ambiguity is only in the small set of brands
- * with their own pricing, so checking that first means most customers with a
- * standard brand skip straight to a plain sole-photo match instead of
- * answering two questions.
+ * excludedBrands / RESOLE_BRAND_OPTIONS / ResoleBrandOption and the
+ * "brand" SoleSelectionResult kind are intentionally still supported
+ * downstream (CartLine.resoleBrand, admin order detail, etc.) even though
+ * this dialog can no longer produce one — past orders placed through the
+ * old brand step still have that data and still need to render correctly.
  */
 
-/** The checklist condition label this dialog is gated on — kept here next to
- *  the dialog it triggers, same pattern as SOLE_CONDITION_LABEL /
- *  INSOLE_CONDITION_LABEL in SoleInsoleConditionDialog.tsx. */
 export const RESOLE_CONDITION_LABEL = "Worn or damaged sole";
-
-export type ResoleBrandOption = {
-  /** Shown on the chip. */
-  label: string;
-  /** How this brand is recorded in Supabase (services.excluded_brands and
-   *  bag/order snapshots) — not always identical to the display label, e.g.
-   *  "Christian Louboutin" displays in full but is stored as "Louboutin" to
-   *  match the existing catalog value. */
-  matchKey: string;
-  /** full-resole's variant_key for this brand's fixed price. Undefined for
-   *  brands that are always blocked regardless of excludedBrands (kept
-   *  separate so a brand can be "shown, but not priced yet" without needing
-   *  a Supabase change). */
-  variantKey?: string;
-};
-
-/** The four specialty brands shown at launch (2026-08-11). Birkenstock and
- *  Golden Goose are priced by brand; Christian Louboutin and Maison Margiela
- *  are shown but blocked — Cobbli doesn't have the right sole source for
- *  either yet. Kept as a small fixed list rather than pulled from the
- *  catalog since these are the only brands with their own resole pricing at
- *  all; everything else goes through the sole-type picker below. */
-export const RESOLE_BRAND_OPTIONS: ResoleBrandOption[] = [
-  { label: "Birkenstock", matchKey: "Birkenstock", variantKey: "birkenstock" },
-  { label: "Golden Goose", matchKey: "Golden Goose", variantKey: "golden-goose" },
-  { label: "Christian Louboutin", matchKey: "Louboutin" },
-  { label: "Maison Margiela", matchKey: "Maison Margiela" },
-];
 
 type SoleOption = {
   key: "leather" | "rubber" | "lug" | "cup";
   label: string;
   desc: string;
   supported: boolean;
-  /** full-resole variant_key this maps to for pricing — lug isn't its own
-   *  variant, it's priced the same as rubber (Danielle's call), just shown
-   *  as its own photo so a customer can actually match what they see. */
+  /** full-resole variant_key this maps to for pricing. */
   variantKey: "leather" | "rubber" | null;
 };
 
+// Lug switched to unsupported 2026-08-27 (Danielle's call, alongside
+// dropping the brand step) — it used to quietly price the same as rubber;
+// now it's "not supported yet," same treatment as cup/sneaker.
+//
+// Reordered rubber, leather, sneaker, lug (2026-08-27, Danielle's call) —
+// was leather, rubber, lug, cup. "cup" renamed "Sneaker sole" in its label
+// same day (the `key: "cup"` itself is untouched — SOLE_PHOTO and every
+// other internal reference still key off "cup", only the customer-facing
+// label changed, same pattern as every other display-name-only rename in
+// this codebase). Descriptions also rewritten to Danielle's exact wording.
 const SOLE_OPTIONS: SoleOption[] = [
+  {
+    key: "rubber",
+    label: "Rubber sole",
+    desc: "Smooth or grooved rubber typically found on everyday dress shoes, loafers, flats, and boots.",
+    supported: true,
+    variantKey: "rubber",
+  },
   {
     key: "leather",
     label: "Leather sole",
-    desc: "Smooth, stitched sole — dress shoes, flats, loafers, sandals",
+    desc: "Smooth, mostly leather sole often found on dress shoes, formal loafers, heels, and some boots",
     supported: true,
     variantKey: "leather",
   },
   {
-    key: "rubber",
-    label: "Rubber sole",
-    desc: "Smooth or lightly grooved rubber — boots, loafers, everyday shoes",
-    supported: true,
-    variantKey: "rubber",
+    key: "cup",
+    label: "Sneaker sole",
+    desc: "One molded piece that wraps up the sides of dress or athletic sneakers",
+    supported: false,
+    variantKey: null,
   },
   {
     key: "lug",
     label: "Lug sole",
-    desc: "Thick, deep tread — work boots, hiking boots, some Chelsea boots, chunky loafers",
-    supported: true,
-    variantKey: "rubber",
-  },
-  {
-    key: "cup",
-    label: "Cup sole",
-    desc: "One molded piece wrapping up the sides — fashion sneakers",
+    desc: "Thick, deep tread soles found on hiking, work, combat, utility, and some Chelsea boots. Also used on some chunky loafers.",
     supported: false,
     variantKey: null,
   },
 ];
 
-/** Simple schematic line art fallback for any sole type without a real photo
- *  yet — kept defensively (all four now have real photos as of 2026-08-12,
- *  see SOLE_PHOTO below) so a future new sole type degrades gracefully
- *  instead of breaking if a photo isn't ready when it's added. */
-const SoleIcon = ({ variant }: { variant: "leather" | "rubber" }) => (
-  <svg width="48" height="34" viewBox="0 0 48 34" aria-hidden="true" className="shrink-0">
-    <path
-      d="M5,13 Q5,30 24,30 Q43,30 43,13 Z"
-      fill="none"
-      stroke="#7a5c40"
-      strokeWidth="1.8"
-    />
-    {variant === "leather" ? (
-      <path d="M9,14 Q9,26 24,26 Q39,26 39,14" fill="none" stroke="#7a5c40" strokeWidth="1" strokeDasharray="2 2" />
-    ) : (
-      <>
-        <line x1="12" y1="17" x2="12" y2="26" stroke="#7a5c40" strokeWidth="1" />
-        <line x1="18" y1="15" x2="18" y2="28" stroke="#7a5c40" strokeWidth="1" />
-        <line x1="24" y1="14" x2="24" y2="29" stroke="#7a5c40" strokeWidth="1" />
-        <line x1="30" y1="15" x2="30" y2="28" stroke="#7a5c40" strokeWidth="1" />
-        <line x1="36" y1="17" x2="36" y2="26" stroke="#7a5c40" strokeWidth="1" />
-      </>
-    )}
-  </svg>
-);
-
-/** Real photos, dropped into public/condition-photos/sole-types by Danielle
- *  (lug/cup 2026-08-11, leather/rubber 2026-08-12 — all four re-saved to a
- *  matching 624x416 crop so the tiles are visually consistent regardless of
- *  the wildly different source sizes she dropped in, e.g. the rubber source
- *  photo was ~5MB at 2400x1792). */
-const SOLE_PHOTO: Partial<Record<SoleOption["key"], string>> = {
+/** Real photos, dropped into public/condition-photos/sole-types by Danielle. */
+const SOLE_PHOTO: Record<SoleOption["key"], string> = {
   lug: "/condition-photos/sole-types/lug-sole.png",
   cup: "/condition-photos/sole-types/cup-sole.png",
   leather: "/condition-photos/sole-types/leather-sole.png",
@@ -146,33 +97,37 @@ export type SoleSelectionResult =
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** full-resole's live excludedBrands, so a brand chip that's been
-   *  re-enabled in Supabase (excluded_brands updated) reflects that here
-   *  without a code change. */
-  excludedBrands: string[];
+  /** The live full-resole catalog row, so the price range up top and each
+   *  supported tile's own price (2026-08-27, Danielle's call) come straight
+   *  from Supabase (service_variants.standard_cents) instead of a hardcoded
+   *  number that could drift from what's actually charged at checkout. */
+  resoleService: Service | null;
   onConfirm: (result: SoleSelectionResult) => void;
 };
 
-const SoleSelectionDialog = ({ open, onOpenChange, excludedBrands, onConfirm }: Props) => {
-  const [step, setStep] = useState<"brand" | "sole">("brand");
-
-  useEffect(() => {
-    if (open) setStep("brand");
-  }, [open]);
-
+const SoleSelectionDialog = ({ open, onOpenChange, resoleService, onConfirm }: Props) => {
   const resolve = (result: SoleSelectionResult) => {
     onConfirm(result);
     onOpenChange(false);
   };
 
-  const pickBrand = (opt: ResoleBrandOption) => {
-    const blocked = !opt.variantKey || excludedBrands.includes(opt.matchKey);
-    if (blocked) {
-      resolve({ kind: "blocked", label: opt.label });
-    } else {
-      resolve({ kind: "brand", label: opt.label, variantKey: opt.variantKey! });
-    }
-  };
+  const priceFor = (key: "leather" | "rubber"): number | null =>
+    resoleService ? resolePriceForKey(resoleService, key) : null;
+
+  // Range shown up top (2026-08-27, Danielle's call — "show a price range
+  // and then show the appropriate price within the selection"). Derived from
+  // whatever supported sole options actually resolve to a price, rather than
+  // hardcoding "$70–$85", so it stays correct if pricing changes later or a
+  // sole option's supported/unsupported status changes.
+  const supportedPrices = SOLE_OPTIONS.map((o) => (o.variantKey ? priceFor(o.variantKey) : null)).filter(
+    (n): n is number => n !== null,
+  );
+  const priceRangeLabel =
+    supportedPrices.length === 0
+      ? null
+      : Math.min(...supportedPrices) === Math.max(...supportedPrices)
+        ? `$${Math.min(...supportedPrices)}`
+        : `$${Math.min(...supportedPrices)}–$${Math.max(...supportedPrices)}`;
 
   const pickSole = (opt: SoleOption) => {
     if (!opt.supported || !opt.variantKey) {
@@ -184,99 +139,62 @@ const SoleSelectionDialog = ({ open, onOpenChange, excludedBrands, onConfirm }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        {step === "brand" ? (
-          <>
-            <DialogHeader>
-              <DialogTitle className="text-2xl">Do any of these brands make your pair?</DialogTitle>
-            </DialogHeader>
-            <p className="text-sm text-muted-foreground -mt-2">
-              These brands use specialty soles, so pricing differs from our standard resole.
-            </p>
-            <div className="grid grid-cols-2 gap-2.5 mt-2">
-              {RESOLE_BRAND_OPTIONS.map((opt) => {
-                // Blocked covers both the two brands with no variantKey at
-                // all (Louboutin/Margiela — no sole source yet) and any
-                // brand excludedBrands picks up dynamically later, so a
-                // priced brand that gets paused shows the same "coming
-                // soon," disabled treatment automatically. Danielle's call
-                // (2026-08-12): rather than letting someone pick a blocked
-                // brand and only finding out afterward, gray it out and stop
-                // the click before it goes anywhere.
-                const blocked = !opt.variantKey || excludedBrands.includes(opt.matchKey);
-                return (
-                  <button
-                    key={opt.label}
-                    type="button"
-                    disabled={blocked}
-                    aria-disabled={blocked}
-                    onClick={() => { if (!blocked) pickBrand(opt); }}
-                    className={
-                      blocked
-                        ? "rounded-md border border-border px-3 py-2.5 text-sm font-medium text-left opacity-50 cursor-not-allowed"
-                        : "rounded-md border border-border px-3 py-2.5 text-sm font-medium text-primary text-left hover:border-primary/60 transition-colors"
-                    }
-                  >
-                    <span className={blocked ? "text-muted-foreground" : undefined}>{opt.label}</span>
-                    {blocked && (
-                      <span
-                        className="block text-[10px] font-medium mt-0.5 px-1.5 py-0.5 rounded-full w-fit"
-                        style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
-                      >
-                        Coming soon
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              type="button"
-              onClick={() => setStep("sole")}
-              className="w-full mt-1 rounded-md px-3 py-2.5 text-sm font-medium text-white"
-              style={{ backgroundColor: "#3d1700" }}
-            >
-              None of these
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => setStep("brand")}
-              className="text-xs text-muted-foreground hover:text-primary -mt-1 mb-1 self-start"
-            >
-              ← Back
-            </button>
-            <DialogHeader>
-              <DialogTitle className="text-2xl">Which sole looks closest to yours?</DialogTitle>
-            </DialogHeader>
-            <p className="text-sm text-muted-foreground -mt-2">
-              Match the shape and tread — not sure? Send us a photo instead.
-            </p>
-            <div className="flex flex-col gap-2 mt-2">
-              {SOLE_OPTIONS.map((opt) => {
-                const photo = SOLE_PHOTO[opt.key];
-                return (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => pickSole(opt)}
-                    className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5 text-left hover:border-primary/60 transition-colors"
-                  >
-                    <span className="shrink-0 w-12 h-9 flex items-center justify-center overflow-hidden rounded" style={{ backgroundColor: "#f5f0e8" }}>
-                      {photo ? (
-                        <img src={photo} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <SoleIcon variant={opt.key === "leather" ? "leather" : "rubber"} />
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-primary">{opt.label}</span>
-                      <span className="block text-xs text-muted-foreground mt-0.5 leading-snug">{opt.desc}</span>
-                    </span>
+      {/* Sized way up 2026-08-27 (Danielle's call: "the pop-up may need to
+          be bigger so people can really see the sole images") — from a
+          max-w-md dialog with 48x36px thumbnails to this, max-w-3xl with
+          big photo cards in a 2-column grid. Scrolls internally
+          (max-h-[90vh] overflow-y-auto) so it still fits on shorter
+          screens instead of running off the bottom. The "← Back" link that
+          used to live here (for returning from the sole step to the brand
+          step) is gone along with the brand step itself — closing is just
+          the dialog's own X now. */}
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-2xl md:text-3xl">Which sole looks closest to yours?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground -mt-2">
+          Match the shape and tread — not sure? Send us a photo instead.
+          {priceRangeLabel && (
+            <>
+              {" "}
+              <span className="font-bold" style={{ color: "#3d1700" }}>
+                {priceRangeLabel} per pair
+              </span>
+              , depending on sole type.
+            </>
+          )}
+        </p>
+        {/* Unsupported-categories disclaimer 2026-08-27 (Danielle's call) —
+            replaces the old brand-picker step. Rather than asking brand up
+            front, this is a single heads-up shown right where the customer
+            is about to proceed, so anyone with one of these still sees it
+            before matching a sole. Text updated same day to Danielle's exact
+            wording. */}
+        <p
+          className="text-xs rounded-md px-3 py-2"
+          style={{ backgroundColor: "#fff5cc", color: "#3d1700" }}
+        >
+          Sneakers and shoes made by Christian Louboutin shoes and Maison Margiela are not currently
+          supported for this service.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+          {SOLE_OPTIONS.map((opt) => {
+            const price = opt.variantKey ? priceFor(opt.variantKey) : null;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => pickSole(opt)}
+                className="flex flex-col text-left rounded-lg border border-border overflow-hidden hover:border-primary/60 transition-colors"
+              >
+                <span className="block w-full aspect-[4/3] overflow-hidden" style={{ backgroundColor: "#f5f0e8" }}>
+                  <img src={SOLE_PHOTO[opt.key]} alt="" className="w-full h-full object-cover" />
+                </span>
+                <span className="flex flex-col gap-1 p-4">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-base font-semibold text-primary">{opt.label}</span>
                     <span
-                      className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full"
+                      className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full"
                       style={
                         opt.supported
                           ? { backgroundColor: "#EAF3DE", color: "#27500A" }
@@ -285,19 +203,29 @@ const SoleSelectionDialog = ({ open, onOpenChange, excludedBrands, onConfirm }: 
                     >
                       {opt.supported ? "Supported" : "Not supported"}
                     </span>
-                  </button>
-                );
-              })}
-            </div>
-            <Link
-              to="/start-repair/assessment"
-              className="flex items-center justify-center gap-2 mt-1 rounded-md border border-dashed border-muted-foreground/40 px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
-            >
-              <Camera size={16} />
-              Not sure — send us a photo
-            </Link>
-          </>
-        )}
+                  </span>
+                  {/* Each supported tile's own price, right below the label
+                      (2026-08-27, Danielle's call) — the range up top says
+                      "somewhere in this ballpark," this says exactly what
+                      picking this specific sole costs. */}
+                  {price !== null && (
+                    <span className="text-lg font-bold" style={{ color: "#3d1700" }}>
+                      ${price} <span className="text-xs font-normal text-muted-foreground">per pair</span>
+                    </span>
+                  )}
+                  <span className="text-sm text-muted-foreground leading-snug">{opt.desc}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <Link
+          to="/start-repair/assessment"
+          className="flex items-center justify-center gap-2 mt-1 rounded-md border border-dashed border-muted-foreground/40 px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+        >
+          <Camera size={16} />
+          Not sure — send us a photo
+        </Link>
       </DialogContent>
     </Dialog>
   );

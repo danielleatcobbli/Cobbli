@@ -31,7 +31,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { X, Camera } from "lucide-react";
+import { X, Camera, ArrowUpRight } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
@@ -59,6 +59,10 @@ import SoleSelectionDialog, {
   RESOLE_CONDITION_LABEL,
   type SoleSelectionResult,
 } from "@/components/cobbli/SoleSelectionDialog";
+import FollowUpSeverityDialog, {
+  SEVERITY_QUESTIONS,
+  type SeverityQuestion,
+} from "@/components/cobbli/FollowUpSeverityDialog";
 import { trackEvent } from "@/lib/analytics";
 import iconOdor from "@/assets/category-icons/odor.svg";
 
@@ -167,6 +171,29 @@ const StartRepair = () => {
     sole?: SoleInsoleAction;
     insole?: SoleInsoleAction;
   }>({});
+
+  // Severity follow-up questions — MOCKUP ONLY, not wired to pricing yet
+  // (2026-08-27, Danielle's ask: "mock this up before wiring it"). Runs
+  // strictly after the existing sole/insole + resole chain above, so it
+  // never disturbs that logic — see proceedPastSoleFlow(), which every
+  // former direct seeRecommendations(...) call site now goes through
+  // instead. When more than one checked condition needs a follow-up
+  // (e.g. both "Stains" and "Scuffs"), they're asked one at a time in
+  // SEVERITY_QUESTIONS' own order (Stains, Scuffs, Scratches, then Worn
+  // or missing heel tip) — the same category order the checklist itself
+  // already uses everywhere else in the app.
+  const [severityQueue, setSeverityQueue] = useState<SeverityQuestion[]>([]);
+  const [severityOpen, setSeverityOpen] = useState(false);
+  // Captured per condition (e.g. { Stains: "heavy" }) for future wiring —
+  // not read by seeRecommendations() yet, see FollowUpSeverityDialog.tsx.
+  const [severityAnswers, setSeverityAnswers] = useState<Record<string, string>>({});
+  // Holds the sole/insole + resole answers while the severity queue runs,
+  // so the real seeRecommendations() call at the end of the queue still
+  // gets them — same stash pattern as pendingSoleInsoleAnswers above.
+  const [pendingFinalAnswers, setPendingFinalAnswers] = useState<{
+    answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction };
+    resoleAnswer?: SoleSelectionResult;
+  }>({ answers: {} });
 
   // Bug fix (2026-07-27, Danielle's report): looping back to "add more
   // services" for a pair that already has services in the bag used to show a
@@ -365,45 +392,109 @@ const StartRepair = () => {
     id: string;
   }) => {
     const isChecked = checkedLabels.has(cond.label);
+    // Amber frame-around-the-photo treatment 2026-08-27 (Danielle's call) —
+    // matches ServiceCard's "amber" theme (the homepage/Services cards):
+    // padding wraps the whole tile so amber shows on all four sides of the
+    // photo instead of the photo running edge-to-edge, and the condition
+    // name sits on the same amber background in cream text. Selected state
+    // is now a brown ring around the tile (border goes from transparent to
+    // solid) rather than a swapped background/border color, since every
+    // tile is amber now regardless of checked state.
     return (
       <label
         key={cond.id}
         htmlFor={cond.id}
-        className="flex flex-col rounded-xl border overflow-hidden cursor-pointer transition-colors"
+        className="flex flex-col rounded-xl overflow-hidden cursor-pointer transition-all"
         style={{
-          borderColor: isChecked ? "#3d1700" : "#e8e0d0",
-          borderWidth: isChecked ? 2 : 1,
-          backgroundColor: isChecked ? "#fff5cc" : "#fff",
+          backgroundColor: "#fdb600",
+          border: isChecked ? "3px solid #3d1700" : "3px solid transparent",
         }}
       >
-        <div className="relative">
-          <BeforeAfterImage
-            before={
-              serviceBySlug.get(cond.slug)?.imageUrl ??
-              cond.imageUrl ??
-              CATEGORY_ICONS[cond.category]
-            }
-            after={serviceBySlug.get(cond.slug)?.afterImageUrl ?? cond.afterImageUrl}
-            alt=""
-            className="aspect-square w-full object-cover"
-            style={{ backgroundColor: "#f5f0e8" }}
-          />
-          {/* "Common" tag removed 2026-08-13 (Danielle's call) — it sat on
-              top of the condition photo and was blocking part of the "Worn
-              or missing heel tip" image, and with the catalog still small
-              she didn't think the common/popular distinction was pulling its
-              weight yet. COMMON_CONDITION_LABELS itself is untouched, so
-              common conditions still sort to the front (see sortCommonFirst
-              above) — only the visual badge is gone. Removed the same way
-              from ServiceCard.tsx and ServiceDetail.tsx's "Popular" tag. */}
-          <Checkbox
-            id={cond.id}
-            checked={isChecked}
-            onCheckedChange={() => toggleCondition(cond.label)}
-            className="absolute top-2 right-2 bg-white/90"
-          />
+        <div className="flex flex-col flex-1 p-2.5">
+          <div className="relative aspect-square overflow-hidden rounded-lg">
+            <BeforeAfterImage
+              before={
+                serviceBySlug.get(cond.slug)?.imageUrl ??
+                cond.imageUrl ??
+                CATEGORY_ICONS[cond.category]
+              }
+              after={serviceBySlug.get(cond.slug)?.afterImageUrl ?? cond.afterImageUrl}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ backgroundColor: "#3d1700" }}
+            />
+            {/* "Common" tag removed 2026-08-13 (Danielle's call) — it sat on
+                top of the condition photo and was blocking part of the "Worn
+                or missing heel tip" image, and with the catalog still small
+                she didn't think the common/popular distinction was pulling
+                its weight yet. COMMON_CONDITION_LABELS itself is untouched,
+                so common conditions still sort to the front (see
+                sortCommonFirst above) — only the visual badge is gone.
+                Removed the same way from ServiceCard.tsx and
+                ServiceDetail.tsx's "Popular" tag. */}
+            <Checkbox
+              id={cond.id}
+              checked={isChecked}
+              onCheckedChange={() => toggleCondition(cond.label)}
+              className="absolute top-2 right-2 bg-white/90"
+            />
+          </div>
+          {/* Condition name links through to its service detail page
+              (/start-repair/services/:slug, the in-flow variant) so someone
+              who wants more detail before deciding can get it — 2026-08-27,
+              Danielle's call. Nested <a>/<Link> inside a <label> doesn't
+              forward its click to the paired checkbox (only non-interactive
+              label content does that), so this works as a plain link
+              without also toggling the tile. stopPropagation kept as a
+              belt-and-braces guard.
+
+              Text switched from cream to Cobbli brown (2026-08-27, Danielle's
+              call, testing for more standout) — brown-on-amber is
+              meaningfully higher contrast than cream-on-amber (cream and
+              amber sit close in lightness; brown is dark), so both the name
+              and price read more clearly against the tile. */}
+          <Link
+            to={`/start-repair/services/${cond.slug}`}
+            onClick={(e) => e.stopPropagation()}
+            className="block pt-2 w-fit hover:underline"
+            style={{ color: "#3d1700" }}
+          >
+            <span className="text-[13px] font-medium leading-snug inline-flex items-start gap-0.5">
+              <span className="line-clamp-2">{cond.label}</span>
+              <ArrowUpRight size={12} className="shrink-0 opacity-70 mt-0.5" />
+            </span>
+          </Link>
+          {/* Price shown right on the tile 2026-08-27 (Danielle's call) — now
+              that "Services" is off the top nav and this checklist is the
+              main entry point, most people were never seeing pricing at all
+              unless they clicked through to a condition's own service page.
+              Same source/format as ServiceCard's amber-card price (DB
+              card_price_label, "per pair"/etc. suffix stripped). Color
+              matches the name's brown (see comment above).
+
+              mt-auto (2026-08-27, Danielle's call: "they should all be
+              showing at the bottom of the square... even if the condition
+              name is only one line") — this grid (grid-cols-2/3/5 below) uses
+              CSS Grid's default `align-items: stretch`, so every tile in a
+              row is already stretched to match the tallest tile in that row
+              (e.g. a row with one 2-line name stretches every tile in it to
+              that height) — the missing piece was that nothing inside the
+              tile was using that extra space, so a 1-line tile's price sat
+              wherever its shorter content happened to end, with the leftover
+              stretched height appearing as empty space below the price
+              instead. `mt-auto` on a flex-column child pushes it to fill any
+              leftover space above itself, so the price now always sits flush
+              against the tile's true bottom edge regardless of how tall the
+              row got stretched or how many lines the name above it took. An
+              earlier attempt reserved a fixed min-height for the name block
+              instead — unnecessary once mt-auto is doing the real work, so
+              it's gone. */}
+          {serviceBySlug.get(cond.slug)?.cardPriceLabel && (
+            <p className="text-[13px] font-bold pt-0.5 mt-auto" style={{ color: "#3d1700" }}>
+              {serviceBySlug.get(cond.slug)!.cardPriceLabel.replace(/\s+per\s+\S.*/i, "").trim()}
+            </p>
+          )}
         </div>
-        <span className="text-[13px] font-medium text-primary/90 px-2.5 py-2 leading-snug">{cond.label}</span>
       </label>
     );
   };
@@ -467,7 +558,7 @@ const StartRepair = () => {
       setSoleSelectionOpen(true);
       return;
     }
-    seeRecommendations({});
+    proceedPastSoleFlow({});
   };
 
   // Sole/insole confirmed — chain into the resole question if this pair also
@@ -478,12 +569,54 @@ const StartRepair = () => {
       setSoleSelectionOpen(true);
       return;
     }
-    seeRecommendations(answers);
+    proceedPastSoleFlow(answers);
   };
 
   const onSoleSelectionConfirm = (result: SoleSelectionResult) => {
-    seeRecommendations(pendingSoleInsoleAnswers, result);
+    proceedPastSoleFlow(pendingSoleInsoleAnswers, result);
     setPendingSoleInsoleAnswers({});
+  };
+
+  // Severity mockup queue — MOCKUP ONLY, see the state comment above and
+  // FollowUpSeverityDialog.tsx. Every path that used to call
+  // seeRecommendations(...) directly now calls this instead: if this pair
+  // has any checked condition with a severity question (Stains, Scuffs,
+  // Scratches, or Worn or missing heel tip), it's asked here, one at a
+  // time, before the real recommendation is computed. If none apply, this
+  // is a same-tick passthrough to seeRecommendations — no behavior change
+  // for pairs that don't touch any of the four conditions.
+  const buildSeverityQueue = (): SeverityQuestion[] =>
+    SEVERITY_QUESTIONS.filter((q) => checkedLabels.has(q.conditionLabel));
+
+  const proceedPastSoleFlow = (
+    answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction },
+    resoleAnswer?: SoleSelectionResult,
+  ) => {
+    const queue = buildSeverityQueue();
+    if (queue.length > 0) {
+      setSeverityAnswers({});
+      setSeverityQueue(queue);
+      setPendingFinalAnswers({ answers, resoleAnswer });
+      setSeverityOpen(true);
+      return;
+    }
+    seeRecommendations(answers, resoleAnswer);
+  };
+
+  const onSeverityConfirm = (conditionLabel: string, optionKey: string) => {
+    trackEvent("severity_question_answered", { condition: conditionLabel, option: optionKey });
+    const nextAnswers = { ...severityAnswers, [conditionLabel]: optionKey };
+    setSeverityAnswers(nextAnswers);
+    const remaining = severityQueue.slice(1);
+    if (remaining.length > 0) {
+      // Dialog stays open — swapping severityQueue[0] moves it to the next
+      // question in the queue.
+      setSeverityQueue(remaining);
+      return;
+    }
+    setSeverityQueue([]);
+    setSeverityOpen(false);
+    seeRecommendations(pendingFinalAnswers.answers, pendingFinalAnswers.resoleAnswer);
   };
 
   const seeRecommendations = (
@@ -642,7 +775,7 @@ const StartRepair = () => {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-white flex flex-col">
+      <main className="min-h-screen flex flex-col bg-white">
         <Header />
         <section className="flex-1 flex items-center justify-center py-20">
           <BrandSpinner size="lg" />
@@ -652,8 +785,17 @@ const StartRepair = () => {
     );
   }
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg, Header theme=cream,
+  // and the two page headings (h1/subtext) switched to amber Fraunces/
+  // Instrument Sans, matching the rest of the site. The checklist tiles,
+  // category pills, validation states, and buttons below are deliberately
+  // left in their existing functional styling (selected/error/active states
+  // rely on specific brand-color meaning, not just decoration) — recoloring
+  // those wholesale risked breaking legibility on this page's more complex
+  // interactive states, which she confirmed was an acceptable scope line
+  // when asked.
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen flex flex-col bg-white">
       <Header />
       <section className="flex-1 py-12 md:py-16">
         <div className={`container ${step === "checklist" ? "max-w-4xl" : "max-w-2xl"}`}>
@@ -661,8 +803,13 @@ const StartRepair = () => {
             <>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h1 className="font-display text-3xl md:text-4xl text-primary">What needs attention?</h1>
-                  <p className="mt-2 text-primary/80">
+                  <h1
+                    className="text-3xl md:text-4xl uppercase"
+                    style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+                  >
+                    What needs attention?
+                  </h1>
+                  <p className="mt-2" style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif", opacity: 0.85 }}>
                     Select everything that applies and we'll recommend the right services.
                   </p>
                 </div>
@@ -678,15 +825,19 @@ const StartRepair = () => {
                 <Link
                   to="/start-repair/assessment"
                   onClick={() => trackEvent("start_repair", { source: "starter_repair_photo_callout" })}
-                  className="flex items-center gap-2.5 w-64 shrink-0 rounded-lg border border-border px-3 py-2.5 hover:border-primary/40 transition-colors"
+                  className="flex items-center gap-2.5 w-64 shrink-0 rounded-lg px-3 py-2.5 transition-colors hover:opacity-90 shadow-soft"
+                  style={{ backgroundColor: "#fdb600" }}
                 >
                   <span
                     className="flex items-center justify-center h-8 w-8 rounded-md shrink-0"
-                    style={{ backgroundColor: "#f5f0e8" }}
+                    style={{ backgroundColor: "#fff5cc" }}
                   >
-                    <Camera size={16} className="text-[#7a5c40]" />
+                    <Camera size={16} style={{ color: "#fdb600" }} />
                   </span>
-                  <span className="text-[11px] leading-snug text-primary/80 text-left">
+                  {/* Brown text (2026-08-27, Danielle's call) — same
+                      brown-on-amber standout treatment as the condition
+                      tiles below. */}
+                  <span className="text-[11px] leading-snug text-left" style={{ color: "#3d1700" }}>
                     <strong className="font-semibold">Not sure?</strong> Send a photo or video and we'll recommend.
                   </span>
                 </Link>
@@ -706,8 +857,18 @@ const StartRepair = () => {
                   H1/subtext and above the category pills (2026-07-27,
                   Danielle's call) rather than above the H1. */}
               <div className="mt-6" id="pair-field">
-                <p className="text-sm font-medium mb-1.5" style={{ color: "#7a5c40" }}>
+                <p className="text-sm font-medium" style={{ color: "#7a5c40" }}>
                   Which pair needs attention? <span style={{ color: "#a32d2d" }}>*</span>
+                </p>
+                {/* Helper text added 2026-08-27 (Danielle's call) — the point
+                    isn't just "give this pair a name," it's that if someone
+                    sends in more than one pair, this description is what
+                    tells them apart later (in the bag, at checkout, in their
+                    account) — that wasn't obvious from the label/placeholder
+                    alone. */}
+                <p className="text-xs mt-0.5 mb-1.5" style={{ color: "#8a7a68" }}>
+                  Describe your shoes so we can match the right services to them and tell your pairs
+                  apart if you're sending in more than one.
                 </p>
                 <div className="flex items-center gap-2 flex-wrap">
                   {showPairDropdown && (
@@ -730,7 +891,16 @@ const StartRepair = () => {
                       ))}
                     </select>
                   )}
-                  {isAddingNewPair && (
+                  {/* Guard added 2026-08-27 — falls back to the free-text
+                      field whenever there's no dropdown to show at all
+                      (`!showPairDropdown`), not just when isAddingNewPair is
+                      true. Without this, a selectedPairId carried over from
+                      elsewhere (e.g. arriving via a service's "Start a
+                      repair") while `pairs` hasn't loaded yet (or is
+                      genuinely empty) left neither control rendering — the
+                      "Which pair needs attention?" label with nothing
+                      underneath it Danielle flagged. */}
+                  {(isAddingNewPair || !showPairDropdown) && (
                     <input
                       type="text"
                       aria-invalid={pairError && !isPairFilled}
@@ -761,42 +931,62 @@ const StartRepair = () => {
               {/* Category slider — switched from a horizontally-scrolling row
                   to a wrapping grid (2026-07-23, Danielle's call): "Cleaning &
                   odor" was falling off the right edge, forcing a scroll to
-                  see it, which she doesn't want at all. Same fixed-width
-                  auto-fit column technique already used by CategoryFilterBar's
-                  non-scrollable mode — every button is the same width
-                  regardless of label length, labels wrap onto a second line
-                  within that width instead of forcing the button wider, and
-                  the whole row wraps onto a second line of its own once
-                  columns stop fitting (e.g. on a narrower window), rather
-                  than ever requiring horizontal scroll.
+                  see it, which she doesn't want at all.
 
-                  Column min-width/gap/padding tightened 2026-07-27 (Danielle's
-                  call) — at the old 76px minimum + gap-3, 10 tiles (All + 9
-                  categories) was juuust past what fits at this container's
-                  narrowest desktop width (768px, before max-w-4xl takes over
-                  at the lg breakpoint), so "Zipper" alone kept falling to its
-                  own second row. Shrunk enough to fit all 10 in that
-                  narrowest case with room to spare. */}
+                  Take 2 on spacing (2026-08-27, Danielle's call) — take 1
+                  switched to content-sized flex items with a fixed gap,
+                  reasoning that equal-width stretched columns made the gap
+                  LOOK uneven since labels filled their box by different
+                  amounts. She came back with the opposite ask: she wants the
+                  ICONS evenly spaced from each other and every tab's box the
+                  same size — which content-sized items can't guarantee either
+                  (box width varies with label length, so icon-to-icon
+                  distance varies too). Fixed-width grid columns (84px, not
+                  auto-fit/1fr stretching to fill the container) solve both at
+                  once: every box is identically sized, and since each icon is
+                  centered in its box, a constant gap between boxes means a
+                  constant gap between icons too — regardless of label length.
+                  Bumped the gap up from the old 6px to 24px for the more
+                  spread-out feel she asked for. Auto-fill (not auto-fit)
+                  still wraps onto additional rows instead of ever requiring
+                  horizontal scroll; unlike take-1's stretch approach, the row
+                  just doesn't force itself to span the full container width
+                  anymore, which is fine since the columns are a fixed size
+                  by design now. */}
               <div
                 role="tablist"
                 aria-label="Checklist categories"
-                className="mt-8 grid gap-1.5"
-                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(62px, 1fr))" }}
+                className="mt-8 grid gap-6"
+                style={{ gridTemplateColumns: "repeat(auto-fill, 84px)" }}
               >
                 <button
                   type="button"
                   role="tab"
                   aria-selected={activeChecklistCategory === "All"}
                   onClick={() => setActiveChecklistCategory("All")}
-                  className={`flex flex-col items-center gap-1 px-1.5 py-2.5 rounded-xl text-[11px] font-medium text-center transition-colors min-w-0 w-full ${
-                    activeChecklistCategory === "All" ? "text-primary border-[1.5px]" : "text-[#7a5c40] hover:text-primary"
-                  }`}
-                  style={activeChecklistCategory === "All" ? { backgroundColor: "#f5f0e8", borderColor: "#3d1700" } : undefined}
+                  className="flex flex-col items-center gap-1 px-1 py-2.5 rounded-xl text-[11px] font-medium text-center transition-colors w-full hover:opacity-80"
+                  style={{ color: "#3d1700" }}
                 >
-                  <img src={CATEGORY_ICONS["All services"]} alt="" aria-hidden="true" style={{ width: 20, height: 20 }} />
                   <span
-                    className="leading-snug"
-                    style={activeChecklistCategory === "All" ? { borderBottom: "2px solid #fdb600", paddingBottom: 1 } : undefined}
+                    aria-hidden="true"
+                    style={{
+                      display: "block",
+                      width: 20,
+                      height: 20,
+                      backgroundColor: "#3d1700",
+                      WebkitMaskImage: `url(${CATEGORY_ICONS["All services"]})`,
+                      maskImage: `url(${CATEGORY_ICONS["All services"]})`,
+                      WebkitMaskSize: "contain",
+                      maskSize: "contain",
+                      WebkitMaskRepeat: "no-repeat",
+                      maskRepeat: "no-repeat",
+                      WebkitMaskPosition: "center",
+                      maskPosition: "center",
+                    }}
+                  />
+                  <span
+                    className="leading-snug max-w-[78px]"
+                    style={activeChecklistCategory === "All" ? { borderBottom: "2px solid #3d1700", paddingBottom: 1 } : undefined}
                   >
                     All
                   </span>
@@ -811,15 +1001,29 @@ const StartRepair = () => {
                       role="tab"
                       aria-selected={isActive}
                       onClick={() => setActiveChecklistCategory(cat)}
-                      className={`flex flex-col items-center gap-1 px-1.5 py-2.5 rounded-xl text-[11px] font-medium text-center transition-colors min-w-0 w-full ${
-                        isActive ? "text-primary border-[1.5px]" : "text-[#7a5c40] hover:text-primary"
-                      }`}
-                      style={isActive ? { backgroundColor: "#f5f0e8", borderColor: "#3d1700" } : undefined}
+                      className="flex flex-col items-center gap-1 px-1 py-2.5 rounded-xl text-[11px] font-medium text-center transition-colors w-full hover:opacity-80"
+                      style={{ color: "#3d1700" }}
                     >
-                      <img src={CATEGORY_ICONS[cat]} alt="" aria-hidden="true" style={{ width: 20, height: 20 }} />
                       <span
-                        className="leading-snug"
-                        style={isActive ? { borderBottom: "2px solid #fdb600", paddingBottom: 1 } : undefined}
+                        aria-hidden="true"
+                        style={{
+                          display: "block",
+                          width: 20,
+                          height: 20,
+                          backgroundColor: "#3d1700",
+                          WebkitMaskImage: `url(${CATEGORY_ICONS[cat]})`,
+                          maskImage: `url(${CATEGORY_ICONS[cat]})`,
+                          WebkitMaskSize: "contain",
+                          maskSize: "contain",
+                          WebkitMaskRepeat: "no-repeat",
+                          maskRepeat: "no-repeat",
+                          WebkitMaskPosition: "center",
+                          maskPosition: "center",
+                        }}
+                      />
+                      <span
+                        className="leading-snug max-w-[78px]"
+                        style={isActive ? { borderBottom: "2px solid #3d1700", paddingBottom: 1 } : undefined}
                       >
                         {categoryDisplayLabel(cat)}
                       </span>
@@ -895,6 +1099,7 @@ const StartRepair = () => {
                 <Button
                   type="button"
                   size="lg"
+                  variant="hero"
                   onClick={onSeeRecommendationsClick}
                 >
                   See my recommendations
@@ -910,7 +1115,12 @@ const StartRepair = () => {
               >
                 ← Back to checklist
               </button>
-              <h1 className="font-display text-3xl md:text-4xl text-primary">Here's what we recommend</h1>
+              <h1
+                className="text-3xl md:text-4xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                Here's what we recommend
+              </h1>
 
               {notOffered.length > 0 && (
                 <div className="mt-6 flex flex-col gap-3">
@@ -1005,11 +1215,13 @@ const StartRepair = () => {
                   onClick={onAddAnotherPair}
                   disabled={!canFinalize}
                   className={!canFinalize ? "opacity-50 cursor-not-allowed" : ""}
+                  style={{ borderColor: "#fdb600", color: "#fdb600" }}
                 >
                   Add another pair to my order
                 </Button>
                 <Button
                   type="button"
+                  variant="hero"
                   size="lg"
                   onClick={onGoToCheckout}
                   disabled={!canFinalize}
@@ -1042,8 +1254,18 @@ const StartRepair = () => {
       <SoleSelectionDialog
         open={soleSelectionOpen}
         onOpenChange={setSoleSelectionOpen}
-        excludedBrands={(services ?? []).find((s) => s.slug === "full-resole")?.excludedBrands ?? []}
+        resoleService={(services ?? []).find((s) => s.slug === "full-resole") ?? null}
         onConfirm={onSoleSelectionConfirm}
+      />
+
+      {/* MOCKUP ONLY — see FollowUpSeverityDialog.tsx and proceedPastSoleFlow
+          above. Runs after the two dialogs above, in SEVERITY_QUESTIONS'
+          fixed order, one question at a time. */}
+      <FollowUpSeverityDialog
+        open={severityOpen}
+        onOpenChange={setSeverityOpen}
+        question={severityQueue[0] ?? null}
+        onConfirm={onSeverityConfirm}
       />
     </main>
   );

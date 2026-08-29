@@ -73,13 +73,22 @@ const Bag = () => {
     }
   };
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + amber page
+  // heading only; the cart line items/pricing/checkout controls below keep
+  // their existing functional styling (same page-shell-only scoping as the
+  // rest of the checkout flow).
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
 
       <main className="flex-1">
         <div className="container py-10">
-          <h1 className="text-3xl md:text-4xl font-semibold mb-8">Shopping bag</h1>
+          <h1
+            className="text-3xl md:text-4xl uppercase mb-8"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+          >
+            Shopping bag
+          </h1>
 
           {isEmpty ? (
             <EmptyBag />
@@ -231,14 +240,22 @@ const EmptyBag = () => (
   <div className="rounded-lg border border-border bg-card py-16 px-6 flex flex-col items-center text-center shadow-soft">
     <div
       className="h-24 w-24 rounded-full flex items-center justify-center mb-6"
-      style={{ backgroundColor: "#3d1700" }}
+      style={{ backgroundColor: "#fdb600" }}
       aria-hidden
     >
-      <img
-        src={bagIcon}
-        alt=""
-        className="h-10 w-10"
-        style={{ filter: "brightness(0) invert(1)" }}
+      <span
+        className="block h-10 w-10"
+        style={{
+          backgroundColor: "#fff5cc",
+          WebkitMaskImage: `url(${bagIcon})`,
+          maskImage: `url(${bagIcon})`,
+          WebkitMaskSize: "contain",
+          maskSize: "contain",
+          WebkitMaskRepeat: "no-repeat",
+          maskRepeat: "no-repeat",
+          WebkitMaskPosition: "center",
+          maskPosition: "center",
+        }}
       />
     </div>
     <h2 className="text-xl font-semibold mb-2">Your bag is empty</h2>

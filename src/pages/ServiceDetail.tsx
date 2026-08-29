@@ -28,7 +28,7 @@ type Mode = "flow" | "standalone";
 // ---------------------------------------------------------------------------
 
 const SERVICE_DETAIL_PRICE: Record<string, string> = {
-  "full-resole":                   "$85",
+  "full-resole":                   "$70–$85",
   "partial-resole":                "$60",
   "high-heel-tip-replacement":     "$35",
   "heel-reattachment":             "$100",
@@ -75,7 +75,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-white flex flex-col">
+      <main className="min-h-screen flex flex-col bg-white">
         <Header />
         {mode === "flow" && <StepIndicator current="select" />}
         <section className="flex-1 flex items-center justify-center py-20">
@@ -143,8 +143,14 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
     navigate("/start-repair", { state: { presetSlug: service.slug } });
   };
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page + amber Fraunces/
+  // Instrument Sans text, matching the homepage/FAQs pattern. Price figure
+  // and the primary "Start a repair" CTA button are kept in the deep umber/
+  // white treatment (not recolored amber) so they stay the highest-contrast,
+  // most prominent elements on the page — same reasoning applied consistently
+  // across every restyled page this pass (Bag, Checkout, etc.).
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen flex flex-col bg-white">
       <Header />
       {mode === "flow" && <StepIndicator current="select" />}
 
@@ -153,7 +159,8 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary mb-6"
+            className="inline-flex items-center gap-1 text-sm mb-6 hover:opacity-80"
+            style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}
           >
             <ChevronLeft size={16} /> Back
           </button>
@@ -193,8 +200,17 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                   tag; isPopular stays computed above (unused for now) so
                   this is a one-line revert if it comes back. */}
 
-              <h1 className="font-display text-3xl text-primary">{service.name}</h1>
-              <p className="mt-3 text-muted-foreground leading-relaxed">
+              {/* Only the service name stays amber 2026-08-27 (Danielle's
+                  call: "the text on the pages brown and just the service
+                  name is yellow") — everything else on the page (back link,
+                  description, price) switched to Cobbli brown below. */}
+              <h1
+                className="text-3xl md:text-4xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                {service.name}
+              </h1>
+              <p className="mt-3 leading-relaxed" style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}>
                 {service.fullDescription || service.description}
               </p>
 
@@ -207,7 +223,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                 </>
               ) : (
                 <>
-                  <div className="my-6 border-t border-border" />
+                  <div className="my-6" style={{ borderTop: "1px solid #3d1700" }} />
 
                   {/* ── Pricing ── */}
                   {displayPrice && (
@@ -216,7 +232,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                         <span className="text-[28px] font-bold leading-none" style={{ color: "#3d1700" }}>
                           {displayPrice}
                         </span>
-                        <span className="text-sm text-muted-foreground">per pair</span>
+                        <span className="text-sm" style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}>per pair</span>
                       </div>
                     </div>
                   )}
@@ -227,7 +243,7 @@ const ServiceDetail = ({ mode }: { mode: Mode }) => {
                     size="lg"
                     onClick={onStart}
                     className="w-full"
-                    style={{ backgroundColor: "#3d1700", color: "white" }}
+                    style={{ backgroundColor: "#3d1700", color: "#ffffff" }}
                   >
                     Start a repair
                   </Button>

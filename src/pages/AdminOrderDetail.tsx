@@ -1309,7 +1309,7 @@ function Card({
       <div style={{ padding: "14px 18px", borderBottom: "1px solid #f0ece5", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {icon && <span style={{ color: "#9ca3af" }}>{icon}</span>}
-          <h2 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#3d1700" }}>{title}</h2>
+          <h2 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#fdb600" }}>{title}</h2>
         </div>
         {headerAction}
       </div>
@@ -1793,7 +1793,7 @@ function IntakeFormModal({
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#3d1700" }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#fdb600" }}>
             Intake form{pair.shoeType ? ` — ${pair.shoeType}` : ""}
           </h2>
           <button
@@ -1965,7 +1965,7 @@ function OuttakeFormModal({
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#3d1700" }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#fdb600" }}>
             Outtake form{pair.shoeType ? ` — ${pair.shoeType}` : ""}
           </h2>
           <button
@@ -2387,7 +2387,7 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
           <button
             type="button"
             onClick={() => printPairTags(orderNumber, [pair])}
-            style={{ padding: "5px 12px", backgroundColor: "#fff", color: "#3d1700", border: "1px solid #d9cfc0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            style={{ padding: "5px 12px", backgroundColor: "#fff", color: "#fdb600", border: "1px solid #d9cfc0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
           >
             Print tag
           </button>
@@ -2425,7 +2425,7 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
           <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Services applied</p>
           <ServiceChecklist services={services} onToggle={toggleService} locked={!intakeDone} />
           {services.length > 0 && (
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6, fontSize: 13, fontWeight: 600, color: "#3d1700" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6, fontSize: 13, fontWeight: 600, color: "#fdb600" }}>
               Total: {fmtPrice(servicesTotal)}
             </div>
           )}
@@ -2644,12 +2644,12 @@ function CommentsCard({ order }: { order: OrderDetail }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
           {comments.map((c, i) => (
             <div key={i} style={{ display: "flex", gap: 12 }}>
-              <div style={{ width: 30, height: 30, borderRadius: "50%", backgroundColor: "#fdf3e0", color: "#3d1700", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+              <div style={{ width: 30, height: 30, borderRadius: "50%", backgroundColor: "#fdf3e0", color: "#fdb600", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
                 {c.initials}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "baseline", marginBottom: 4, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#3d1700" }}>{c.author}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#fdb600" }}>{c.author}</span>
                   <span style={{ fontSize: 11, color: "#9ca3af" }}>{fmtTimestamp(c.isoTimestamp)}</span>
                 </div>
                 <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{c.text}</p>
@@ -3126,7 +3126,7 @@ function PageHeader({ order, onRefetch }: { order: OrderDetail; onRefetch: () =>
       {/* Top row: order # + badges (left) — consolidated action block (right) */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 20, fontWeight: 700, color: "#3d1700" }}>{order.orderNumber}</span>
+          <span style={{ fontSize: 20, fontWeight: 700, color: "#fdb600" }}>{order.orderNumber}</span>
           <StatusPill status={order.status} />
           {order.isRework && (
             <span style={{ backgroundColor: "#fef3c7", color: "#92400e", fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 5 }}>Rework</span>
@@ -3141,7 +3141,7 @@ function PageHeader({ order, onRefetch }: { order: OrderDetail; onRefetch: () =>
             <button
               type="button"
               onClick={() => printPairTags(order.orderNumber, order.pairs)}
-              style={{ padding: "5px 12px", backgroundColor: "#fff", color: "#3d1700", border: "1px solid #d9cfc0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+              style={{ padding: "5px 12px", backgroundColor: "#fff", color: "#fdb600", border: "1px solid #d9cfc0", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
             >
               Print all tags{order.pairs.length > 1 ? ` (${order.pairs.length})` : ""}
             </button>

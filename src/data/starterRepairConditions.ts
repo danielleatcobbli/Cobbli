@@ -144,17 +144,34 @@ export const CHECKLIST_GROUPS: ChecklistGroup[] = [
     // stink-lines icon import above, iconOdor, is left in place for this).
   ] },
   { serviceCategory: "Color & stains", conditions: [
+    // Stains split out to its own "stain-repair" service 2026-08-27
+    // (Danielle's call) — it used to share color-restoration with "Faded or
+    // streaky color" (a leftover from before stain-repair was reactivated in
+    // the catalog, see the Supabase note in AdminDashboard-adjacent history).
+    // Listed first in this array (2026-08-27, her call) so Stain repair sorts
+    // ahead of Color correction wherever CHECKLIST_GROUPS order drives display
+    // order (Services page, homepage) — neither condition is in
+    // COMMON_CONDITION_LABELS, so this array's order is what decides it.
+    // Repointing the slug also fixes two things automatically, no separate
+    // code needed: SLUG_TO_CONDITION_IMAGE now resolves stain-repair's photo
+    // to this condition's own imageUrl/afterImageUrl (same "pull in the
+    // stain condition's photos" mechanism already used everywhere else —
+    // Supabase's stain-repair row has no image_url of its own, so this
+    // fallback is exactly what shows), and SLUG_TO_CONDITION_LABELS now maps
+    // stain-repair -> ["Stains"] and color-restoration -> ["Faded or streaky
+    // color"] only, so the recommendation screen's "Fixes: …" line reads
+    // "Fixes: stains" and "Fixes: faded or streaky color" respectively.
+    { label: "Stains", slug: "stain-repair", imageUrl: "/condition-photos/stains.jpg", afterImageUrl: "/condition-photos/stains-after.jpg" },
     // Before/after pair added 2026-08-13 (Danielle's photos) — before was
     // also broken previously (pointed at a "faded-or-streaky-color.png" that
     // no longer existed on disk after she re-uploaded under a different
     // filename).
     { label: "Faded or streaky color", slug: "color-restoration", imageUrl: "/condition-photos/faded-or-streaky-color-before.png", afterImageUrl: "/condition-photos/faded-or-streaky-color-after.png" },
-    { label: "Stains", slug: "color-restoration", imageUrl: "/condition-photos/stains.jpg", afterImageUrl: "/condition-photos/stains-after.jpg" },
     // "Water stains" removed 2026-07-31 (MVP scope-down, Danielle's call).
     // Different from the other removals in this pass: color-restoration
-    // itself is NOT marked is_coming_soon, since Faded or streaky color,
-    // Stains, and Scratches all still route to it live — only this specific
-    // condition entry point is being pulled, not the underlying service.
+    // itself is NOT marked is_coming_soon, since Faded or streaky color and
+    // Scratches still route to it live — only this specific condition entry
+    // point is being pulled, not the underlying service.
   ] },
   { serviceCategory: "Insole & interior", conditions: [
     // Before/after pair added 2026-08-13 — before was also broken

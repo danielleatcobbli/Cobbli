@@ -254,12 +254,21 @@ const Admin = () => {
     fetchRows(tab);
   };
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + Header
+  // theme="cream" + amber page title only; the assessment queue/table below
+  // keeps its existing functional styling (staff tool, page-shell-only
+  // scoping same as the rest of admin).
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen flex flex-col bg-white">
       <Header />
       <section className="flex-1 py-10">
         <div className="container">
-          <h1 className="font-display text-3xl md:text-4xl text-primary mb-2">Admin</h1>
+          <h1
+            className="text-3xl md:text-4xl uppercase mb-2"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+          >
+            Admin
+          </h1>
           <p className="text-muted-foreground mb-6">Photo assessments</p>
 
           {isAdmin && (

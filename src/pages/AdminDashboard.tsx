@@ -1670,7 +1670,7 @@ function PhotosView() {
 function KPIsView() {
   return (
     <div style={{ padding: "60px 24px", textAlign: "center" }}>
-      <p style={{ fontSize: 22, fontWeight: 600, color: "#3d1700", marginBottom: 10 }}>KPIs — admin only</p>
+      <p style={{ fontSize: 22, fontWeight: 600, color: "#fdb600", marginBottom: 10 }}>KPIs — admin only</p>
       <p style={{ fontSize: 14, color: "#9ca3af", maxWidth: 400, margin: "0 auto", lineHeight: 1.6 }}>
         Revenue, fulfillment time, rework rate, and more coming soon.
       </p>

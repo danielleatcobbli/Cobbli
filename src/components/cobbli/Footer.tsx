@@ -30,14 +30,28 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
     ? { target: "_blank", rel: "noopener noreferrer" }
     : {};
 
+  // Cream bg + amber text/icons 2026-08-27 (Danielle's call) — back to
+  // matching the cream-bar/amber Header on every inner page, site-wide
+  // (footer never sits over the hero photo, so there's no homepage
+  // exception here the way there is for the header). Text-shadow tried the
+  // same day and pulled same-day — Danielle found it made things harder to
+  // read, not easier — so legibility here comes from font-weight alone now
+  // (bumped 400 -> 700) instead.
+  //
+  // Social icon dilate filter removed 2026-08-27 (Danielle's call) — she
+  // only wanted the header's account/bag icons bolded, not these. Back to a
+  // plain masked span, no filter at all.
   return (
     <footer
       id="footer"
-      className="text-white"
-      style={{ backgroundColor: "#3d1700", fontFamily: "'Albert Sans', sans-serif" }}
+      style={{
+        backgroundColor: "#fff5cc",
+        color: "#fdb600",
+        fontFamily: "'Albert Sans', sans-serif",
+      }}
     >
       <div className="container py-10 flex flex-row items-center justify-between gap-6">
-        <div className="flex flex-col gap-2 text-white" style={{ fontSize: "13px", fontWeight: 400 }}>
+        <div className="flex flex-col gap-2" style={{ fontSize: "13px", fontWeight: 700, color: "#fdb600" }}>
           <div className="flex items-center gap-3 flex-wrap">
             <a href="/privacy-policy" className="underline" {...legalLinkProps}>
               Privacy Policy
@@ -68,11 +82,19 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center hover:opacity-80 transition-opacity"
             >
-              <img
-                src={s.src}
-                alt=""
-                className="h-7 w-7"
-                style={{ filter: "brightness(0) invert(1)" }}
+              <span
+                className="block h-8 w-8"
+                style={{
+                  backgroundColor: "#fdb600",
+                  WebkitMaskImage: `url(${s.src})`,
+                  maskImage: `url(${s.src})`,
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                }}
               />
             </a>
           ))}

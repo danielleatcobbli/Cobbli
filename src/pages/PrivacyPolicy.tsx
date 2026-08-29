@@ -9,32 +9,37 @@ const PrivacyPolicy = () => {
       "Read Cobbli's privacy policy: how we collect, use and protect personal information when you book shoe repairs and use our door-to-door service.",
   });
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg, amber Fraunces
+  // headings + Instrument Sans body, matching the rest of the cream pages.
+  // Every heading in this doc used the exact same inline color style, so the
+  // amber swap was a single find/replace across all 30 of them.
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
         <article className="max-w-3xl mx-auto px-6 md:px-12 py-12 text-left">
           <h1
-            className="text-3xl md:text-4xl font-semibold"
-            style={{ color: "#3d1700" }}
+            className="text-3xl md:text-4xl uppercase font-bold"
+            style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
           >
             Privacy Policy
           </h1>
           <p
             className="mt-2"
             style={{
-              fontFamily: "'Albert Sans', sans-serif",
+              fontFamily: "'Instrument Sans', sans-serif",
               fontWeight: 400,
               fontSize: "13px",
-              color: "#6b7280",
+              color: "#fdb600",
+              opacity: 0.7,
             }}
           >
             Effective Date: June 4, 2025 | Last Updated: June 4, 2025
           </p>
-          <div className="mt-8 text-foreground/90 leading-relaxed">
+          <div className="mt-8 leading-relaxed" style={{ color: "#fdb600", opacity: 0.9, fontFamily: "'Instrument Sans', sans-serif" }}>
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               1. Introduction
             </h2>
@@ -59,7 +64,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               2. Information We Collect
             </h2>
@@ -69,7 +74,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               2.1 Information You Provide to Us
             </h3>
@@ -91,7 +96,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               2.2 Information Collected Automatically
             </h3>
@@ -104,7 +109,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               2.3 Information from Third Parties
             </h3>
@@ -114,7 +119,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               3. How We Use Your Information
             </h2>
@@ -140,7 +145,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4. Legal Bases for Processing
             </h2>
@@ -164,7 +169,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5. How We Share Your Information
             </h2>
@@ -174,7 +179,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5.1 Service Providers
             </h3>
@@ -194,7 +199,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5.2 Repair and Operations Staff
             </h3>
@@ -204,7 +209,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5.3 Legal and Safety Disclosures
             </h3>
@@ -214,7 +219,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5.4 Business Transfers
             </h3>
@@ -224,7 +229,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               6. Data Retention
             </h2>
@@ -254,14 +259,14 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               7. Cookies and Tracking Technologies
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               7.1 Strictly Necessary Cookies
             </h3>
@@ -271,7 +276,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               7.2 Analytics Cookies
             </h3>
@@ -281,7 +286,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               7.3 Future Advertising Cookies
             </h3>
@@ -291,7 +296,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               7.4 Managing Cookies
             </h3>
@@ -310,7 +315,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               8. Marketing and Promotional Communications
             </h2>
@@ -336,7 +341,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               9. Children's Privacy
             </h2>
@@ -353,14 +358,14 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               10. Your Privacy Rights and Choices
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               10.1 Account Information
             </h3>
@@ -370,7 +375,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               10.2 Data Deletion
             </h3>
@@ -384,7 +389,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               10.3 California Residents (CCPA)
             </h3>
@@ -408,7 +413,7 @@ const PrivacyPolicy = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               10.4 Other Applicable Rights
             </h3>
@@ -422,7 +427,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               11. Data Security
             </h2>
@@ -439,7 +444,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               12. Third-Party Links and Services
             </h2>
@@ -449,7 +454,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               13. How to Contact Us
             </h2>
@@ -480,7 +485,7 @@ const PrivacyPolicy = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               14. Changes to This Privacy Policy
             </h2>

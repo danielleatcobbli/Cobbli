@@ -283,14 +283,23 @@ const AssessmentUpload = () => {
     }
   };
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + amber page
+  // heading, same page-shell-only scoping as StartRepair.tsx (the upload
+  // dropzone/file previews/form below keep their existing functional
+  // styling).
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen flex flex-col bg-white">
       <Header />
 
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">
-          <h1 className="font-display text-3xl md:text-4xl text-primary">Show us your shoes</h1>
-          <p className="mt-2 text-primary/80">
+          <h1
+            className="text-3xl md:text-4xl uppercase"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+          >
+            Show us your shoes
+          </h1>
+          <p className="mt-2" style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif", opacity: 0.85 }}>
             Upload photos or a short video of your shoes <span className="text-destructive">*</span> and we'll recommend the right repairs.
           </p>
 

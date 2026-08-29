@@ -32,23 +32,30 @@
     <link rel="preload" as="image" href="/assets/hero-cobbler.webp" fetchpriority="high" />
 
     <!-- Async (non-render-blocking) Google Fonts loading -->
+    <!-- Fraunces + Instrument Sans added 2026-08-26 (Danielle's call) for the
+         new homepage template — free stand-ins for Saral Devanagari + Quincy
+         CF, which are both paid fonts Danielle doesn't have a web license
+         for. Swap the family names below if she buys a license later; same
+         weights/styles should carry over. Scoped to the homepage components
+         for now via inline fontFamily styles, not added to tailwind.config's
+         font-sans/font-display so the rest of the site is untouched. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="preload"
       as="style"
-      href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700;900&family=Albert+Sans:wght@300;400;500;600&family=Public+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700;900&family=Albert+Sans:wght@300;400;500;600&family=Public+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500;700&family=Fraunces:ital,wght@0,400;0,600;0,700;1,400;1,500;1,600&family=Instrument+Sans:wght@400;500;600;700&display=swap"
     />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700;900&family=Albert+Sans:wght@300;400;500;600&family=Public+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700;900&family=Albert+Sans:wght@300;400;500;600&family=Public+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500;700&family=Fraunces:ital,wght@0,400;0,600;0,700;1,400;1,500;1,600&family=Instrument+Sans:wght@400;500;600;700&display=swap"
       media="print"
       onload="this.media='all'"
     />
     <noscript>
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700;900&family=Albert+Sans:wght@300;400;500;600&family=Public+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700;900&family=Albert+Sans:wght@300;400;500;600&family=Public+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500;700&family=Fraunces:ital,wght@0,400;0,600;0,700;1,400;1,500;1,600&family=Instrument+Sans:wght@400;500;600;700&display=swap"
       />
     </noscript>
 

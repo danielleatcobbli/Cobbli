@@ -81,9 +81,13 @@ const ComparisonTable = ({ activeSlug }: { activeSlug: string }) => {
                   className="p-2 text-center text-xs font-medium align-bottom break-words"
                   style={{
                     width: `${colWidth}%`,
+                    fontFamily: "'Instrument Sans', sans-serif",
+                    // Active column swapped from cream-on-white to amber-on-
+                    // cream 2026-08-26 (Danielle's call, page bg is now cream
+                    // itself, so the old cream highlight would've disappeared).
                     ...(active
-                      ? { backgroundColor: "#fff5cc", color: "#3d1700", borderRadius: "6px 6px 0 0" }
-                      : { color: "#7a5c40" }),
+                      ? { backgroundColor: "#fdb600", color: "#fff5cc", borderRadius: "6px 6px 0 0" }
+                      : { color: "#fdb600", opacity: 0.7 }),
                   }}
                 >
                   {b.name}
@@ -94,8 +98,11 @@ const ComparisonTable = ({ activeSlug }: { activeSlug: string }) => {
         </thead>
         <tbody>
           {COMPARISON_ROWS.map((row) => (
-            <tr key={row.key} className="border-t border-border">
-              <td className="p-2 text-xs font-medium break-words" style={{ color: "#3d1700", width: `${labelWidth}%` }}>
+            <tr key={row.key} style={{ borderTop: "1px solid #fdb600" }}>
+              <td
+                className="p-2 text-xs font-medium break-words"
+                style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif", width: `${labelWidth}%` }}
+              >
                 {row.label}
               </td>
               {COMPARISON_BUNDLES.map((b) => {
@@ -105,9 +112,13 @@ const ComparisonTable = ({ activeSlug }: { activeSlug: string }) => {
                   <td
                     key={b.slug}
                     className="p-2 text-center"
-                    style={active ? { backgroundColor: "#fff5cc" } : undefined}
+                    style={active ? { backgroundColor: "#fdb600" } : undefined}
                   >
-                    {included ? <Check size={16} style={{ color: "#166534" }} className="inline" /> : <span style={{ color: "#d1d5db" }}>—</span>}
+                    {included ? (
+                      <Check size={16} style={{ color: active ? "#fff5cc" : "#166534" }} className="inline" />
+                    ) : (
+                      <span style={{ color: active ? "#fff5cc" : "#c9b896", opacity: active ? 0.6 : 1 }}>—</span>
+                    )}
                   </td>
                 );
               })}
@@ -172,15 +183,18 @@ const PackageDetail = () => {
     goToPick();
   };
 
+  // Restyled 2026-08-26 (Danielle's call) — same cream/amber pattern +
+  // price/CTA-stays-brown scoping rule as ServiceDetail.tsx.
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen flex flex-col bg-white">
       <Header />
 
       <section className="flex-1 py-10 md:py-12">
         <div className="container max-w-5xl">
           <Link
             to="/services"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary mb-6"
+            className="inline-flex items-center gap-1 text-sm mb-6 hover:opacity-80"
+            style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}
           >
             <ChevronLeft size={16} /> Back
           </Link>
@@ -202,25 +216,34 @@ const PackageDetail = () => {
 
             {/* Content */}
             <div>
-              <h1 className="font-display text-3xl text-primary">{bundle.name}</h1>
-              <p className="mt-3 text-muted-foreground leading-relaxed">
-                <span className="font-bold" style={{ color: "#3d1700" }}>Best for</span>{" "}
+              {/* Only the package name stays amber 2026-08-27 (Danielle's
+                  call, same treatment as ServiceDetail.tsx: "the text on the
+                  pages brown and just the service name is yellow") —
+                  everything else below switched to Cobbli brown. */}
+              <h1
+                className="text-3xl md:text-4xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                {bundle.name}
+              </h1>
+              <p className="mt-3 leading-relaxed" style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}>
+                <span className="font-bold">Best for</span>{" "}
                 {bundle.bestFor}
               </p>
-              <p className="mt-2 text-muted-foreground leading-relaxed">{bundle.description}</p>
+              <p className="mt-2 leading-relaxed" style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}>{bundle.description}</p>
 
-              <div className="my-6 border-t border-border" />
+              <div className="my-6" style={{ borderTop: "1px solid #3d1700" }} />
 
               {/* Included */}
               <div className="mb-6">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Included</p>
-                <ul className="space-y-1 text-sm text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}>Included</p>
+                <ul className="space-y-1 text-sm" style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}>
                   {bundle.includesJustAShine && (
-                    <li><span className="font-bold" style={{ color: "#3d1700" }}>Just a shine</span></li>
+                    <li><span className="font-bold">Just a shine</span></li>
                   )}
                   {included.map((c) => (
                     <li key={c.key}>
-                      <span className="font-bold" style={{ color: "#3d1700" }}>{c.label}:</span> {c.items}
+                      <span className="font-bold">{c.label}:</span> {c.items}
                     </li>
                   ))}
                 </ul>
@@ -231,7 +254,7 @@ const PackageDetail = () => {
                   <span className="text-[28px] font-bold leading-none" style={{ color: "#3d1700" }}>
                     {displayedPrice}
                   </span>
-                  <span className="text-sm text-muted-foreground">per pair</span>
+                  <span className="text-sm" style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}>per pair</span>
                 </div>
               </div>
 
@@ -241,7 +264,7 @@ const PackageDetail = () => {
                 onClick={onStart}
                 disabled={packageUnavailable}
                 className="w-full"
-                style={{ backgroundColor: "#3d1700", color: "white" }}
+                style={{ backgroundColor: "#3d1700", color: "#ffffff" }}
               >
                 {packageUnavailable ? "Currently unavailable" : "Start a repair"}
               </Button>
@@ -263,8 +286,13 @@ const PackageDetail = () => {
               part of this comparison (see ComparisonTable above). */}
           {!bundle.includesJustAShine && (
             <div className="mt-14">
-              <h2 className="font-display text-2xl text-primary mb-2">Compare packages</h2>
-              <p className="text-sm text-muted-foreground mb-4">
+              <h2
+                className="text-2xl md:text-3xl uppercase mb-2"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#3d1700" }}
+              >
+                Compare packages
+              </h2>
+              <p className="text-sm mb-4" style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}>
                 See what's included across every package — {bundle.name} is highlighted below.
               </p>
               <ComparisonTable activeSlug={bundle.slug} />

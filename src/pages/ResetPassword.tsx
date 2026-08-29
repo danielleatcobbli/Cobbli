@@ -341,14 +341,21 @@ const ResetPassword = () => {
     }
   };
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + amber page
+  // headings only, same scoping as SignIn.tsx/SignUp.tsx.
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
         <div className="container max-w-md py-12 md:py-16">
           {step === "request" && (
             <section className="space-y-6">
-              <h1 className="text-2xl md:text-3xl font-semibold">Reset your password</h1>
+              <h1
+                className="text-2xl md:text-3xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                Reset your password
+              </h1>
               <form onSubmit={handleRequest} className="space-y-5" noValidate>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email address <span className="text-destructive">*</span></Label>
@@ -382,7 +389,12 @@ const ResetPassword = () => {
 
           {step === "sent" && (
             <section className="space-y-6">
-              <h1 className="text-2xl md:text-3xl font-semibold">Check your inbox</h1>
+              <h1
+                className="text-2xl md:text-3xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                Check your inbox
+              </h1>
               <p className="text-foreground/80">
                 We've sent a password reset link to {submittedEmail}. If you don't see it, check your spam folder.
               </p>
@@ -406,7 +418,12 @@ const ResetPassword = () => {
 
           {step === "reset" && (
             <section className="space-y-6">
-              <h1 className="text-2xl md:text-3xl font-semibold">Set new password</h1>
+              <h1
+                className="text-2xl md:text-3xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                Set new password
+              </h1>
               <form onSubmit={handleResetSubmit} className="space-y-5" noValidate>
                 <div className="space-y-2">
                   <Label htmlFor="new-pwd">New password <span className="text-destructive">*</span></Label>

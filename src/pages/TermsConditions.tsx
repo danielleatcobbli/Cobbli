@@ -9,32 +9,36 @@ const TermsConditions = () => {
 "The terms and conditions that govern your use of Cobbli's NYC shoe repair service, including pickup, return, payment and order guarantees.",
   });
 
+  // Restyled 2026-08-26 (Danielle's call) — same cream/amber pattern as
+  // PrivacyPolicy.tsx (single find/replace across all 54 identical heading
+  // color styles).
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
         <article className="max-w-3xl mx-auto px-6 md:px-12 py-12 text-left">
           <h1
-            className="text-3xl md:text-4xl font-semibold"
-            style={{ color: "#3d1700" }}
+            className="text-3xl md:text-4xl uppercase font-bold"
+            style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
           >
             Terms & Conditions
           </h1>
           <p
             className="mt-2"
             style={{
-              fontFamily: "'Albert Sans', sans-serif",
+              fontFamily: "'Instrument Sans', sans-serif",
               fontWeight: 400,
               fontSize: "13px",
-              color: "#6b7280",
+              color: "#fdb600",
+              opacity: 0.7,
             }}
           >
             Effective Date: June 4, 2026 | Last Updated: June 4, 2026
           </p>
-          <div className="mt-8 text-foreground/90 leading-relaxed">
+          <div className="mt-8 leading-relaxed" style={{ color: "#fdb600", opacity: 0.9, fontFamily: "'Instrument Sans', sans-serif" }}>
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               1. Acceptance of Terms
             </h2>
@@ -59,14 +63,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               2. Eligibility and Account Registration
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               2.1 Eligibility
             </h3>
@@ -76,7 +80,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               2.2 Account Registration
             </h3>
@@ -86,7 +90,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               2.3 One Account Per Person
             </h3>
@@ -96,7 +100,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               2.4 Account Termination
             </h3>
@@ -106,14 +110,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               3. Services
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               3.1 Scope of Services
             </h3>
@@ -123,7 +127,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               3.2 Accepted Items
             </h3>
@@ -142,7 +146,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               3.3 Item Value Cap
             </h3>
@@ -152,7 +156,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               3.4 Pricing and Estimates
             </h3>
@@ -162,7 +166,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               3.5 Service Limitations
             </h3>
@@ -172,14 +176,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4. Pickup, Handling, and Return
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4.1 Scheduling
             </h3>
@@ -189,7 +193,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4.2 Item Condition Documentation
             </h3>
@@ -199,7 +203,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4.3 Cancellations
             </h3>
@@ -213,7 +217,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4.4 Rescheduling
             </h3>
@@ -223,7 +227,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4.5 No-Shows
             </h3>
@@ -233,7 +237,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4.6 Return Delivery
             </h3>
@@ -243,7 +247,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4.7 Unclaimed Items and Abandoned Property
             </h3>
@@ -253,7 +257,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               4.8 Items Held Pending Payment
             </h3>
@@ -263,14 +267,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5. Liability for Items in Our Care
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5.1 Standard of Care
             </h3>
@@ -280,7 +284,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5.2 Limitation of Liability for Items
             </h3>
@@ -290,7 +294,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5.3 Claims Process
             </h3>
@@ -314,7 +318,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               5.4 Excluded Losses
             </h3>
@@ -329,14 +333,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               6. Repair Satisfaction Guarantee
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               6.1 Re-Do Policy
             </h3>
@@ -346,7 +350,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               6.2 Reporting Window
             </h3>
@@ -360,7 +364,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               6.3 Scope of Re-Do
             </h3>
@@ -370,14 +374,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               7. Payments
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               7.1 Payment Processing
             </h3>
@@ -387,7 +391,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               7.2 Fees
             </h3>
@@ -397,7 +401,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               7.3 Disputes and Chargebacks
             </h3>
@@ -411,14 +415,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               8. Prohibited Items and Prohibited Use
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               8.1 Prohibited Items
             </h3>
@@ -434,7 +438,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               8.2 Prohibited Use
             </h3>
@@ -444,14 +448,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               9. Intellectual Property and Photo Consent
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               9.1 Cobbli IP
             </h3>
@@ -461,7 +465,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               9.2 Customer Photo Consent
             </h3>
@@ -484,7 +488,7 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               10. Disclaimers
             </h2>
@@ -500,14 +504,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               11. Dispute Resolution and Arbitration
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               11.1 Mandatory Arbitration
             </h3>
@@ -529,7 +533,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               11.2 Class Action Waiver
             </h3>
@@ -539,7 +543,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               11.3 Governing Law
             </h3>
@@ -549,7 +553,7 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               12. Notices
             </h2>
@@ -574,14 +578,14 @@ const TermsConditions = () => {
 
             <h2
               className="text-xl font-semibold mt-8"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               13. General Provisions
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               13.1 Entire Agreement
             </h3>
@@ -591,7 +595,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               13.2 Severability
             </h3>
@@ -601,7 +605,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               13.3 No Waiver
             </h3>
@@ -611,7 +615,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               13.4 Assignment
             </h3>
@@ -621,7 +625,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               13.5 Force Majeure
             </h3>
@@ -631,7 +635,7 @@ const TermsConditions = () => {
 
             <h3
               className="text-lg font-semibold mt-6"
-              style={{ color: "#3d1700" }}
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
               13.6 Contact
             </h3>

@@ -282,7 +282,7 @@ const AssessmentProposal = () => {
   };
 
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen flex flex-col bg-white">
       <Header />
       <section className="flex-1 py-10 md:py-14">
         <div className="container max-w-3xl">

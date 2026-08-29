@@ -18,18 +18,43 @@ type Props = {
    *  s.description when undefined (Cleaning/Preventative care services, which
    *  aren't part of the checklist). */
   addresses?: string;
+  /** "amber" swaps the card body to a bright yellow background with cream
+   *  text — Danielle's cream-section/yellow-card, yellow-section/cream-text
+   *  rule from her homepage mockup, 2026-08-26. Defaults to "light" (today's
+   *  cream card, unchanged) everywhere except the homepage Services teaser,
+   *  which is the only caller passing "amber" — every other page (the full
+   *  /services catalog, Starter repair recommendations, etc.) keeps the
+   *  original look. */
+  theme?: "light" | "amber";
 };
 
-const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair, addresses }: Props) => {
+const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair, addresses, theme = "light" }: Props) => {
   const to =
     fromCategory && fromCategory !== "All services"
       ? `/services/${s.slug}?from=${encodeURIComponent(fromCategory)}`
       : `/services/${s.slug}`;
+  const amber = theme === "amber";
 
   return (
-    <div className="group w-full rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col h-full">
-      <Link to={to} className="flex flex-col flex-1">
-        <div className="aspect-[4/5] relative overflow-hidden" style={{ backgroundColor: "#3d1700" }}>
+    <div
+      className={
+        amber
+          ? "group w-full rounded-xl overflow-hidden border shadow-soft hover:shadow-elevated transition-all flex flex-col h-full"
+          : "group w-full rounded-xl overflow-hidden border border-border bg-card shadow-soft hover:shadow-elevated hover:border-primary/40 transition-all flex flex-col h-full"
+      }
+      style={amber ? { backgroundColor: "#fdb600", borderColor: "#fdb600" } : undefined}
+    >
+      {/* Amber theme: padding wraps the whole card (image included) so the
+          amber shows as a frame on all four sides of the photo, matching
+          Danielle's Canva reference exactly, 2026-08-26 — instead of the
+          image running edge-to-edge with only the text below getting
+          padding. Image gets its own rounded corners since it's inset now,
+          not flush with the card's outer radius. */}
+      <Link to={to} className={amber ? "flex flex-col flex-1 p-3" : "flex flex-col flex-1"}>
+        <div
+          className={amber ? "aspect-[4/5] relative overflow-hidden rounded-lg" : "aspect-[4/5] relative overflow-hidden"}
+          style={{ backgroundColor: "#3d1700" }}
+        >
           <BeforeAfterImage
             before={s.imageUrl ?? SLUG_TO_CONDITION_IMAGE.get(s.slug)?.imageUrl}
             after={s.afterImageUrl ?? SLUG_TO_CONDITION_IMAGE.get(s.slug)?.afterImageUrl}
@@ -43,17 +68,26 @@ const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair, addresses }: P
               every caller (unused for now) so this is a one-line revert if
               it comes back. */}
         </div>
-        <div className="p-4 flex flex-col gap-1 flex-1">
-          <h3 className="text-[14px] font-bold leading-snug" style={{ color: "#3d1700" }}>
+        <div className={amber ? "pt-3 flex flex-col gap-1 flex-1" : "p-4 flex flex-col gap-1 flex-1"}>
+          <h3
+            className="text-[14px] font-bold leading-snug"
+            style={{ color: amber ? "#fff5cc" : "#3d1700" }}
+          >
             {s.name}
           </h3>
           {(addresses ?? s.description) && (
-            <p className="text-[12px] leading-snug mt-0.5" style={{ color: "#7a5c40" }}>
+            <p
+              className="text-[12px] leading-snug mt-0.5"
+              style={{ color: amber ? "#fff5cc" : "#7a5c40", opacity: amber ? 0.9 : 1 }}
+            >
               {addresses ?? s.description}
             </p>
           )}
           {s.cardPriceLabel && (
-            <p className="text-[13px] font-bold mt-auto pt-2" style={{ color: "#3d1700" }}>
+            <p
+              className="text-[13px] font-bold mt-auto pt-2"
+              style={{ color: amber ? "#fff5cc" : "#3d1700" }}
+            >
               {s.cardPriceLabel.replace(/\s+per\s+\S.*/i, "").trim()}
             </p>
           )}
@@ -65,8 +99,8 @@ const ServiceCard = ({ s, fromCategory, isPopular, onAddToRepair, addresses }: P
           <button
             type="button"
             onClick={() => onAddToRepair(s.slug)}
-            className="w-full rounded-md py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: "#3d1700" }}
+            className="w-full rounded-md py-2 text-sm font-medium transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "#3d1700", color: "#ffffff" }}
           >
             Add to repair
           </button>

@@ -79,8 +79,13 @@ const Services = () => {
     return map;
   }, [list]);
 
+  // Restyled 2026-08-26 (Danielle's call) to match the cream/amber pattern
+  // used on the homepage + FAQs: cream page bg, amber Fraunces heading,
+  // Instrument Sans body, Header theme="cream", and ServiceCard/
+  // CategoryFilterBar switched to their amber themes (same as the homepage's
+  // Services teaser) for full consistency.
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen flex flex-col bg-white">
       <Header />
 
       <section className="flex-1 py-16 md:py-20">
@@ -94,7 +99,10 @@ const Services = () => {
               useful thing to see here. No packages promise below anymore. */}
           <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
             <div>
-              <h1 className="text-3xl md:text-4xl font-display text-primary">
+              <h1
+                className="text-4xl md:text-5xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
                 Services
               </h1>
             </div>
@@ -105,16 +113,16 @@ const Services = () => {
             </Button>
           </div>
 
-            <CategoryFilterBar active={active} onChange={setActive} className="mb-10" />
+            <CategoryFilterBar active={active} onChange={setActive} className="mb-10" theme="amber" />
 
             {isLoading ? (
               <BrandSpinner className="py-20" size="lg" />
             ) : isError ? (
-              <p className="text-muted-foreground py-10">
+              <p style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }} className="py-10">
                 We couldn't load services right now. Please refresh, or{" "}
                 <a
                   href="mailto:support@cobbli.com"
-                  className="underline text-primary"
+                  className="underline"
                   onClick={() => trackEvent("consultation_email_clicked", { source: "services_error" })}
                 >
                   support@cobbli.com
@@ -123,13 +131,14 @@ const Services = () => {
               </p>
             ) : activeServices.length === 0 && comingSoonServices.length === 0 ? (
               <div className="py-16 text-center">
-                <p className="text-xl text-primary mb-2">No services in this category yet</p>
-                <p className="text-muted-foreground mb-6">
+                <p className="text-xl mb-2" style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }}>No services in this category yet</p>
+                <p className="mb-6" style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif", opacity: 0.9 }}>
                   Try another category, or get in touch and we'll recommend the right repair.
                 </p>
                 <a
                   href="mailto:support@cobbli.com"
-                  className="underline text-primary"
+                  className="underline"
+                  style={{ color: "#fdb600" }}
                   onClick={() => trackEvent("consultation_email_clicked", { source: "services_no_category" })}
                 >
                   support@cobbli.com
@@ -146,6 +155,7 @@ const Services = () => {
                         fromCategory={active}
                         isPopular={POPULAR_SERVICE_SLUGS.has(s.slug)}
                         addresses={addressesLine(s.slug)}
+                        theme="amber"
                       />
                     ))}
                   </div>

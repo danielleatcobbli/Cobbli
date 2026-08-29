@@ -44,17 +44,34 @@ const Services = () => {
       : `/services?category=${encodeURIComponent(active)}`;
 
   return (
-    <section id="services" className="py-20 md:py-28 bg-white overflow-hidden">
-      <div className="container">
+    <section id="services" className="relative overflow-hidden" style={{ backgroundColor: "#fff5cc" }}>
+      {/* Cream section (Danielle's exact "cobbli cream" hex, #fff5cc) with an
+          amber wave divider at the bottom leading into How it works, and
+          amber cards (ServiceCard theme="amber") — matches her homepage
+          mockup and her cream-section/yellow-accent, yellow-section/cream-
+          accent rule, 2026-08-26. Filter bar and card grid logic are
+          unchanged; only ServiceCard's color theme differs here. */}
+      <div className="container py-14 md:py-20">
 
-        <div className="flex items-baseline justify-between gap-4 mb-4">
-          <h2 className="text-2xl md:text-3xl font-display text-primary">
+        {/* Heading enlarged + uppercased 2026-08-26 (Danielle's call) to
+            match the consistent big-heading treatment across every homepage
+            section now (Services/How it works/Reviews/Get to know us all
+            text-5xl md:text-7xl uppercase). Left-aligned (Danielle's call —
+            not every homepage heading needs to be centered; other section
+            headings stay centered). "View all" sits in the same row,
+            vertically centered against the heading text via items-center,
+            rather than stacked above it. */}
+        <div className="flex items-center justify-between mb-4">
+          <h2
+            className="text-left text-5xl md:text-7xl uppercase"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+          >
             Services
           </h2>
           <Link
             to={viewAllServicesHref}
             className="text-sm underline font-medium shrink-0"
-            style={{ color: "#7a5c40" }}
+            style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }}
           >
             View all →
           </Link>
@@ -66,6 +83,7 @@ const Services = () => {
           scrollable
           iconSize={22}
           className="mb-5"
+          theme="amber"
         />
 
         {isLoading ? (
@@ -77,11 +95,15 @@ const Services = () => {
         ) : (
           <div className="flex gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1">
             {visibleServices.map((s) => (
-              <div key={s.slug} className="shrink-0" style={{ width: 160 }}>
+              // Widened 160 -> 280 2026-08-26 (Danielle's call, matches her
+              // Canva mockup's larger tiles) — ServiceCard's photo box is
+              // aspect-[4/5], so it scales up with the wider card automatically.
+              <div key={s.slug} className="shrink-0" style={{ width: 280 }}>
                 <ServiceCard
                   s={s}
                   isPopular={POPULAR_SERVICE_SLUGS.has(s.slug)}
                   addresses={addressesLine(s.slug)}
+                  theme="amber"
                 />
               </div>
             ))}
@@ -89,6 +111,19 @@ const Services = () => {
         )}
 
       </div>
+
+      <svg
+        className="block w-full absolute -bottom-px left-0"
+        viewBox="0 0 1440 60"
+        preserveAspectRatio="none"
+        style={{ height: 40 }}
+        aria-hidden="true"
+      >
+        <path
+          d="M0,60 C240,15 480,15 720,38 C960,60 1200,60 1440,25 L1440,60 L0,60 Z"
+          fill="#fdb600"
+        />
+      </svg>
     </section>
   );
 };

@@ -2,7 +2,8 @@ import Header from "@/components/cobbli/Header";
 import Hero from "@/components/cobbli/Hero";
 import Services from "@/components/cobbli/Services";
 import HowItWorks from "@/components/cobbli/HowItWorks";
-import TrustSignals from "@/components/cobbli/TrustSignals";
+import Reviews from "@/components/cobbli/Reviews";
+import GetToKnowUs from "@/components/cobbli/GetToKnowUs";
 
 import Footer from "@/components/cobbli/Footer";
 import { useEffect } from "react";
@@ -66,12 +67,25 @@ const Index = () => {
 
   return (
     <main className="min-h-screen bg-white">
-      <Header />
-      <Hero />
+      {/* Header floats directly on the hero photo (goodgirlsnacks.com-style
+          "no menu bar" look), 2026-08-25 (Danielle's call, previewing) —
+          needs Header + Hero sharing a `relative` wrapper so the absolutely
+          positioned header lays over the hero image instead of pushing it
+          down. Revert by dropping the wrapper div and the `transparent`
+          prop to go back to the solid sticky bar. */}
+      <div className="relative">
+        <Header transparent />
+        <Hero />
+      </div>
       <Services />
       <HowItWorks />
-      <TrustSignals />
-      
+      {/* Reviews replaces the old "Why Cobbli" trust-signals section here
+          2026-08-26 (Danielle's call, matches her homepage mockup) —
+          TrustSignals.tsx is untouched, just no longer rendered on the
+          homepage. Revert by swapping the import/JSX back if needed. */}
+      <Reviews />
+      <GetToKnowUs />
+
       <Footer />
     </main>
   );

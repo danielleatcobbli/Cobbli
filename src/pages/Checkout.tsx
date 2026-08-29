@@ -504,11 +504,16 @@ const Checkout = () => {
 
   if (returningSessionId && finalizing) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
+      <div className="min-h-screen flex flex-col bg-white">
         <Header />
         <main className="flex-1">
           <div className="container py-16 text-center">
-            <h1 className="text-2xl font-semibold mb-3">Finalizing your order…</h1>
+            <h1
+              className="text-2xl uppercase mb-3"
+              style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+            >
+              Finalizing your order…
+            </h1>
             <p className="text-sm text-muted-foreground">
               Hang tight — we're confirming your payment.
             </p>
@@ -524,13 +529,22 @@ const Checkout = () => {
   // whole checkout, including payment, stays on this one page.
 
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + amber page
+  // heading only; payment/pricing/form steps below keep their existing
+  // functional styling (same page-shell-only scoping as the rest of
+  // checkout).
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <PaymentTestModeBanner />
       <main className="flex-1">
         <div className="container py-10">
-          <h1 className="text-3xl md:text-4xl font-semibold mb-6">Checkout</h1>
+          <h1
+            className="text-3xl md:text-4xl uppercase mb-6"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+          >
+            Checkout
+          </h1>
 
           <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
             <div className="space-y-4">

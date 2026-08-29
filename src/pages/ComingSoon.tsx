@@ -1,5 +1,5 @@
 import { usePageMeta } from "@/hooks/usePageMeta";
-import logo from "@/assets/logo-cobbli.svg";
+import logo from "@/assets/logo-cobbli.webp";
 import instagram from "@/assets/icons/instagram.svg";
 import tiktok from "@/assets/icons/tiktok.svg";
 import x from "@/assets/icons/x.svg";
@@ -61,8 +61,12 @@ const ComingSoon = () => {
       <div className="absolute inset-0 bg-gradient-hero" />
       <div className="absolute inset-0" style={{ backgroundColor: "rgba(61, 23, 0, 0.45)" }} />
 
+      {/* Sized down 2026-08-26, same fix/reasoning as Header.tsx — the old
+          h-32/h-40 was tuned for the previous SVG's ~18.5%-of-canvas glyph
+          height; the new tightly-cropped logo.webp needs a much smaller
+          class to render the same actual visual size. */}
       <div className="relative z-10 w-full flex justify-center">
-        <img src={logo} alt="Cobbli" className="h-32 md:h-40 w-auto" />
+        <img src={logo} alt="Cobbli" className="h-6 md:h-7 w-auto" />
       </div>
 
       {/* Headline/subhead switched to Montserrat 2026-08-13 (Danielle's call

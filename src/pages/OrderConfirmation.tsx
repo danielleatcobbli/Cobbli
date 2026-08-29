@@ -356,10 +356,10 @@ const OrderConfirmation = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
+      <div className="min-h-screen flex flex-col bg-white">
         <Header />
         <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="animate-spin text-primary" />
+          <Loader2 className="animate-spin" style={{ color: "#fdb600" }} />
         </main>
         <Footer />
       </div>
@@ -368,11 +368,16 @@ const OrderConfirmation = () => {
 
   if (!order) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
+      <div className="min-h-screen flex flex-col bg-white">
         <Header />
         <main className="flex-1">
           <div className="container py-16 text-center">
-            <h1 className="text-2xl font-semibold mb-3">Order not found</h1>
+            <h1
+              className="text-2xl uppercase mb-3"
+              style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+            >
+              Order not found
+            </h1>
             <Button asChild variant="hero">
               <Link to="/account/orders">View my orders</Link>
             </Button>
@@ -385,8 +390,13 @@ const OrderConfirmation = () => {
 
   const a = order.address;
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + Header
+  // theme="cream" + amber page heading only; the confirmation banner already
+  // used cream/amber, and the pricing/scheduling/rework sections below keep
+  // their existing functional styling (same page-shell-only scoping as the
+  // rest of checkout).
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
         <div className="container py-10 max-w-3xl">
@@ -394,27 +404,32 @@ const OrderConfirmation = () => {
           {localOrder && (
             <div
               className="rounded-xl p-6 md:p-8 flex items-start gap-4 mb-8"
-              style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
+              style={{ backgroundColor: "#fdb600", border: "1px solid #fdb600" }}
             >
               <div
                 className="h-10 w-10 rounded-full flex items-center justify-center shrink-0"
-                style={{ backgroundColor: "#fdb600", color: "#3d1700" }}
+                style={{ backgroundColor: "#3d1700", color: "#fdb600" }}
               >
                 <CheckCircle2 size={20} />
               </div>
               <div>
-                <h1 className="font-display text-2xl text-primary">Your Order is Confirmed!</h1>
-                <p className="mt-1 text-sm md:text-base text-primary/80">
+                <h1 className="text-2xl uppercase" style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fff5cc" }}>Your Order is Confirmed!</h1>
+                <p className="mt-1 text-sm md:text-base" style={{ color: "#fff5cc", opacity: 0.9 }}>
                   A confirmation email has been sent to {order.email}
                 </p>
-                <p className="mt-2 text-xs text-primary/70">Order #{order.number}</p>
+                <p className="mt-2 text-xs" style={{ color: "#fff5cc", opacity: 0.8 }}>Order #{order.number}</p>
               </div>
             </div>
           )}
 
           {!localOrder && (
             <div className="mb-6">
-              <h1 className="font-display text-2xl text-primary">Order #{order.number}</h1>
+              <h1
+                className="text-2xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                Order #{order.number}
+              </h1>
             </div>
           )}
 
@@ -657,7 +672,7 @@ const OrderConfirmation = () => {
             {/* Scope banner */}
             <div
               className="rounded-md p-3 text-sm"
-              style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600", color: "#3d1700" }}
+              style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600", color: "#fdb600" }}
             >
               Reworks cover issues with the services listed above. Concerns outside of your
               original order, like scratches on your shoe if you didn't purchase scratch repair,

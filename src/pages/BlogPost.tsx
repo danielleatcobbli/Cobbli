@@ -84,8 +84,10 @@ const BlogPost = () => {
       : null,
   });
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg, amber Fraunces/
+  // Instrument Sans text, matching Blog.tsx and the rest of the cream pages.
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
         {state.status === "loading" && (
@@ -94,9 +96,9 @@ const BlogPost = () => {
 
         {state.status === "missing" && (
           <div className="container max-w-2xl py-20 text-center space-y-4">
-            <h1 className="font-display text-3xl" style={{ color: "#3d1700" }}>Post not found</h1>
-            <p className="text-muted-foreground">This post may have been removed or isn't published yet</p>
-            <Link to="/blog" className="inline-block underline" style={{ color: "#3d1700" }}>
+            <h1 className="text-3xl uppercase" style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}>Post not found</h1>
+            <p style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif", opacity: 0.9 }}>This post may have been removed or isn't published yet</p>
+            <Link to="/blog" className="inline-block underline" style={{ color: "#fdb600" }}>
               Back to all posts
             </Link>
           </div>
@@ -104,54 +106,47 @@ const BlogPost = () => {
 
         {state.status === "ready" && (
           <article>
-            <div
-              className="border-b"
-              style={{
-                background: "linear-gradient(180deg, #fff8ec 0%, rgba(255,248,236,0) 100%)",
-              }}
-            >
-              <div className="container max-w-3xl py-10 md:py-16">
-                <Link
-                  to="/blog"
-                  className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline"
-                  style={{ color: "#3d1700" }}
+            <div className="container max-w-3xl py-10 md:py-16">
+              <Link
+                to="/blog"
+                className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline"
+                style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }}
+              >
+                ← All posts
+              </Link>
+              <p
+                className="mb-4 text-xs font-semibold uppercase tracking-[0.2em]"
+                style={{ color: "#fdb600", opacity: 0.8, fontFamily: "'Instrument Sans', sans-serif" }}
+              >
+                The Cobbli Journal
+              </p>
+              <h1
+                className="text-3xl md:text-5xl leading-tight mb-5 uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                {state.post.title}
+              </h1>
+              <div className="flex items-center gap-3 text-sm" style={{ color: "#fdb600", opacity: 0.85, fontFamily: "'Instrument Sans', sans-serif" }}>
+                <span
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-sm"
+                  style={{ backgroundColor: "#fdb600", color: "#fff5cc", fontFamily: "'Fraunces', serif", fontWeight: 700 }}
+                  aria-hidden="true"
                 >
-                  ← All posts
-                </Link>
-                <p
-                  className="mb-4 text-xs font-semibold uppercase tracking-[0.2em]"
-                  style={{ color: "rgba(61,23,0,0.55)" }}
-                >
-                  The Cobbli Journal
-                </p>
-                <h1
-                  className="font-display text-3xl md:text-5xl leading-tight mb-5"
-                  style={{ color: "#3d1700" }}
-                >
-                  {state.post.title}
-                </h1>
-                <div className="flex items-center gap-3 text-sm text-foreground/70">
-                  <span
-                    className="flex h-9 w-9 items-center justify-center rounded-full font-display text-sm"
-                    style={{ backgroundColor: "rgba(61,23,0,0.1)", color: "#3d1700" }}
-                    aria-hidden="true"
-                  >
-                    {(state.post.authorName || "Cobbli").charAt(0)}
-                  </span>
-                  <span className="font-medium" style={{ color: "#3d1700" }}>
-                    {state.post.authorName || "Cobbli"}
-                  </span>
-                  <span aria-hidden="true">·</span>
-                  <time dateTime={state.post.publishedAt}>
-                    {formatBlogDate(state.post.publishedAt)}
-                  </time>
-                </div>
+                  {(state.post.authorName || "Cobbli").charAt(0)}
+                </span>
+                <span className="font-medium" style={{ opacity: 1 }}>
+                  {state.post.authorName || "Cobbli"}
+                </span>
+                <span aria-hidden="true">·</span>
+                <time dateTime={state.post.publishedAt}>
+                  {formatBlogDate(state.post.publishedAt)}
+                </time>
               </div>
             </div>
 
             <div className="container max-w-3xl py-10 md:py-14">
               {coverUrl && (
-                <div className="mb-10 overflow-hidden rounded-2xl shadow-sm" style={{ backgroundColor: "#fff5cc" }}>
+                <div className="mb-10 overflow-hidden rounded-2xl shadow-sm" style={{ backgroundColor: "#3d1700" }}>
                   <img
                     src={coverUrl}
                     alt={state.post.mainImage?.alt || ""}
@@ -159,15 +154,18 @@ const BlogPost = () => {
                   />
                 </div>
               )}
-              <div className="prose prose-lg max-w-none [&_h2]:font-display [&_h3]:font-display [&_h2]:text-[#3d1700] [&_h3]:text-[#3d1700] [&_a]:text-[#3d1700] [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-foreground/70" style={{ borderColor: "rgba(61,23,0,0.2)" }}>
+              <div
+                className="prose prose-lg max-w-none [&_h2]:text-[#fdb600] [&_h3]:text-[#fdb600] [&_a]:text-[#fdb600] [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-4 [&_blockquote]:italic"
+                style={{ borderColor: "#fdb600", color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }}
+              >
                 <SanityPortableText value={state.post.body || []} />
               </div>
 
-              <div className="mt-14 border-t pt-8 text-center">
+              <div className="mt-14 pt-8 text-center" style={{ borderTop: "1px solid #fdb600" }}>
                 <Link
                   to="/blog"
                   className="inline-flex items-center gap-1.5 font-medium underline-offset-4 hover:underline"
-                  style={{ color: "#3d1700" }}
+                  style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }}
                 >
                   ← Back to all stories
                 </Link>

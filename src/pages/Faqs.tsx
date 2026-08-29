@@ -121,9 +121,16 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "How does Cobbli work?",
     a: (
       <p>
-        Tell us what's wrong with your shoes through our quick Start a Repair form or by sending us a
-        photo or video and we'll recommend the right repairs. From there, we pick up your shoes, repair
-        them in-house, and return them to your door.
+        Tell us what's wrong with your shoes through our quick{" "}
+        <Link
+          to="/start-repair"
+          className="underline underline-offset-4 hover:text-primary"
+          onClick={() => trackEvent("start_repair", { source: "faqs" })}
+        >
+          Start a Repair
+        </Link>{" "}
+        form or by sending us a photo or video and we'll recommend the right repairs. From there, we pick
+        up your shoes, repair them in-house, and return them to your door.
       </p>
     ),
   },
@@ -255,36 +262,59 @@ const Faqs = () => {
 "Answers to common questions about Cobbli's NYC shoe repair service: pickup and return, pricing, turnaround times, service area and order guarantees.",
   });
 
+  // Restyled 2026-08-26 (Danielle's call) to match the homepage's cream/
+  // amber pattern (Services, Reviews, etc.) and its fonts (Fraunces
+  // headings, Instrument Sans body/nav). White page bg + amber-bar Header
+  // (now Header's site-wide default, rolled out everywhere 2026-08-27 after
+  // this page trialled it) — CoverageRequestForm (the zip/email mini-form
+  // inside "What areas do you service?") is left in its original neutral
+  // styling since it's a functional form, not scoped by her request.
   return (
     <main className="min-h-screen flex flex-col bg-white">
       <Header />
       <section className="flex-1 py-16 md:py-24">
         <div className="container max-w-3xl">
-          <h1 className="font-display text-4xl md:text-5xl text-balance">
+          <h1
+            className="text-4xl md:text-5xl text-balance uppercase"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+          >
             Frequently asked questions
           </h1>
 
-          <ul className="mt-10 border-t border-border">
+          <ul className="mt-10" style={{ borderTop: "1px solid #fdb600" }}>
             {faqs.map((f, i) => {
               const isOpen = openIdx === i;
               return (
-                <li key={i} className="border-b border-border">
+                <li key={i} style={{ borderBottom: "1px solid #fdb600" }}>
                   <button
                     type="button"
                     onClick={() => setOpenIdx(isOpen ? null : i)}
                     aria-expanded={isOpen}
                     className="w-full flex items-start justify-between gap-6 py-5 text-left"
                   >
-                    <span className="text-lg md:text-xl text-primary">{f.q}</span>
+                    <span
+                      className="text-lg md:text-xl"
+                      style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif", fontWeight: 600 }}
+                    >
+                      {f.q}
+                    </span>
                     <span
                       aria-hidden="true"
-                      className="shrink-0 mt-1 h-6 w-6 flex items-center justify-center text-primary"
+                      className="shrink-0 mt-1 h-6 w-6 flex items-center justify-center"
+                      style={{ color: "#fdb600" }}
                     >
                       {isOpen ? <Minus size={20} /> : <Plus size={20} />}
                     </span>
                   </button>
+                  {/* Plain brown text, no background box (2026-08-27,
+                      Danielle's call — tried a cream highlight box first,
+                      but brown-on-white on its own reads clearly enough and
+                      the box was unnecessary). */}
                   {isOpen && (
-                    <div className="pb-6 pr-10 text-base text-muted-foreground leading-relaxed">
+                    <div
+                      className="pb-6 pr-10 text-base leading-relaxed"
+                      style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}
+                    >
                       {f.a}
                     </div>
                   )}

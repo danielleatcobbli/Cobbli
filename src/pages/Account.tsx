@@ -135,15 +135,18 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => {
           </>
         )}
       </div>
-      <nav aria-label="Account" className="flex flex-col gap-1 text-sm">
+      {/* Uppercase + Instrument Sans/bold 2026-08-27 (Danielle's call —
+          Account section should use the same fonts/capitalization as the
+          rest of the site, matching the header nav's uppercase treatment). */}
+      <nav aria-label="Account" className="flex flex-col gap-1 text-sm uppercase tracking-wide" style={{ fontFamily: "'Instrument Sans', sans-serif" }}>
         {NAV.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
               cn(
-                "py-2 transition-colors hover:text-primary",
-                isActive ? "underline underline-offset-4 font-medium text-primary" : "text-foreground/80",
+                "py-2 transition-colors hover:text-primary font-bold",
+                isActive ? "underline underline-offset-4 text-primary" : "text-foreground/80",
               )
             }
           >
@@ -153,7 +156,7 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => {
         <button
           type="button"
           onClick={onSignOut}
-          className="text-left py-2 text-foreground/80 hover:text-primary transition-colors"
+          className="text-left py-2 font-bold text-foreground/80 hover:text-primary transition-colors"
         >
           Sign Out
         </button>
@@ -395,7 +398,12 @@ const Orders = () => {
 
   return (
     <section>
-      <h1 className="text-2xl md:text-3xl font-semibold">My orders</h1>
+      <h1
+        className="text-2xl md:text-3xl uppercase"
+        style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+      >
+        My orders
+      </h1>
       <p className="text-muted-foreground mt-1 mb-6">Your repairs and proposals</p>
 
       {loading ? (
@@ -486,7 +494,12 @@ const Addresses = () => {
 
   return (
     <section>
-      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My Addresses</h1>
+      <h1
+        className="text-2xl md:text-3xl uppercase mb-6"
+        style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+      >
+        My Addresses
+      </h1>
       {items === null ? (
         <BrandSpinner className="py-10" />
       ) : items.length === 0 ? (
@@ -546,7 +559,12 @@ const PaymentMethods = () => {
 
   return (
     <section>
-      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My payment methods</h1>
+      <h1
+        className="text-2xl md:text-3xl uppercase mb-6"
+        style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+      >
+        My payment methods
+      </h1>
       {items === null ? (
         <BrandSpinner className="py-10" />
       ) : items.length === 0 ? (
@@ -665,7 +683,12 @@ const AddAddress = () => {
 
   return (
     <section className="max-w-lg">
-      <h1 className="text-2xl md:text-3xl font-semibold mb-6">Add address</h1>
+      <h1
+        className="text-2xl md:text-3xl uppercase mb-6"
+        style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+      >
+        Add address
+      </h1>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="street">Street address <span className="text-destructive">*</span></Label>
@@ -796,7 +819,12 @@ const AddPaymentMethod = () => {
 
   return (
     <section className="max-w-lg">
-      <h1 className="text-2xl md:text-3xl font-semibold mb-6">Add payment method</h1>
+      <h1
+        className="text-2xl md:text-3xl uppercase mb-6"
+        style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+      >
+        Add payment method
+      </h1>
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="cardholder">Cardholder name <span className="text-destructive">*</span></Label>
@@ -959,7 +987,12 @@ const EditAddress = () => {
 
   return (
     <section className="max-w-lg">
-      <h1 className="text-2xl md:text-3xl font-semibold mb-6">Edit address</h1>
+      <h1
+        className="text-2xl md:text-3xl uppercase mb-6"
+        style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+      >
+        Edit address
+      </h1>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="street">Street address <span className="text-destructive">*</span></Label>
@@ -1286,7 +1319,12 @@ const EditPaymentMethod = () => {
 
   return (
     <section className="max-w-lg">
-      <h1 className="text-2xl md:text-3xl font-semibold mb-6">Edit payment method</h1>
+      <h1
+        className="text-2xl md:text-3xl uppercase mb-6"
+        style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+      >
+        Edit payment method
+      </h1>
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-card p-4 text-sm">
           <p className="font-medium">
@@ -1430,7 +1468,12 @@ const Password = () => {
 
   return (
     <section className="max-w-md">
-      <h1 className="text-2xl md:text-3xl font-semibold mb-6">My Password</h1>
+      <h1
+        className="text-2xl md:text-3xl uppercase mb-6"
+        style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+      >
+        My Password
+      </h1>
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <PasswordField
           id="current-pw"
@@ -1503,7 +1546,12 @@ const Contact = () => {
   });
   return (
     <section className="max-w-2xl">
-      <h1 className="text-2xl md:text-3xl font-semibold mb-4">Contact Us</h1>
+      <h1
+        className="text-2xl md:text-3xl uppercase mb-4"
+        style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+      >
+        Contact Us
+      </h1>
       <p className="text-foreground/90 leading-relaxed">
         We'd love to hear from you! You can reach us at{" "}
         <a href="mailto:support@cobbli.com" className="underline hover:text-primary">
@@ -1540,8 +1588,14 @@ const Account = () => {
   };
 
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + Header
+  // theme="cream" only; the account dashboard itself (sidebar, orders table,
+  // addresses, payment methods, settings forms) keeps its existing
+  // functional styling, same page-shell-only scoping applied to the rest of
+  // the account/checkout pages — this page in particular is too data-dense
+  // to safely recolor wholesale in this pass.
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
         <div className="container py-10 md:py-14">

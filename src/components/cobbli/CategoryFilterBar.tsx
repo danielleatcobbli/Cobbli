@@ -65,6 +65,13 @@ type Props = {
   scrollable?: boolean;
   /** Icon display size in px. Defaults to 24. */
   iconSize?: number;
+  /** "amber" recolors icons/labels to Cobbli yellow and drops the boxed
+   *  active state in favor of just the yellow underline — Danielle's call
+   *  2026-08-26, matches her homepage mockup's cleaner Hot-Girl-Pickles-style
+   *  look. Defaults to "default" (today's look, unchanged) everywhere except
+   *  the homepage Services teaser, the only caller passing "amber" — the
+   *  full /services page keeps its current dark-icon, boxed-active style. */
+  theme?: "default" | "amber";
 };
 
 /** Shared category filter bar used on the homepage Services preview and the
@@ -78,7 +85,8 @@ type Props = {
  *  fits on one row on a typical desktop width instead of wrapping to a
  *  second. Scrollable mode (the homepage carousel) is unchanged — each
  *  button keeps its natural width in a horizontally-scrolling row. */
-const CategoryFilterBar = ({ active, onChange, className, scrollable, iconSize = 20 }: Props) => {
+const CategoryFilterBar = ({ active, onChange, className, scrollable, iconSize = 20, theme = "default" }: Props) => {
+  const amber = theme === "amber";
   const containerClass = scrollable
     ? `flex flex-nowrap gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1 ${className ?? ""}`
     : `grid gap-2 md:gap-3 ${className ?? ""}`;
@@ -102,21 +110,55 @@ const CategoryFilterBar = ({ active, onChange, className, scrollable, iconSize =
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(c)}
-            className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[11px] font-medium text-center transition-colors min-w-0 ${
+            // Bolded for the amber/homepage theme only 2026-08-27 (Danielle's
+            // call: "aren't jumping out enough... maybe by bolding") — the
+            // /services page's "default" theme keeps its original
+            // font-medium weight, unaffected.
+            className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[11px] ${
+              amber ? "font-extrabold" : "font-medium"
+            } text-center transition-colors min-w-0 ${
               scrollable ? "shrink-0" : "w-full"
-            } ${isActive ? "text-primary border-[1.5px]" : "text-[#7a5c40] hover:text-primary"}`}
+            } ${
+              amber
+                ? "hover:opacity-80"
+                : isActive
+                  ? "text-primary border-[1.5px]"
+                  : "text-[#7a5c40] hover:text-primary"
+            }`}
             style={
-              isActive
-                ? { backgroundColor: "#f5f0e8", borderColor: "#3d1700" }
-                : undefined
+              amber
+                ? { color: "#fdb600" }
+                : isActive
+                  ? { backgroundColor: "#f5f0e8", borderColor: "#3d1700" }
+                  : undefined
             }
           >
-            <img
-              src={ICONS[c]}
-              alt=""
-              aria-hidden="true"
-              style={{ width: iconSize, height: iconSize, opacity: 1 }}
-            />
+            {amber ? (
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "block",
+                  width: iconSize,
+                  height: iconSize,
+                  backgroundColor: "#fdb600",
+                  WebkitMaskImage: `url(${ICONS[c]})`,
+                  maskImage: `url(${ICONS[c]})`,
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                }}
+              />
+            ) : (
+              <img
+                src={ICONS[c]}
+                alt=""
+                aria-hidden="true"
+                style={{ width: iconSize, height: iconSize, opacity: 1 }}
+              />
+            )}
             <span
               className="leading-snug"
               style={

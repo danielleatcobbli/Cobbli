@@ -123,16 +123,24 @@ const AssessmentDeposit = () => {
     ? `${window.location.origin}/start-repair/assessment/deposit?session_id={CHECKOUT_SESSION_ID}&assessment_id=${assessmentId}`
     : "";
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + amber page
+  // heading only; the Stripe checkout panel and payment/pricing detail
+  // blocks below keep their existing functional styling.
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen flex flex-col bg-white">
       <Header />
       <PaymentTestModeBanner />
       <StepIndicator steps={ASSESSMENT_STEPS} current="deposit" ariaLabel="Assessment progress" />
 
       <section className="flex-1 py-12 md:py-16">
         <div className="container max-w-2xl">
-          <h1 className="font-display text-3xl md:text-4xl text-primary">Confirm your deposit</h1>
-          <p className="mt-2 text-primary/80">
+          <h1
+            className="text-3xl md:text-4xl uppercase"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+          >
+            Confirm your deposit
+          </h1>
+          <p className="mt-2" style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif", opacity: 0.85 }}>
             We charge a $20 deposit per pair while we review your photos. It's applied to your repair when you place your order or refunded in full if you decide not to proceed.
           </p>
 

@@ -183,8 +183,10 @@ const SignUp = () => {
     return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
   };
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + amber page
+  // heading only, same scoping as SignIn.tsx.
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
         <div className="container max-w-md py-12 md:py-16">
@@ -193,20 +195,16 @@ const SignUp = () => {
               role="tab"
               aria-selected={false}
               onClick={() => navigate("/signin", { state: { from } })}
-              className={cn(
-                "h-11 rounded-md text-sm font-semibold transition-colors",
-                "bg-muted text-muted-foreground hover:bg-muted/80",
-              )}
+              className="h-11 rounded-md text-sm font-semibold transition-colors hover:opacity-80"
+              style={{ backgroundColor: "#fff5cc", color: "#fdb600", border: "1px solid #fdb600" }}
             >
               Sign in
             </button>
             <button
               role="tab"
               aria-selected={true}
-              className={cn(
-                "h-11 rounded-md text-sm font-semibold transition-colors",
-                "bg-primary text-primary-foreground shadow-soft",
-              )}
+              className="h-11 rounded-md text-sm font-semibold transition-colors shadow-soft"
+              style={{ backgroundColor: "#fdb600", color: "#fff5cc" }}
             >
               Create an account
             </button>
@@ -214,7 +212,12 @@ const SignUp = () => {
 
           {confirmEmailSent ? (
             <section className="space-y-6 text-center">
-              <h1 className="text-2xl md:text-3xl font-semibold">Check your inbox</h1>
+              <h1
+                className="text-2xl md:text-3xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                Check your inbox
+              </h1>
               <p className="text-foreground/80">
                 We've sent a confirmation link to <strong>{email}</strong>. Click it to verify your email and finish
                 setting up your account.
@@ -225,7 +228,11 @@ const SignUp = () => {
             </section>
           ) : (
             <section aria-labelledby="signup-heading">
-              <h1 id="signup-heading" className="text-2xl md:text-3xl font-semibold mb-2 text-center">
+              <h1
+                id="signup-heading"
+                className="text-2xl md:text-3xl uppercase mb-2 text-center"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
                 Create an account
               </h1>
               <p className="text-sm text-foreground/80 mb-6 text-center">
@@ -394,7 +401,7 @@ const SignUp = () => {
                     <span className="w-full border-t border-border" />
                   </div>
                   <div className="relative flex justify-center text-xs">
-                    <span className="bg-background px-2 text-muted-foreground">or</span>
+                    <span className="px-2 text-muted-foreground bg-white">or</span>
                   </div>
                 </div>
 

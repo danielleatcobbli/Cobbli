@@ -202,7 +202,7 @@ const SelectServices = () => {
   };
 
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen flex flex-col bg-white">
       <Header />
       <StepIndicator current="select" />
 
@@ -210,7 +210,12 @@ const SelectServices = () => {
         <div className="container">
           <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
             <div className="flex-1 min-w-0">
-              <h1 className="font-display text-2xl md:text-3xl text-primary">What can we help with?</h1>
+              <h1
+                className="text-2xl md:text-3xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                What can we help with?
+              </h1>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium text-primary">Selected services:</span>
                 {selectedServices.length === 0 ? (

@@ -15,7 +15,18 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        hero: "bg-status-orange text-primary font-semibold shadow-soft hover:bg-status-orange/90 hover:shadow-elevated transition-all",
+        // Switched from amber to Cobbli brown 2026-08-27 (Danielle's call,
+        // "let's go brown for buttons") — amber is already the site's
+        // dominant surface/decoration color (headers, tiles, section
+        // backgrounds, badges), so an amber button stopped reading as
+        // distinctly clickable next to all the other amber around it. Brown
+        // is reserved for text/icons elsewhere, so making it "the button
+        // color" gives one consistent, high-contrast cue for "this is an
+        // action" wherever it shows up. bg-primary resolves to Cobbli brown
+        // via the --primary CSS var (see index.css). Text tried as Cobbli
+        // cream first, same day, but Danielle said it "looks kind of weird
+        // on the brown" — switched to plain white instead.
+        hero: "bg-primary text-white font-semibold shadow-soft hover:bg-primary/90 hover:shadow-elevated transition-all",
         heroOutline: "border-2 border-primary-foreground/80 bg-transparent text-primary-foreground hover:bg-primary-foreground hover:text-primary transition-colors",
       },
       size: {

@@ -135,8 +135,11 @@ const SignIn = () => {
     }
   };
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg + amber page
+  // heading only; the auth form/tabs/buttons below keep their existing
+  // functional styling.
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
         <div className="container max-w-md py-12 md:py-16">
@@ -144,10 +147,8 @@ const SignIn = () => {
             <button
               role="tab"
               aria-selected={true}
-              className={cn(
-                "h-11 rounded-md text-sm font-semibold transition-colors",
-                "bg-primary text-primary-foreground shadow-soft",
-              )}
+              className="h-11 rounded-md text-sm font-semibold transition-colors shadow-soft"
+              style={{ backgroundColor: "#fdb600", color: "#fff5cc" }}
             >
               Sign in
             </button>
@@ -155,10 +156,8 @@ const SignIn = () => {
               role="tab"
               aria-selected={false}
               onClick={() => navigate("/signup", { state: { from: fromState } })}
-              className={cn(
-                "h-11 rounded-md text-sm font-semibold transition-colors",
-                "bg-muted text-muted-foreground hover:bg-muted/80",
-              )}
+              className="h-11 rounded-md text-sm font-semibold transition-colors hover:opacity-80"
+              style={{ backgroundColor: "#fff5cc", color: "#fdb600", border: "1px solid #fdb600" }}
             >
               Create an account
             </button>
@@ -166,7 +165,11 @@ const SignIn = () => {
 
           {locked ? (
             <section aria-labelledby="locked-heading" className="space-y-6">
-              <h1 id="locked-heading" className="text-2xl md:text-3xl font-semibold">
+              <h1
+                id="locked-heading"
+                className="text-2xl md:text-3xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
                 Account locked
               </h1>
               <p className="text-foreground/80">
@@ -179,7 +182,11 @@ const SignIn = () => {
             </section>
           ) : (
             <section aria-labelledby="signin-heading">
-              <h1 id="signin-heading" className="text-2xl md:text-3xl font-semibold mb-6 text-center">
+              <h1
+                id="signin-heading"
+                className="text-2xl md:text-3xl uppercase mb-6 text-center"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
                 Sign in
               </h1>
 
@@ -246,7 +253,7 @@ const SignIn = () => {
                     <span className="w-full border-t border-border" />
                   </div>
                   <div className="relative flex justify-center text-xs">
-                    <span className="bg-background px-2 text-muted-foreground">or</span>
+                    <span className="px-2 text-muted-foreground bg-white">or</span>
                   </div>
                 </div>
 

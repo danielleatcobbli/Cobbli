@@ -13,24 +13,23 @@ import {
 } from "@/lib/sanity";
 
 const BROWN = "#3d1700";
-const CREAM_CARD = "#f6ead9";
+const AMBER = "#fdb600";
+const CREAM = "#fff5cc";
 
 /** Placeholder shown in place of a cover image. Renders the post title in a
  * decorative cursive treatment so the card still feels designed without
- * repeating the title/date/excerpt that already appear in the card body. */
+ * repeating the title/date/excerpt that already appear in the card body.
+ * Kept as its own dark umber block (matching ServiceCard's image-area
+ * convention elsewhere) so it stays legible regardless of card theme. */
 const NoCoverBand = ({ title }: { title: string }) => (
   <div
     className="relative flex aspect-[16/10] w-full items-center justify-center overflow-hidden p-6"
-    style={{
-      backgroundColor: CREAM_CARD,
-      backgroundImage:
-        "radial-gradient(circle at 20% 20%, rgba(61,23,0,0.07), transparent 45%), radial-gradient(circle at 80% 80%, rgba(61,23,0,0.07), transparent 45%)",
-    }}
+    style={{ backgroundColor: BROWN }}
   >
     <span
       aria-hidden="true"
       className="font-cursive line-clamp-3 select-none text-center text-4xl font-bold leading-snug md:text-5xl"
-      style={{ color: BROWN, opacity: 0.95 }}
+      style={{ color: AMBER }}
     >
       {title}
     </span>
@@ -62,31 +61,30 @@ const Blog = () => {
     };
   }, []);
 
+  // Restyled 2026-08-26 (Danielle's call) — cream page bg, amber Fraunces/
+  // Instrument Sans headings/body, and post cards switched to the same
+  // amber-card/cream-text treatment as ServiceCard's amber theme, for full
+  // consistency with the rest of the cream-background pages.
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       <main className="flex-1">
-        <div
-          className="border-b"
-          style={{
-            background:
-              "linear-gradient(180deg, #fff8ec 0%, rgba(255,248,236,0) 100%)",
-          }}
-        >
-          <div className="container max-w-6xl py-14 md:py-20 text-center">
-            <p
-              className="mb-3 text-xs font-semibold uppercase tracking-[0.2em]"
-              style={{ color: "rgba(61,23,0,0.55)" }}
-            >
-              The Cobbli Journal
-            </p>
-            <h1 className="font-display text-4xl md:text-6xl" style={{ color: BROWN }}>
-              Behind the Workbench
-            </h1>
-            <p className="mx-auto mt-4 max-w-xl text-base md:text-lg text-foreground/70">
-              Shoe care tips, workshop stories, and updates from the people building Cobbli.
-            </p>
-          </div>
+        <div className="container max-w-6xl py-14 md:py-20 text-center">
+          <p
+            className="mb-3 text-xs font-semibold uppercase tracking-[0.2em]"
+            style={{ color: AMBER, fontFamily: "'Instrument Sans', sans-serif", opacity: 0.8 }}
+          >
+            The Cobbli Journal
+          </p>
+          <h1
+            className="text-4xl md:text-6xl uppercase"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: AMBER }}
+          >
+            Behind the Workbench
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl text-base md:text-lg" style={{ color: AMBER, fontFamily: "'Instrument Sans', sans-serif", opacity: 0.9 }}>
+            Shoe care tips, workshop stories, and updates from the people building Cobbli.
+          </p>
         </div>
 
         <div className="container max-w-6xl py-12 md:py-16">
@@ -95,9 +93,9 @@ const Blog = () => {
           )}
 
           {posts !== null && posts.length === 0 && (
-            <div className="rounded-2xl border border-dashed p-16 text-center">
-              <h2 className="font-display text-2xl mb-2" style={{ color: BROWN }}>No posts yet</h2>
-              <p className="text-muted-foreground">Check back soon — we're cooking up our first stories.</p>
+            <div className="rounded-2xl border border-dashed p-16 text-center" style={{ borderColor: AMBER }}>
+              <h2 className="text-2xl mb-2 uppercase" style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: AMBER }}>No posts yet</h2>
+              <p style={{ color: AMBER, fontFamily: "'Instrument Sans', sans-serif", opacity: 0.9 }}>Check back soon — we're cooking up our first stories.</p>
             </div>
           )}
 
@@ -109,10 +107,11 @@ const Blog = () => {
                   <Link
                     key={post._id}
                     to={`/blog/${post.slug}`}
-                    className="group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+                    className="group flex flex-col overflow-hidden rounded-xl shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+                    style={{ backgroundColor: AMBER }}
                   >
                     {coverUrl ? (
-                      <div className="aspect-[16/10] w-full overflow-hidden" style={{ backgroundColor: "#fff5cc" }}>
+                      <div className="aspect-[16/10] w-full overflow-hidden" style={{ backgroundColor: BROWN }}>
                         <img
                           src={coverUrl}
                           alt={post.mainImage?.alt || ""}
@@ -124,16 +123,16 @@ const Blog = () => {
                       <NoCoverBand title={post.title} />
                     )}
                     <div className="flex flex-1 flex-col gap-2 p-5">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      <p className="text-xs uppercase tracking-wide" style={{ color: CREAM, opacity: 0.85, fontFamily: "'Instrument Sans', sans-serif" }}>
                         {formatBlogDate(post.publishedAt)}
                       </p>
-                      <h2 className="font-display text-xl leading-tight" style={{ color: BROWN }}>
+                      <h2 className="text-xl leading-tight" style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: CREAM }}>
                         {post.title}
                       </h2>
-                      <p className="text-sm text-foreground/80 flex-1">{post.excerpt}</p>
+                      <p className="text-sm flex-1" style={{ color: CREAM, opacity: 0.9, fontFamily: "'Instrument Sans', sans-serif" }}>{post.excerpt}</p>
                       <span
                         className="mt-1 inline-flex items-center gap-1 text-sm font-medium underline-offset-4 group-hover:underline"
-                        style={{ color: BROWN }}
+                        style={{ color: CREAM, fontFamily: "'Instrument Sans', sans-serif" }}
                       >
                         Read more
                         <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
