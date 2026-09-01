@@ -12,7 +12,7 @@ export const BRANDS = [
   "Ermenegildo Zegna","Ferragamo","Frye","Givenchy","Golden Goose","Gucci",
   "Hermès","Hugo Boss","Hunter","J.Crew","Jimmy Choo","Johnston & Murphy",
   "Kate Spade","Kenneth Cole","L.K. Bennett","Lacoste","Loewe","Louis Vuitton",
-  "Loro Piana","Manolo Blahnik","Margaux","Massimo Dutti","Miu Miu","Moncler",
+  "Loro Piana","Maison Margiela","Manolo Blahnik","Margaux","Massimo Dutti","Miu Miu","Moncler",
   "New Balance","Nike","Off-White","Paul Smith","Prada","Ralph Lauren","Rag & Bone",
   "Rebecca Minkoff","Reebok","Roger Vivier","Russell & Bromley","Saint Laurent",
   "Salvatore Ferragamo","Sam Edelman","Santoni","Sergio Rossi","Steve Madden",

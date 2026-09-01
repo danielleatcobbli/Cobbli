@@ -45,11 +45,12 @@ import type { BagService } from "@/context/BagContext";
 import { formatPrice, useBag } from "@/context/BagContext";
 import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { useAuth } from "@/context/AuthContext";
-import type { ShoeType } from "@/types/service";
+import { SHOE_TYPES, type ShoeType, isResoleSupportedFor, isHeelTipEligible } from "@/types/service";
 import { resolePriceForKey, type ResolePriceKey } from "@/types/service";
 import { CHECKLIST_GROUPS, ADDONS, computeRecommendation, COMMON_CONDITION_LABELS, SLUG_TO_CONDITION_LABELS } from "@/data/starterRepairConditions";
 import { CATEGORY_ICONS, categoryDisplayLabel } from "@/components/cobbli/CategoryFilterBar";
 import BeforeAfterImage from "@/components/cobbli/BeforeAfterImage";
+import BrandCombobox, { type BrandMode } from "@/components/cobbli/BrandCombobox";
 import SoleInsoleConditionDialog, {
   SOLE_CONDITION_LABEL,
   INSOLE_CONDITION_LABEL,
@@ -65,6 +66,77 @@ import FollowUpSeverityDialog, {
 } from "@/components/cobbli/FollowUpSeverityDialog";
 import { trackEvent } from "@/lib/analytics";
 import iconOdor from "@/assets/category-icons/odor.svg";
+
+// Shoe-type tile photos (2026-08-29, Danielle's call — dropped the
+// hand-drawn icon attempt, "very AI looking," in favor of real photos, same
+// pattern as every other photo-driven selector in this app: condition
+// tiles, sole-type options, etc.). Served from /public like
+// condition-photos and sole-types photos, not imported as module assets, so
+// dropping a new file in public/shoe-type-photos/ is a no-code-change swap.
+// Nothing exists at these paths yet — renderShoeTypeTile below falls back to
+// a plain placeholder box (same dashed-border pattern used in
+// FollowUpSeverityDialog.tsx) until real photos land there. Filenames she
+// should use when she has them, one per shoe type:
+//   /shoe-type-photos/flats.jpg
+//   /shoe-type-photos/loafers.jpg
+//   /shoe-type-photos/sneakers.jpg
+//   /shoe-type-photos/boots.jpg
+//   /shoe-type-photos/ankle-boots.jpg
+//   /shoe-type-photos/heels.jpg
+//   /shoe-type-photos/sandals.jpg
+const SHOE_TYPE_PHOTO: Record<ShoeType, string> = {
+  Flats: "/shoe-type-photos/flats.jpg",
+  Loafers: "/shoe-type-photos/loafers.jpg",
+  Sneakers: "/shoe-type-photos/sneakers.jpg",
+  Boots: "/shoe-type-photos/boots.jpg",
+  "Ankle boots": "/shoe-type-photos/ankle-boots.jpg",
+  Heels: "/shoe-type-photos/heels.jpg",
+  Sandals: "/shoe-type-photos/sandals.jpg",
+};
+
+// No exported constant for this elsewhere (unlike SOLE_CONDITION_LABEL/
+// RESOLE_CONDITION_LABEL) — matches the literal condition label used in
+// starterRepairConditions.ts and FollowUpSeverityDialog.tsx's severity
+// question for it.
+const HEEL_TIP_CONDITION_LABEL = "Worn or missing heel tip";
+
+/** Colors shown as optional chips on the pair-details step — same list
+ *  AssessmentDetails.tsx already uses for the (separate, legacy) assessment
+ *  flow's own shoe-details form, kept in sync manually since that page
+ *  isn't part of this one's module graph. */
+const PAIR_COLORS = [
+  "Black", "Blue", "Brown", "Cream", "Denim", "Gold", "Green", "Grey",
+  "Multi", "Navy", "Orange", "Pattern", "Pink", "Purple", "Red", "Silver",
+  "Tan", "White", "Yellow",
+];
+
+/** Shoe-type tile image, with a graceful placeholder for whichever
+ *  SHOE_TYPE_PHOTO paths don't have a real file yet (all of them, right
+ *  now) — same dashed-box pattern as FollowUpSeverityDialog's
+ *  PlaceholderPhoto, so a missing photo reads as "not added yet," not as a
+ *  broken image icon. Swaps itself out automatically the moment a real file
+ *  lands at the expected path — no code change needed on Danielle's end. */
+const ShoeTypeTilePhoto = ({ src, label }: { src: string; label: string }) => {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <span
+        className="flex items-center justify-center w-10 h-10 rounded-md border border-dashed"
+        style={{ borderColor: "#3d1700", opacity: 0.5 }}
+      >
+        <Camera size={16} style={{ color: "#3d1700" }} />
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={label}
+      onError={() => setFailed(true)}
+      className="w-10 h-10 rounded-md object-cover"
+    />
+  );
+};
 
 type CartLine = {
   id: string;
@@ -107,25 +179,40 @@ const StartRepair = () => {
   const { findByPairId, addPair: addPairToBag } = useBag();
   const { user } = useAuth();
 
-  // Which-pair field (2026-07-27, Danielle's call): a dropdown of saved pairs
-  // only makes sense for a signed-in customer who actually has any — a guest
-  // never has saved pairs, so they go straight to the free-text "new pair"
-  // field with no dropdown to show at all. Signed-in customers with saved
-  // pairs get the dropdown, with "Add a new pair" swapping it for the same
-  // text field.
+  // Which-pair step (rebuilt 2026-08-29, Danielle's call) — pair identity is
+  // now its own required page ("Tell us about this pair," step ===
+  // "pair-details") shown BEFORE the checklist, instead of a field sitting
+  // on the checklist page itself. Two things drove this: (1) she wanted the
+  // pair field impossible to skip past without noticing, and structurally
+  // gating the checklist behind it does that more reliably than any amount
+  // of visual styling could; (2) she wants shoe type + brand collected up
+  // front so the checklist can grey out/hide conditions that don't apply to
+  // this particular pair (resole for sneakers/Louboutin/Margiela, heel-tip
+  // for non-heeled shoe types) — see isResoleSupportedFor/isHeelTipEligible.
+  //
+  // A dropdown of saved pairs only makes sense for a signed-in customer who
+  // actually has any — a guest never has saved pairs, so they go straight to
+  // the new-pair form with no dropdown to show at all.
   const showPairDropdown = !!user && pairs.length > 0;
   const isAddingNewPair = selectedPairId === null;
-  const [newPairName, setNewPairName] = useState("");
 
-  // Red validation state for the pair field (2026-07-29, Danielle's call):
-  // customers were reaching the recommendations screen without naming a
-  // pair, then hitting a quietly-disabled checkout button with no clear
-  // reason why. Since a repair is always one-pair-at-a-time, the pair field
-  // is now a hard gate on "See my recommendations" itself — not just
-  // checkout — and failing that gate flags the field red right where the
-  // customer is looking, instead of a muted note they'd have to go find.
+  // New-pair form fields (replaces the old single free-text "newPairName" —
+  // see PairsContext.tsx's SavedPair/formatPairLabel for how these compose
+  // into the label shown everywhere else). Shoe type and brand are required;
+  // color and identifiers are optional, per Danielle's call.
+  const [newPairShoeType, setNewPairShoeType] = useState<ShoeType | "">("");
+  const [newPairBrandMode, setNewPairBrandMode] = useState<BrandMode>("");
+  const [newPairBrand, setNewPairBrand] = useState("");
+  const [newPairColors, setNewPairColors] = useState<string[]>([]);
+  const [newPairIdentifiers, setNewPairIdentifiers] = useState("");
+
+  // Red validation state for the pair-details step (2026-07-29, carried
+  // forward from the old pair field's same treatment) — shoe type/brand
+  // missing flags right on the pair-details page instead of letting someone
+  // through to a checklist with no pair behind it.
   const [pairError, setPairError] = useState(false);
-  const isPairFilled = selectedPairId !== null || newPairName.trim().length > 0;
+  const isPairFilled =
+    selectedPairId !== null || (newPairShoeType !== "" && (newPairBrandMode === "unknown" || newPairBrand.trim().length > 0));
 
   // Same treatment as pairError above, for the other independent
   // requirement (2026-08-12, Danielle's call — the two need to behave the
@@ -142,7 +229,7 @@ const StartRepair = () => {
   // a fresh pair is started (see onAddAnotherPair) rather than persisting.
   const [repairNotes, setRepairNotes] = useState("");
 
-  const [step, setStep] = useState<"checklist" | "results">("checklist");
+  const [step, setStep] = useState<"pair-details" | "checklist" | "results">("pair-details");
   const [checkedLabels, setCheckedLabels] = useState<Set<string>>(new Set());
   const [checkedAddons, setCheckedAddons] = useState<Set<string>>(new Set());
   const [notOffered, setNotOffered] = useState<{ slug: string; name: string }[]>([]);
@@ -222,7 +309,13 @@ const StartRepair = () => {
   useEffect(() => {
     // Switching to an existing saved pair means whatever was typed for a new
     // pair no longer applies — clear it so it can't get sent along by mistake.
-    if (selectedPairId) setNewPairName("");
+    if (selectedPairId) {
+      setNewPairShoeType("");
+      setNewPairBrandMode("");
+      setNewPairBrand("");
+      setNewPairColors([]);
+      setNewPairIdentifiers("");
+    }
     const existing = selectedPairId ? findByPairId(selectedPairId) : undefined;
     const cameFromNoPairSelected = prevSelectedPairIdRef.current === null;
     prevSelectedPairIdRef.current = selectedPairId;
@@ -351,6 +444,34 @@ const StartRepair = () => {
     ...list.filter((c) => !hasRealImage(c)),
   ];
 
+  // Shoe-type/brand gating (2026-08-29, Danielle's call) — resolved from
+  // whichever pair is active: an existing saved pair's own shoeType/brand,
+  // or whatever's been entered so far on the new-pair form. Falls back
+  // gracefully to "no restriction" (shoeType "") before either is known,
+  // e.g. briefly on first render before the pair-details step has run.
+  const activePair = selectedPairId ? getPair(selectedPairId) : null;
+  const activeShoeType: ShoeType | "" = activePair?.shoeType ?? newPairShoeType;
+  const activeBrand: string | undefined = activePair?.brand ?? (newPairBrand.trim() || undefined);
+  const heelTipEligible = isHeelTipEligible(activeShoeType);
+  const resoleSupported = isResoleSupportedFor(activeShoeType, activeBrand);
+
+  // Short summary shown at the top of the checklist with a "Change pair"
+  // link back to the pair-details step (replaces the old inline pair-field
+  // dropdown/text input that used to live directly on this page).
+  const activePairSummary = activePair
+    ? formatPairLabel(activePair)
+    : [newPairColors.join(" / "), newPairBrandMode === "unknown" ? "Unknown brand" : newPairBrand.trim(), newPairShoeType]
+        .filter(Boolean)
+        .join(" · ") + (newPairIdentifiers.trim() ? ` (${newPairIdentifiers.trim()})` : "");
+
+  // Heel-tip condition hidden entirely (not just greyed out) for shoe types
+  // that don't plausibly have a heel tip — see HEEL_TIP_SHOE_TYPES. Resole
+  // stays visible but greyed out (see renderConditionTile) since Danielle
+  // specifically asked for a "not currently supported" message there rather
+  // than making it disappear.
+  const filterEligibleConditions = (list: VisibleCondition[]): VisibleCondition[] =>
+    heelTipEligible ? list : list.filter((c) => c.label !== HEEL_TIP_CONDITION_LABEL);
+
   const visibleConditions = useMemo<VisibleCondition[]>(() => {
     if (activeChecklistCategory === "All") {
       // Dedupe by label — several conditions intentionally appear in more
@@ -368,20 +489,23 @@ const StartRepair = () => {
           flat.push({ ...cond, category: group.serviceCategory, id: `cond-${group.serviceCategory}-${cond.slug}-${idx}` });
         });
       });
-      return sortImagesFirst(sortCommonFirst(flat));
+      return filterEligibleConditions(sortImagesFirst(sortCommonFirst(flat)));
     }
     const group = CHECKLIST_GROUPS.find((g) => g.serviceCategory === activeChecklistCategory);
     if (!group) return [];
-    return sortImagesFirst(
-      sortCommonFirst(
-        group.conditions.map((cond, idx) => ({
-          ...cond,
-          category: group.serviceCategory,
-          id: `cond-${group.serviceCategory}-${cond.slug}-${idx}`,
-        })),
+    return filterEligibleConditions(
+      sortImagesFirst(
+        sortCommonFirst(
+          group.conditions.map((cond, idx) => ({
+            ...cond,
+            category: group.serviceCategory,
+            id: `cond-${group.serviceCategory}-${cond.slug}-${idx}`,
+          })),
+        ),
       ),
     );
-  }, [activeChecklistCategory, serviceBySlug]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChecklistCategory, serviceBySlug, heelTipEligible]);
 
   const renderConditionTile = (cond: {
     label: string;
@@ -392,6 +516,11 @@ const StartRepair = () => {
     id: string;
   }) => {
     const isChecked = checkedLabels.has(cond.label);
+    // Resole gating (2026-08-29, Danielle's call) — greyed out with a "not
+    // currently supported" message rather than hidden, since she specifically
+    // distinguished this from heel-tip's "only visible for..." treatment
+    // (that one's filtered out of visibleConditions entirely, above).
+    const isResoleUnsupported = cond.label === RESOLE_CONDITION_LABEL && !resoleSupported;
     // Amber frame-around-the-photo treatment 2026-08-27 (Danielle's call) —
     // matches ServiceCard's "amber" theme (the homepage/Services cards):
     // padding wraps the whole tile so amber shows on all four sides of the
@@ -404,10 +533,11 @@ const StartRepair = () => {
       <label
         key={cond.id}
         htmlFor={cond.id}
-        className="flex flex-col rounded-xl overflow-hidden cursor-pointer transition-all"
+        className={`flex flex-col rounded-xl overflow-hidden transition-all ${isResoleUnsupported ? "cursor-not-allowed" : "cursor-pointer"}`}
         style={{
           backgroundColor: "#fdb600",
           border: isChecked ? "3px solid #3d1700" : "3px solid transparent",
+          opacity: isResoleUnsupported ? 0.55 : 1,
         }}
       >
         <div className="flex flex-col flex-1 p-2.5">
@@ -421,7 +551,7 @@ const StartRepair = () => {
               after={serviceBySlug.get(cond.slug)?.afterImageUrl ?? cond.afterImageUrl}
               alt=""
               className="absolute inset-0 w-full h-full object-cover"
-              style={{ backgroundColor: "#3d1700" }}
+              style={{ backgroundColor: "#3d1700", filter: isResoleUnsupported ? "grayscale(1)" : undefined }}
             />
             {/* "Common" tag removed 2026-08-13 (Danielle's call) — it sat on
                 top of the condition photo and was blocking part of the "Worn
@@ -435,7 +565,11 @@ const StartRepair = () => {
             <Checkbox
               id={cond.id}
               checked={isChecked}
-              onCheckedChange={() => toggleCondition(cond.label)}
+              disabled={isResoleUnsupported}
+              onCheckedChange={() => {
+                if (isResoleUnsupported) return;
+                toggleCondition(cond.label);
+              }}
               className="absolute top-2 right-2 bg-white/90"
             />
           </div>
@@ -489,10 +623,16 @@ const StartRepair = () => {
               earlier attempt reserved a fixed min-height for the name block
               instead — unnecessary once mt-auto is doing the real work, so
               it's gone. */}
-          {serviceBySlug.get(cond.slug)?.cardPriceLabel && (
-            <p className="text-[13px] font-bold pt-0.5 mt-auto" style={{ color: "#3d1700" }}>
-              {serviceBySlug.get(cond.slug)!.cardPriceLabel.replace(/\s+per\s+\S.*/i, "").trim()}
+          {isResoleUnsupported ? (
+            <p className="text-[11px] font-semibold pt-0.5 mt-auto leading-snug" style={{ color: "#3d1700" }}>
+              Not currently supported for this type of shoe
             </p>
+          ) : (
+            serviceBySlug.get(cond.slug)?.cardPriceLabel && (
+              <p className="text-[13px] font-bold pt-0.5 mt-auto" style={{ color: "#3d1700" }}>
+                {serviceBySlug.get(cond.slug)!.cardPriceLabel.replace(/\s+per\s+\S.*/i, "").trim()}
+              </p>
+            )
           )}
         </div>
       </label>
@@ -534,18 +674,11 @@ const StartRepair = () => {
   // so they're shown one at a time rather than together.
   const onSeeRecommendationsClick = () => {
     if (!services) return;
-    // Both requirements validated together (not one-at-a-time) so a customer
-    // missing both sees both flagged on the first click, not just the first
-    // one — then scroll to whichever comes first on the page (the pair field
-    // sits above the checklist) so there's still one clear next step.
-    const pairMissing = !isPairFilled;
+    // Pair identity is no longer validated here (2026-08-29) — the checklist
+    // is now structurally unreachable without first completing the
+    // pair-details step, so isPairFilled is always true by this point.
     const conditionsMissing = !anyChecked;
-    setPairError(pairMissing);
     setConditionsError(conditionsMissing);
-    if (pairMissing) {
-      document.getElementById("pair-field")?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
     if (conditionsMissing) {
       document.getElementById("condition-tiles")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
@@ -707,8 +840,9 @@ const StartRepair = () => {
   const total = useMemo(() => cartLines.reduce((sum, l) => sum + l.price, 0), [cartLines]);
 
   // Required so either button below always has a pair to attach these
-  // services to — either an existing selected pair, or a name typed into the
-  // new-pair field.
+  // services to. isPairFilled is effectively always true by the results
+  // screen (the pair-details step already gated it) — kept as a defensive
+  // check rather than assumed, same spirit as the old comment here.
   const canFinalize = cartLines.length > 0 && isPairFilled;
 
   // Adds the current recommendation set to the bag under whichever pair is
@@ -729,14 +863,18 @@ const StartRepair = () => {
 
     let pair = selectedPairId ? getPair(selectedPairId) : undefined;
     if (!pair) {
-      // No shoe-type/color/brand form anymore (Danielle's call, 2026-07-15)
-      // — pricing doesn't depend on them, so "Unspecified"/empty here is a
-      // safe, inert default rather than forcing a choice that doesn't matter.
+      // Shoe-type/brand form is back (2026-08-29, Danielle's call) — this
+      // time not for pricing, but so the checklist can gate resole/heel-tip
+      // by shoe type and brand (see isResoleSupportedFor/isHeelTipEligible).
+      // newPairShoeType is guaranteed set by the time we get here — the
+      // pair-details step won't advance to the checklist without it.
+      const resolvedBrand =
+        newPairBrandMode === "unknown" ? undefined : newPairBrand.trim() || undefined;
       pair = addSavedPair({
-        shoeType: "Unspecified" as ShoeType,
-        colors: [],
-        brand: undefined,
-        description: newPairName.trim(),
+        shoeType: (newPairShoeType || "Unspecified") as ShoeType,
+        colors: newPairColors,
+        brand: resolvedBrand,
+        identifiers: newPairIdentifiers.trim() || undefined,
       });
       setSelectedPairId(pair.id);
     }
@@ -759,18 +897,37 @@ const StartRepair = () => {
   const onAddAnotherPair = () => {
     if (!commitPairToBag()) return;
     setSelectedPairId(null);
-    setNewPairName("");
+    setNewPairShoeType("");
+    setNewPairBrandMode("");
+    setNewPairBrand("");
+    setNewPairColors([]);
+    setNewPairIdentifiers("");
     setRepairNotes("");
     setCheckedLabels(new Set());
     setCheckedAddons(new Set());
     setCartLines([]);
     setNotOffered([]);
-    setStep("checklist");
+    // Back to "pair-details" (not "checklist") — a fresh pair needs its own
+    // shoe type/brand identified before its own checklist gating can apply.
+    setStep("pair-details");
   };
 
   const onGoToCheckout = () => {
     if (!commitPairToBag()) return;
     navigate("/checkout");
+  };
+
+  // Advances from the pair-details step to the checklist — the one place
+  // pair identity is actually validated now (2026-08-29). Picking an
+  // existing saved pair always passes (selectedPairId set); adding a new
+  // one requires shoe type + brand (color/identifiers stay optional).
+  const onPairDetailsContinue = () => {
+    if (!isPairFilled) {
+      setPairError(true);
+      return;
+    }
+    setPairError(false);
+    setStep("checklist");
   };
 
   if (isLoading) {
@@ -799,7 +956,169 @@ const StartRepair = () => {
       <Header />
       <section className="flex-1 py-12 md:py-16">
         <div className={`container ${step === "checklist" ? "max-w-4xl" : "max-w-2xl"}`}>
-          {step === "checklist" ? (
+          {step === "pair-details" ? (
+            <>
+              <h1
+                className="text-3xl md:text-4xl uppercase"
+                style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
+              >
+                Which pair needs attention?
+              </h1>
+              <p className="mt-2" style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif", opacity: 0.85 }}>
+                Tell us about this pair so we can match the right services
+              </p>
+
+              {showPairDropdown && (
+                <div className="mt-6">
+                  <label htmlFor="existing-pair-select" className="text-sm font-medium" style={{ color: "#7a5c40" }}>
+                    Have a pair you've already told us about?
+                  </label>
+                  <select
+                    id="existing-pair-select"
+                    value={selectedPairId ?? ""}
+                    onChange={(e) => {
+                      setSelectedPairId(e.target.value || null);
+                      setPairError(false);
+                    }}
+                    className="mt-1.5 block w-full text-sm rounded-md px-3 py-2 text-primary bg-white"
+                    style={{ border: "1px solid hsl(var(--border))" }}
+                  >
+                    <option value="">Add a new pair</option>
+                    {pairs.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {formatPairLabel(p)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {(isAddingNewPair || !showPairDropdown) && (
+                <div className="mt-6 rounded-xl border border-border bg-white p-5 space-y-5">
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "#7a5c40" }}>
+                      Shoe type <span style={{ color: "#a32d2d" }}>*</span>
+                    </p>
+                    {/* Tile format (2026-08-29, Danielle's call: "bigger and
+                        more visual... big icon with text below it") — same
+                        amber-card visual language as the condition tiles
+                        below (backgroundColor #fdb600, brown ring when
+                        selected), just applied to shoe type instead. Real
+                        photos now (2026-08-29, Danielle's call, replacing a
+                        hand-drawn icon pass she flagged as "very AI
+                        looking") — see SHOE_TYPE_PHOTO above for the exact
+                        paths/filenames still needed; ShoeTypeTilePhoto shows
+                        a dashed placeholder box until each one exists. */}
+                    <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-4 gap-3">
+                      {SHOE_TYPES.map((t) => {
+                        const selected = newPairShoeType === t;
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => {
+                              setNewPairShoeType(t);
+                              setPairError(false);
+                            }}
+                            aria-pressed={selected}
+                            className="flex flex-col items-center gap-2 rounded-xl p-3 transition-all"
+                            style={{
+                              backgroundColor: "#fdb600",
+                              border: selected ? "3px solid #3d1700" : "3px solid transparent",
+                            }}
+                          >
+                            <ShoeTypeTilePhoto src={SHOE_TYPE_PHOTO[t]} label={t} />
+                            <span className="text-[13px] font-medium text-center leading-snug" style={{ color: "#3d1700" }}>
+                              {t}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-medium mb-1.5" style={{ color: "#7a5c40" }}>
+                      Shoe brand <span style={{ color: "#a32d2d" }}>*</span>
+                    </p>
+                    <BrandCombobox
+                      mode={newPairBrandMode}
+                      value={newPairBrand}
+                      onChange={(m, v) => {
+                        setNewPairBrandMode(m);
+                        setNewPairBrand(v);
+                        setPairError(false);
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "#7a5c40" }}>
+                      Shoe color(s) <span className="font-normal" style={{ color: "#8a7a68" }}>(optional)</span>
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap gap-2">
+                      {PAIR_COLORS.map((c) => {
+                        const selected = newPairColors.includes(c);
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() =>
+                              setNewPairColors((prev) =>
+                                prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c],
+                              )
+                            }
+                            className="px-3 py-1.5 rounded-full text-sm border transition-colors"
+                            style={{
+                              backgroundColor: selected ? "#fff5cc" : "#fff",
+                              color: "#3d1700",
+                              borderColor: selected ? "#3d1700" : "hsl(var(--border))",
+                              borderWidth: selected ? 2 : 1,
+                            }}
+                          >
+                            {c}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="pair-identifiers" className="text-sm font-medium" style={{ color: "#7a5c40" }}>
+                      Additional identifiers <span className="font-normal" style={{ color: "#8a7a68" }}>(optional)</span>
+                    </label>
+                    <p className="text-xs mt-0.5 mb-1.5" style={{ color: "#8a7a68" }}>
+                      If you're sending in multiple similar pairs (e.g. 2 black ballet flats),
+                      additional identifiers can be helpful in determining which service should apply
+                      to which shoe.
+                    </p>
+                    <input
+                      id="pair-identifiers"
+                      type="text"
+                      value={newPairIdentifiers}
+                      onChange={(e) => setNewPairIdentifiers(e.target.value)}
+                      placeholder="e.g. gold buckle"
+                      className="text-sm rounded-md px-3 py-2 text-primary w-full"
+                      style={{ border: "1px solid hsl(var(--border))" }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {pairError && !isPairFilled && (
+                <p className="text-xs mt-2 font-medium" style={{ color: "#a32d2d" }}>
+                  Pick a shoe type and brand before continuing — each repair is for one pair of shoes.
+                </p>
+              )}
+
+              <div className="mt-6 flex items-center justify-end gap-4">
+                <Button type="button" size="lg" variant="hero" onClick={onPairDetailsContinue}>
+                  Next
+                </Button>
+              </div>
+            </>
+          ) : step === "checklist" ? (
             <>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -843,89 +1162,24 @@ const StartRepair = () => {
                 </Link>
               </div>
 
-              {/* Which-pair field (2026-07-27, Danielle's call) — replaced
-                  the old static "Adding more services for: X" label sitting
-                  next to a dropdown that showed the exact same name a second
-                  time. Now there's exactly one control: the dropdown when
-                  there's a saved pair to show (signed-in, has saved pairs),
-                  or the free-text field in its place otherwise — never both
-                  showing the same pair's name at once. Picking a different
-                  saved pair, or switching to "Add a new pair," re-triggers
-                  the checked-labels effect above so the checklist reloads
-                  that pair's own existing selections instead of carrying
-                  over whatever was checked for the last one. Sits below the
-                  H1/subtext and above the category pills (2026-07-27,
-                  Danielle's call) rather than above the H1. */}
-              <div className="mt-6" id="pair-field">
-                <p className="text-sm font-medium" style={{ color: "#7a5c40" }}>
-                  Which pair needs attention? <span style={{ color: "#a32d2d" }}>*</span>
-                </p>
-                {/* Helper text added 2026-08-27 (Danielle's call) — the point
-                    isn't just "give this pair a name," it's that if someone
-                    sends in more than one pair, this description is what
-                    tells them apart later (in the bag, at checkout, in their
-                    account) — that wasn't obvious from the label/placeholder
-                    alone. */}
-                <p className="text-xs mt-0.5 mb-1.5" style={{ color: "#8a7a68" }}>
-                  Describe your shoes so we can match the right services to them and tell your pairs
-                  apart if you're sending in more than one.
-                </p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {showPairDropdown && (
-                    <select
-                      aria-label="Which pair needs attention?"
-                      aria-invalid={pairError && !isPairFilled}
-                      value={selectedPairId ?? ""}
-                      onChange={(e) => {
-                        setSelectedPairId(e.target.value || null);
-                        setPairError(false);
-                      }}
-                      className="text-sm rounded-md px-3 py-2 text-primary bg-white"
-                      style={{ border: pairError && !isPairFilled ? "1.5px solid #a32d2d" : "1px solid hsl(var(--border))" }}
-                    >
-                      <option value="">Add a new pair</option>
-                      {pairs.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {formatPairLabel(p)}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {/* Guard added 2026-08-27 — falls back to the free-text
-                      field whenever there's no dropdown to show at all
-                      (`!showPairDropdown`), not just when isAddingNewPair is
-                      true. Without this, a selectedPairId carried over from
-                      elsewhere (e.g. arriving via a service's "Start a
-                      repair") while `pairs` hasn't loaded yet (or is
-                      genuinely empty) left neither control rendering — the
-                      "Which pair needs attention?" label with nothing
-                      underneath it Danielle flagged. */}
-                  {(isAddingNewPair || !showPairDropdown) && (
-                    <input
-                      type="text"
-                      aria-invalid={pairError && !isPairFilled}
-                      value={newPairName}
-                      onChange={(e) => {
-                        setNewPairName(e.target.value);
-                        if (e.target.value.trim().length > 0) setPairError(false);
-                      }}
-                      placeholder="e.g. Black loafers"
-                      className="text-sm rounded-md px-3 py-2 text-primary flex-1 min-w-[200px]"
-                      style={{ border: pairError && !isPairFilled ? "1.5px solid #a32d2d" : "1px solid hsl(var(--border))" }}
-                    />
-                  )}
-                </div>
-                {pairError && !isPairFilled ? (
-                  <p className="text-xs mt-1.5 font-medium" style={{ color: "#a32d2d" }}>
-                    Tell us which pair this is for before continuing — each repair is for one pair of shoes.
-                  </p>
-                ) : (
-                  isAddingNewPair && (
-                    <p className="text-xs mt-1.5" style={{ color: "#8a7a68" }}>
-                      Add shoe details to help us match services when you send in multiple pairs.
-                    </p>
-                  )
-                )}
+              {/* Which-pair summary (rebuilt 2026-08-29, Danielle's call) —
+                  the pair itself is now identified on its own required step
+                  before the checklist is ever reachable (see step ===
+                  "pair-details" below), so this is just a read-only recap
+                  with a way back to change it — not an editable field with
+                  its own validation anymore. */}
+              <div className="mt-6 flex items-center gap-2 flex-wrap">
+                <span className="text-sm" style={{ color: "#7a5c40" }}>
+                  {activePairSummary || "This pair"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStep("pair-details")}
+                  className="text-xs font-medium underline hover:opacity-80"
+                  style={{ color: "#fdb600" }}
+                >
+                  Change pair
+                </button>
               </div>
 
               {/* Category slider — switched from a horizontally-scrolling row
@@ -1095,6 +1349,11 @@ const StartRepair = () => {
                   anyone who wants the full catalog can already reach /services
                   directly (nav, a service link, etc.) without this page
                   pointing them there. */}
+              {/* "Next" (2026-08-27, Danielle's call, confirmed) — was "See
+                  my recommendations," renamed since a click here doesn't
+                  always go straight to recommendations anymore: it may land
+                  on a sole/insole, resole, or severity follow-up question
+                  first. "Next" reads correctly either way. */}
               <div className="mt-6 flex items-center justify-end gap-4">
                 <Button
                   type="button"
@@ -1102,7 +1361,7 @@ const StartRepair = () => {
                   variant="hero"
                   onClick={onSeeRecommendationsClick}
                 >
-                  See my recommendations
+                  Next
                 </Button>
               </div>
             </>

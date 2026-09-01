@@ -189,6 +189,49 @@ export const priceForShoeType = (s: Service, shoeType: ShoeType): number => {
 /** All services are now eligible for all shoe types — final eligibility is determined at assessment. */
 export const isEligibleForShoeType = (_s: Service, _shoeType: ShoeType) => true;
 
+// ---------------------------------------------------------------------------
+// Shoe-type/brand gating for specific conditions (2026-08-29, Danielle's
+// call) — narrower and more targeted than the old isEligibleForShoeType
+// system above (which she'd already turned off site-wide): just the two
+// cases she flagged, resole and heel-tip, driven by the new "Tell us about
+// this pair" step in StartRepair.tsx.
+// ---------------------------------------------------------------------------
+
+/** Same brands already called out in SoleSelectionDialog's disclaimer — kept
+ *  here as the display-friendly full names, one source of truth for both the
+ *  disclaimer and the checklist-tile gating below. */
+export const RESOLE_UNSUPPORTED_BRANDS = ["Christian Louboutin", "Maison Margiela"];
+
+/** Matched against whatever the customer typed (BrandCombobox's "list" mode
+ *  always sends the exact full name above, but "custom" free text is as
+ *  likely to be "Louboutin" or "margiela" as the full name) — so this checks
+ *  for the distinctive surname rather than requiring the whole brand name to
+ *  appear verbatim. */
+const RESOLE_UNSUPPORTED_BRAND_KEYWORDS = ["louboutin", "margiela"];
+
+/** Full-resole isn't offered for sneakers (any brand) or for the specific
+ *  brands above (any shoe type) — mirrors SoleSelectionDialog's existing
+ *  disclaimer. Used to grey out the "Worn or damaged sole" checklist tile
+ *  before a customer ever reaches that dialog. */
+export const isResoleSupportedFor = (shoeType: ShoeType | "", brand?: string): boolean => {
+  if (shoeType === "Sneakers") return false;
+  const b = brand?.trim().toLowerCase();
+  if (b && RESOLE_UNSUPPORTED_BRAND_KEYWORDS.some((keyword) => b.includes(keyword))) {
+    return false;
+  }
+  return true;
+};
+
+/** Shoe types that plausibly have a heel tip to wear down in the first
+ *  place — Danielle's call, 2026-08-29: "heel tip repairs should only be
+ *  visible for heels or boots." Sandals deliberately left out for now (she
+ *  wasn't sure whether heeled sandals count) — easy one-line addition to
+ *  this array once she decides. */
+export const HEEL_TIP_SHOE_TYPES: ShoeType[] = ["Heels", "Ankle boots", "Boots"];
+
+export const isHeelTipEligible = (shoeType: ShoeType | ""): boolean =>
+  HEEL_TIP_SHOE_TYPES.includes(shoeType as ShoeType);
+
 /**
  * Price (in dollars) for the full-resole service given a known sole material and
  * care tier. Returns null when the material isn't recognised in the catalog.

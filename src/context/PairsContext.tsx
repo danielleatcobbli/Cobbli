@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { ShoeType } from "@/types/service";
+import { SHOE_TYPES, type ShoeType } from "@/types/service";
 import { supabase } from "@/integrations/supabase/client";
 
 export type SavedPair = {
@@ -8,6 +8,11 @@ export type SavedPair = {
   colors: string[];
   brand?: string;
   description?: string;
+  /** Optional free-text disambiguator (2026-08-29, Danielle's call) — e.g.
+   *  "gold buckle" to tell apart two otherwise-identical saved pairs (two
+   *  pairs of Chanel flats, say). Shown alongside the structured shoe type/
+   *  brand/color label rather than replacing it — see formatPairLabel. */
+  identifiers?: string;
   photoUrls?: string[];
   createdAt: string;
 };
@@ -225,13 +230,21 @@ export const usePairs = () => {
 };
 
 import { displayBrand } from "@/components/cobbli/BrandCombobox";
-export const formatPairLabel = (p: SavedPair) =>
-  // Pairs created via the simplified "Describe this pair" step (2026-07-15)
-  // only ever have a description — no shoeType/colors/brand worth showing —
-  // so prefer it outright rather than falling back to a label built from
-  // fields that are now just an "Unspecified"/empty placeholder. Older pairs
-  // saved through the full manual form still fall back to the structured
-  // label exactly as before.
-  p.description?.trim()
-    ? p.description.trim()
-    : [p.colors.join(" / "), displayBrand(p.brand), p.shoeType].filter(Boolean).join(" · ");
+// formatPairLabel rewritten 2026-08-29 (Danielle's call) — the "Describe
+// this pair" free-text-only step (2026-07-15) is gone, replaced by the new
+// "Tell us about this pair" step that collects a real shoe type + brand
+// again (plus optional color/identifiers). SHOE_TYPES.includes(p.shoeType)
+// is the signal for which era a given SavedPair came from: pairs made
+// through that old free-text step still carry the "Unspecified" sentinel
+// (cast `as ShoeType`, deliberately not a real SHOE_TYPES value) with only
+// `description` set, and keep showing exactly as before. Pairs made through
+// the new step always have a real shoeType, and now build their label from
+// the structured fields with `identifiers` appended as a parenthetical
+// disambiguator when present, e.g. "Flats · Chanel (gold buckle)".
+export const formatPairLabel = (p: SavedPair) => {
+  if (!SHOE_TYPES.includes(p.shoeType)) {
+    return p.description?.trim() || "Your pair";
+  }
+  const base = [p.colors.join(" / "), displayBrand(p.brand), p.shoeType].filter(Boolean).join(" · ");
+  return p.identifiers?.trim() ? `${base} (${p.identifiers.trim()})` : base;
+};
