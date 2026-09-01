@@ -224,6 +224,12 @@ const ComingSoon = () => {
         </div>
       </section>
 
+      {/* Recolored white -> amber (2026-09-01, Danielle's call) — matches
+          the amber treatment Header.tsx already uses for icons sitting on
+          top of a hero photo, so this page's whole palette stays amber
+          instead of introducing white as a one-off. CSS mask (not a filter)
+          since these are baked monochrome SVGs — same technique used
+          site-wide for icon recoloring, see Header.tsx/Footer.tsx. */}
       <div className="relative z-10 flex items-center gap-4">
         {socials.map((s) => (
           <a
@@ -234,11 +240,20 @@ const ComingSoon = () => {
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center hover:opacity-80 transition-opacity"
           >
-            <img
-              src={s.src}
-              alt=""
-              className="h-7 w-7"
-              style={{ filter: "brightness(0) invert(1)" }}
+            <span
+              aria-hidden="true"
+              className="h-7 w-7 inline-block"
+              style={{
+                backgroundColor: "#fdb600",
+                WebkitMaskImage: `url(${s.src})`,
+                maskImage: `url(${s.src})`,
+                WebkitMaskSize: "contain",
+                maskSize: "contain",
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskPosition: "center",
+              }}
             />
           </a>
         ))}
