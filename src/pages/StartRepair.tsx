@@ -67,6 +67,51 @@ import FollowUpSeverityDialog, {
 import { trackEvent } from "@/lib/analytics";
 import iconOdor from "@/assets/category-icons/odor.svg";
 
+// In-progress draft persistence (2026-09-01, bug fix — Danielle's report:
+// "click 'Not sure?' from the checklist, go back, and it dumps me back on
+// 'Which pair needs attention?' even though I'd already filled that out and
+// was on the next page"). Root cause: for a brand-new pair (not yet an
+// existing saved one), nothing about being past the pair-details step or
+// mid-checklist was persisted anywhere — selectedPairId itself stays null
+// until the pair is actually committed to the bag, which only happens once
+// the customer finishes the whole checklist and hits one of the results-
+// screen buttons. A real route change (like the "Not sure?" link, which
+// navigates to /start-repair/assessment) unmounts this page entirely, so
+// browser back always remounted fresh at the hardcoded default step. Fix:
+// mirror RepairFlowContext's own sessionStorage pattern here for this page's
+// own draft-in-progress fields, so a remount can resume instead of restart.
+const DRAFT_STORAGE_KEY = "cobbli.startRepair.draft.v1";
+
+type StartRepairDraft = {
+  step: "pair-details" | "checklist" | "results";
+  newPairShoeType: ShoeType | "";
+  newPairBrandMode: BrandMode;
+  newPairBrand: string;
+  newPairColors: string[];
+  newPairIdentifiers: string;
+  checkedLabels: string[];
+  checkedAddons: string[];
+};
+
+const readStartRepairDraft = (): Partial<StartRepairDraft> => {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    /* ignore */
+  }
+  return {};
+};
+
+const clearStartRepairDraft = () => {
+  try {
+    window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+};
+
 // Shoe-type tile photos (2026-08-29, Danielle's call — dropped the
 // hand-drawn icon attempt, "very AI looking," in favor of real photos, same
 // pattern as every other photo-driven selector in this app: condition
@@ -110,31 +155,62 @@ const PAIR_COLORS = [
   "Tan", "White", "Yellow",
 ];
 
-/** Shoe-type tile image, with a graceful placeholder for whichever
- *  SHOE_TYPE_PHOTO paths don't have a real file yet (all of them, right
- *  now) — same dashed-box pattern as FollowUpSeverityDialog's
- *  PlaceholderPhoto, so a missing photo reads as "not added yet," not as a
- *  broken image icon. Swaps itself out automatically the moment a real file
- *  lands at the expected path — no code change needed on Danielle's end. */
-const ShoeTypeTilePhoto = ({ src, label }: { src: string; label: string }) => {
+/** Shoe-type tile (2026-09-01, Danielle's call: "I want the icons to fill
+ *  the whole box and have text overlaid on them") — the photo fills the
+ *  entire tile edge-to-edge, with the label sitting on a dark scrim at the
+ *  bottom for legibility over any photo. Falls back to the amber tile +
+ *  centered camera icon (same dashed-placeholder intent as before, just
+ *  without the dashed border now that the tile itself has no padding to
+ *  draw one inside) for whichever SHOE_TYPE_PHOTO paths don't have a real
+ *  file yet — swaps itself out automatically the moment a real file lands
+ *  at the expected path, no code change needed on Danielle's end. */
+const ShoeTypeTile = ({
+  shoeType,
+  selected,
+  onSelect,
+}: {
+  shoeType: ShoeType;
+  selected: boolean;
+  onSelect: () => void;
+}) => {
   const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <span
-        className="flex items-center justify-center w-10 h-10 rounded-md border border-dashed"
-        style={{ borderColor: "#3d1700", opacity: 0.5 }}
-      >
-        <Camera size={16} style={{ color: "#3d1700" }} />
-      </span>
-    );
-  }
   return (
-    <img
-      src={src}
-      alt={label}
-      onError={() => setFailed(true)}
-      className="w-10 h-10 rounded-md object-cover"
-    />
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className="relative aspect-square rounded-xl overflow-hidden transition-all"
+      style={{
+        backgroundColor: "#fdb600",
+        border: selected ? "3px solid #3d1700" : "3px solid transparent",
+      }}
+    >
+      {!failed ? (
+        <>
+          <img
+            src={SHOE_TYPE_PHOTO[shoeType]}
+            alt={shoeType}
+            onError={() => setFailed(true)}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          <span
+            className="absolute inset-x-0 bottom-0 px-2 pt-4 pb-1.5"
+            style={{ background: "linear-gradient(to top, rgba(61,23,0,0.85), rgba(61,23,0,0))" }}
+          >
+            <span className="block text-[13px] font-semibold text-center leading-snug text-white">
+              {shoeType}
+            </span>
+          </span>
+        </>
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+          <Camera size={20} style={{ color: "#3d1700", opacity: 0.45 }} />
+          <span className="text-[13px] font-medium text-center leading-snug" style={{ color: "#3d1700" }}>
+            {shoeType}
+          </span>
+        </div>
+      )}
+    </button>
   );
 };
 
@@ -200,11 +276,19 @@ const StartRepair = () => {
   // see PairsContext.tsx's SavedPair/formatPairLabel for how these compose
   // into the label shown everywhere else). Shoe type and brand are required;
   // color and identifiers are optional, per Danielle's call.
-  const [newPairShoeType, setNewPairShoeType] = useState<ShoeType | "">("");
-  const [newPairBrandMode, setNewPairBrandMode] = useState<BrandMode>("");
-  const [newPairBrand, setNewPairBrand] = useState("");
-  const [newPairColors, setNewPairColors] = useState<string[]>([]);
-  const [newPairIdentifiers, setNewPairIdentifiers] = useState("");
+  const [newPairShoeType, setNewPairShoeType] = useState<ShoeType | "">(
+    () => readStartRepairDraft().newPairShoeType ?? "",
+  );
+  const [newPairBrandMode, setNewPairBrandMode] = useState<BrandMode>(
+    () => readStartRepairDraft().newPairBrandMode ?? "",
+  );
+  const [newPairBrand, setNewPairBrand] = useState(() => readStartRepairDraft().newPairBrand ?? "");
+  const [newPairColors, setNewPairColors] = useState<string[]>(
+    () => readStartRepairDraft().newPairColors ?? [],
+  );
+  const [newPairIdentifiers, setNewPairIdentifiers] = useState(
+    () => readStartRepairDraft().newPairIdentifiers ?? "",
+  );
 
   // Red validation state for the pair-details step (2026-07-29, carried
   // forward from the old pair field's same treatment) — shoe type/brand
@@ -229,9 +313,27 @@ const StartRepair = () => {
   // a fresh pair is started (see onAddAnotherPair) rather than persisting.
   const [repairNotes, setRepairNotes] = useState("");
 
-  const [step, setStep] = useState<"pair-details" | "checklist" | "results">("pair-details");
-  const [checkedLabels, setCheckedLabels] = useState<Set<string>>(new Set());
-  const [checkedAddons, setCheckedAddons] = useState<Set<string>>(new Set());
+  // Bug fix (2026-09-01, Danielle's report): navigating away mid-checklist
+  // (e.g. the "Not sure?" photo/video link, a real route change) and back
+  // via the browser's back button remounts this whole page, and step was
+  // always hardcoded to start at "pair-details" — throwing away real
+  // progress. Root cause: for a brand-new pair, selectedPairId itself stays
+  // null until the whole checklist is finished (see commitPairToBag), so
+  // there was nothing to detect "already past pair-details" from. Restore
+  // from the sessionStorage draft (see readStartRepairDraft above) when
+  // present; otherwise fall back to the selectedPairId heuristic for an
+  // existing saved pair picked from the dropdown, which sets it immediately.
+  const [step, setStep] = useState<"pair-details" | "checklist" | "results">(() => {
+    const draftStep = readStartRepairDraft().step;
+    if (draftStep) return draftStep;
+    return selectedPairId ? "checklist" : "pair-details";
+  });
+  const [checkedLabels, setCheckedLabels] = useState<Set<string>>(
+    () => new Set(readStartRepairDraft().checkedLabels ?? []),
+  );
+  const [checkedAddons, setCheckedAddons] = useState<Set<string>>(
+    () => new Set(readStartRepairDraft().checkedAddons ?? []),
+  );
   const [notOffered, setNotOffered] = useState<{ slug: string; name: string }[]>([]);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
 
@@ -241,46 +343,69 @@ const StartRepair = () => {
   // *and* a worn-out one that needs replacing, and the right service differs
   // (gluing vs. full-resole / insole-replacement). Only the question(s)
   // matching a checked condition are shown (2026-07-28, Danielle's call).
-  const [soleInsoleOpen, setSoleInsoleOpen] = useState(false);
   const needsSoleQuestion = checkedLabels.has(SOLE_CONDITION_LABEL);
   const needsInsoleQuestion = checkedLabels.has(INSOLE_CONDITION_LABEL);
-
-  // Resole brand/sole-type follow-up (2026-08-11, Danielle's call) — gates
-  // "See my recommendations" the same way the sole/insole question above
-  // does, whenever "Worn or damaged sole" is checked, since full-resole's
-  // price (and whether it's even offered for this pair) now depends on the
-  // answer. Runs after the sole/insole question when both apply — see
-  // onSoleInsoleConfirm — so pendingSoleInsoleAnswers holds that answer while
-  // this one is being asked.
-  const [soleSelectionOpen, setSoleSelectionOpen] = useState(false);
   const needsResoleQuestion = checkedLabels.has(RESOLE_CONDITION_LABEL);
-  const [pendingSoleInsoleAnswers, setPendingSoleInsoleAnswers] = useState<{
+
+  // Unified follow-up question chain (rebuilt 2026-09-02, Danielle's ask:
+  // "let the user go back when they're answering the questions" — the old
+  // design was three independent open/queue states chained together via
+  // one-shot "pending" stashes, which had no way to step backward without
+  // closing the whole sequence and restarting the checklist submission).
+  // followUpSteps is built once, at "Next" click time, in a fixed order
+  // (sole/insole, then resole sole-type, then severity questions in
+  // SEVERITY_QUESTIONS' own order) — going back/forward only moves
+  // followUpIndex through that same fixed array, never reorders it.
+  type FollowUpStep =
+    | { kind: "sole-insole" }
+    | { kind: "resole" }
+    | { kind: "severity"; question: SeverityQuestion };
+  const [followUpSteps, setFollowUpSteps] = useState<FollowUpStep[]>([]);
+  const [followUpIndex, setFollowUpIndex] = useState(0);
+  const [soleInsoleAnswers, setSoleInsoleAnswers] = useState<{
     sole?: SoleInsoleAction;
     insole?: SoleInsoleAction;
   }>({});
-
-  // Severity follow-up questions — MOCKUP ONLY, not wired to pricing yet
-  // (2026-08-27, Danielle's ask: "mock this up before wiring it"). Runs
-  // strictly after the existing sole/insole + resole chain above, so it
-  // never disturbs that logic — see proceedPastSoleFlow(), which every
-  // former direct seeRecommendations(...) call site now goes through
-  // instead. When more than one checked condition needs a follow-up
-  // (e.g. both "Stains" and "Scuffs"), they're asked one at a time in
-  // SEVERITY_QUESTIONS' own order (Stains, Scuffs, Scratches, then Worn
-  // or missing heel tip) — the same category order the checklist itself
-  // already uses everywhere else in the app.
-  const [severityQueue, setSeverityQueue] = useState<SeverityQuestion[]>([]);
-  const [severityOpen, setSeverityOpen] = useState(false);
+  const [resoleAnswer, setResoleAnswer] = useState<SoleSelectionResult | undefined>(undefined);
   // Captured per condition (e.g. { Stains: "heavy" }) for future wiring —
   // not read by seeRecommendations() yet, see FollowUpSeverityDialog.tsx.
   const [severityAnswers, setSeverityAnswers] = useState<Record<string, string>>({});
-  // Holds the sole/insole + resole answers while the severity queue runs,
-  // so the real seeRecommendations() call at the end of the queue still
-  // gets them — same stash pattern as pendingSoleInsoleAnswers above.
-  const [pendingFinalAnswers, setPendingFinalAnswers] = useState<{
-    answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction };
-    resoleAnswer?: SoleSelectionResult;
-  }>({ answers: {} });
+  // Distinguishes "this dialog closed itself right after onConfirm, as part
+  // of advancing to the next/previous step" from "the customer actually hit
+  // X/Cancel/Escape" — both call the same onOpenChange(false), but only the
+  // latter should cancel the whole sequence. Set true immediately before
+  // any index change that will cause the current dialog to auto-close
+  // itself, consumed (and reset) the moment that resulting onOpenChange
+  // fires. See handleFollowUpOpenChange below.
+  const followUpAdvancingRef = useRef(false);
+
+  const currentFollowUpStep = followUpSteps[followUpIndex];
+  const soleInsoleOpen = currentFollowUpStep?.kind === "sole-insole";
+  const resoleOpen = currentFollowUpStep?.kind === "resole";
+  const severityOpen = currentFollowUpStep?.kind === "severity";
+  const currentSeverityQuestion = currentFollowUpStep?.kind === "severity" ? currentFollowUpStep.question : null;
+
+  const closeFollowUpFlow = () => {
+    setFollowUpSteps([]);
+    setFollowUpIndex(0);
+  };
+
+  const handleFollowUpOpenChange = (open: boolean) => {
+    if (open) return;
+    if (followUpAdvancingRef.current) {
+      followUpAdvancingRef.current = false;
+      return;
+    }
+    // A genuine cancel (X, Cancel button, Escape, overlay click) — bail out
+    // of the whole sequence rather than just this one question, same as the
+    // old design's behavior.
+    closeFollowUpFlow();
+  };
+
+  const goBackFollowUp = () => {
+    followUpAdvancingRef.current = true;
+    setFollowUpIndex((i) => Math.max(0, i - 1));
+  };
 
   // Bug fix (2026-07-27, Danielle's report): looping back to "add more
   // services" for a pair that already has services in the bag used to show a
@@ -305,11 +430,30 @@ const StartRepair = () => {
   // apart from "the customer is switching between two already-selected
   // pairs" — see the bug note inside the effect.
   const prevSelectedPairIdRef = useRef<string | null>(null);
+  // Separate from prevSelectedPairIdRef — this just marks whether the effect
+  // below has ever run for *this* mounted instance, regardless of what
+  // selectedPairId happens to be. See the bug note on the new-pair-field
+  // reset just below for why the distinction matters.
+  const isFirstPairEffectRunRef = useRef(true);
 
   useEffect(() => {
+    const isInitialMount = isFirstPairEffectRunRef.current;
+    isFirstPairEffectRunRef.current = false;
+
     // Switching to an existing saved pair means whatever was typed for a new
-    // pair no longer applies — clear it so it can't get sent along by mistake.
-    if (selectedPairId) {
+    // pair no longer applies — clear it so it can't get sent along by
+    // mistake. Bug fix (2026-09-01, Danielle's report): skip this on the
+    // very first run after a mount/remount. selectedPairId can already be
+    // non-null right at mount for reasons that AREN'T a genuine in-session
+    // "switch to an existing pair" — e.g. a stale value left over from
+    // earlier in the browser tab's session — and unconditionally clearing
+    // here was stomping on newPairShoeType/newPairBrand/etc the moment they
+    // were restored from the sessionStorage draft (see readStartRepairDraft
+    // above) for a brand-new, still-in-progress pair. A *real* switch to an
+    // existing pair happening later, while this instance stays mounted,
+    // still clears correctly — isInitialMount is only true once, on the
+    // very first effect run.
+    if (selectedPairId && !isInitialMount) {
       setNewPairShoeType("");
       setNewPairBrandMode("");
       setNewPairBrand("");
@@ -359,6 +503,39 @@ const StartRepair = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPairId]);
+
+  // Keeps the sessionStorage draft (see readStartRepairDraft above) in sync
+  // with this page's in-progress state, so a remount from browser back can
+  // restore it. Cleared once the pair's actually committed to the bag (see
+  // commitPairToBag) — at that point this is real data elsewhere, not a
+  // draft, and shouldn't linger to resurrect stale checklist state on a
+  // later, genuinely fresh visit.
+  useEffect(() => {
+    const draft: StartRepairDraft = {
+      step,
+      newPairShoeType,
+      newPairBrandMode,
+      newPairBrand,
+      newPairColors,
+      newPairIdentifiers,
+      checkedLabels: Array.from(checkedLabels),
+      checkedAddons: Array.from(checkedAddons),
+    };
+    try {
+      window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch {
+      /* ignore */
+    }
+  }, [
+    step,
+    newPairShoeType,
+    newPairBrandMode,
+    newPairBrand,
+    newPairColors,
+    newPairIdentifiers,
+    checkedLabels,
+    checkedAddons,
+  ]);
 
   // slug -> service, so each condition's checklist thumbnail can reuse the
   // exact photo shown on that service's card/detail page on /services —
@@ -667,11 +844,34 @@ const StartRepair = () => {
 
   const anyChecked = checkedLabels.size > 0 || checkedAddons.size > 0;
 
-  // Entry point for the "See my recommendations" button — routes through the
-  // sole/insole follow-up, then the resole brand/sole-type follow-up, only
-  // when each is actually needed, since the recommendation itself depends on
-  // the answer(s). The two follow-ups are independent (different conditions),
-  // so they're shown one at a time rather than together.
+  // What's currently checked on the checklist, as condition/add-on labels —
+  // carried as router state into every "Not sure? Send us a photo instead"
+  // link (the main checklist callout below, plus each follow-up dialog) so
+  // staff can see what the customer was already trying to select even
+  // though they never finished the checklist (2026-09-02, Danielle's ask:
+  // "we have clear visibility to what services they are trying to select
+  // when they send us a photo"). Read by AssessmentUpload.tsx and stored on
+  // the assessments row's new requested_conditions column.
+  const requestedConditionLabels = useMemo(() => {
+    const labels = Array.from(checkedLabels);
+    checkedAddons.forEach((slug) => {
+      const addon = ADDONS.find((a) => a.slug === slug);
+      if (addon) labels.push(addon.label);
+    });
+    return labels;
+  }, [checkedLabels, checkedAddons]);
+
+  // Every checked condition with a severity question (Stains, Scuffs,
+  // Scratches, or Worn or missing heel tip), in SEVERITY_QUESTIONS' own
+  // fixed order — MOCKUP ONLY, see FollowUpSeverityDialog.tsx.
+  const buildSeverityQueue = (): SeverityQuestion[] =>
+    SEVERITY_QUESTIONS.filter((q) => checkedLabels.has(q.conditionLabel));
+
+  // Entry point for the "Next" button — builds the fixed-order follow-up
+  // chain (sole/insole, then resole sole-type, then severity questions),
+  // only including whichever steps this pair's checked conditions actually
+  // need, then opens the first one. Rebuilt 2026-09-02 (Danielle's ask) to
+  // support back-navigation — see followUpSteps/followUpIndex above.
   const onSeeRecommendationsClick = () => {
     if (!services) return;
     // Pair identity is no longer validated here (2026-08-29) — the checklist
@@ -683,78 +883,71 @@ const StartRepair = () => {
       document.getElementById("condition-tiles")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    if (needsSoleQuestion || needsInsoleQuestion) {
-      setSoleInsoleOpen(true);
+    const steps: FollowUpStep[] = [];
+    if (needsSoleQuestion || needsInsoleQuestion) steps.push({ kind: "sole-insole" });
+    if (needsResoleQuestion) steps.push({ kind: "resole" });
+    buildSeverityQueue().forEach((question) => steps.push({ kind: "severity", question }));
+
+    if (steps.length === 0) {
+      seeRecommendations({}, undefined);
       return;
     }
-    if (needsResoleQuestion) {
-      setSoleSelectionOpen(true);
-      return;
-    }
-    proceedPastSoleFlow({});
+    // Fresh run each time "Next" is clicked from the checklist — clears any
+    // answers left over from a previous attempt (e.g. the customer went
+    // back to the checklist and changed what's checked).
+    setSoleInsoleAnswers({});
+    setResoleAnswer(undefined);
+    setSeverityAnswers({});
+    setFollowUpSteps(steps);
+    setFollowUpIndex(0);
   };
 
-  // Sole/insole confirmed — chain into the resole question if this pair also
-  // needs it, rather than computing recommendations twice.
-  const onSoleInsoleConfirm = (answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction }) => {
-    if (needsResoleQuestion) {
-      setPendingSoleInsoleAnswers(answers);
-      setSoleSelectionOpen(true);
+  // Advances to the next step in followUpSteps, or — if this was the last
+  // one — closes the sequence and computes the real recommendation.
+  // finalSoleInsoleAnswers/finalResoleAnswer/finalSeverityAnswers are passed
+  // explicitly rather than read back from state, since the setState call for
+  // whichever one this step just answered hasn't re-rendered yet at the
+  // point this runs (same reasoning the old "pending" stash variables
+  // existed for). Defaulted to the current state value so callers that
+  // didn't just change that particular answer (e.g. a sole/insole confirm,
+  // which never touches severityAnswers) don't have to pass it explicitly.
+  const advanceOrFinishFollowUp = (
+    finalSoleInsoleAnswers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction } = soleInsoleAnswers,
+    finalResoleAnswer: SoleSelectionResult | undefined = resoleAnswer,
+    finalSeverityAnswers: Record<string, string> = severityAnswers,
+  ) => {
+    followUpAdvancingRef.current = true;
+    const nextIndex = followUpIndex + 1;
+    if (nextIndex >= followUpSteps.length) {
+      setFollowUpSteps([]);
+      setFollowUpIndex(0);
+      seeRecommendations(finalSoleInsoleAnswers, finalResoleAnswer, finalSeverityAnswers);
       return;
     }
-    proceedPastSoleFlow(answers);
+    setFollowUpIndex(nextIndex);
+  };
+
+  const onSoleInsoleConfirm = (answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction }) => {
+    setSoleInsoleAnswers(answers);
+    advanceOrFinishFollowUp(answers, resoleAnswer);
   };
 
   const onSoleSelectionConfirm = (result: SoleSelectionResult) => {
-    proceedPastSoleFlow(pendingSoleInsoleAnswers, result);
-    setPendingSoleInsoleAnswers({});
-  };
-
-  // Severity mockup queue — MOCKUP ONLY, see the state comment above and
-  // FollowUpSeverityDialog.tsx. Every path that used to call
-  // seeRecommendations(...) directly now calls this instead: if this pair
-  // has any checked condition with a severity question (Stains, Scuffs,
-  // Scratches, or Worn or missing heel tip), it's asked here, one at a
-  // time, before the real recommendation is computed. If none apply, this
-  // is a same-tick passthrough to seeRecommendations — no behavior change
-  // for pairs that don't touch any of the four conditions.
-  const buildSeverityQueue = (): SeverityQuestion[] =>
-    SEVERITY_QUESTIONS.filter((q) => checkedLabels.has(q.conditionLabel));
-
-  const proceedPastSoleFlow = (
-    answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction },
-    resoleAnswer?: SoleSelectionResult,
-  ) => {
-    const queue = buildSeverityQueue();
-    if (queue.length > 0) {
-      setSeverityAnswers({});
-      setSeverityQueue(queue);
-      setPendingFinalAnswers({ answers, resoleAnswer });
-      setSeverityOpen(true);
-      return;
-    }
-    seeRecommendations(answers, resoleAnswer);
+    setResoleAnswer(result);
+    advanceOrFinishFollowUp(soleInsoleAnswers, result);
   };
 
   const onSeverityConfirm = (conditionLabel: string, optionKey: string) => {
     trackEvent("severity_question_answered", { condition: conditionLabel, option: optionKey });
-    const nextAnswers = { ...severityAnswers, [conditionLabel]: optionKey };
-    setSeverityAnswers(nextAnswers);
-    const remaining = severityQueue.slice(1);
-    if (remaining.length > 0) {
-      // Dialog stays open — swapping severityQueue[0] moves it to the next
-      // question in the queue.
-      setSeverityQueue(remaining);
-      return;
-    }
-    setSeverityQueue([]);
-    setSeverityOpen(false);
-    seeRecommendations(pendingFinalAnswers.answers, pendingFinalAnswers.resoleAnswer);
+    const nextSeverityAnswers = { ...severityAnswers, [conditionLabel]: optionKey };
+    setSeverityAnswers(nextSeverityAnswers);
+    advanceOrFinishFollowUp(soleInsoleAnswers, resoleAnswer, nextSeverityAnswers);
   };
 
   const seeRecommendations = (
     answers: { sole?: SoleInsoleAction; insole?: SoleInsoleAction },
     resoleAnswer?: SoleSelectionResult,
+    severityResultAnswers: Record<string, string> = severityAnswers,
   ) => {
     if (!services || !anyChecked) return;
     const requiredSlugs = new Set<string>();
@@ -823,6 +1016,27 @@ const StartRepair = () => {
         if (resoleAnswer.kind === "brand") line.resoleBrand = resoleAnswer.variantKey;
         if (resoleAnswer.kind === "material") line.soleMaterial = resoleAnswer.variantKey === "leather" ? "Leather" : "Rubber";
       }
+      // Severity-based pricing (2026-09-02, Danielle's real live-pricing
+      // pass — previously MOCKUP ONLY, see FollowUpSeverityDialog.tsx).
+      // Scuff and scratch repair is one service reachable from two checked
+      // conditions ("Scuffs" and "Scratches") — if both are checked and
+      // answered differently, heavy wins, since a pair that's heavy on
+      // either front needs the more thorough repair either way.
+      if (s.slug === "scuff-repair") {
+        const scuffsAnswer = severityResultAnswers["Scuffs"];
+        const scratchesAnswer = severityResultAnswers["Scratches"];
+        const severity =
+          scuffsAnswer === "heavy" || scratchesAnswer === "heavy" ? "heavy" : scuffsAnswer ?? scratchesAnswer;
+        const live = (services ?? []).find((svc) => svc.slug === "scuff-repair");
+        const variant = severity ? live?.variants.find((v) => v.key === severity) : undefined;
+        if (variant) line.price = variant.standard * 100;
+      }
+      if (s.slug === "high-heel-tip-replacement") {
+        const answer = severityResultAnswers[HEEL_TIP_CONDITION_LABEL];
+        const live = (services ?? []).find((svc) => svc.slug === "high-heel-tip-replacement");
+        const variant = answer ? live?.variants.find((v) => v.key === answer) : undefined;
+        if (variant) line.price = variant.standard * 100;
+      }
       lines.push(line);
     });
 
@@ -887,6 +1101,10 @@ const StartRepair = () => {
       currency: "USD",
       service_count: items.length,
     });
+    // This pair's now real data in the bag, not an in-progress draft —
+    // clear it so it can't resurrect stale checklist state on a later,
+    // genuinely fresh visit to /start-repair.
+    clearStartRepairDraft();
     return true;
   };
 
@@ -1000,40 +1218,25 @@ const StartRepair = () => {
                       Shoe type <span style={{ color: "#a32d2d" }}>*</span>
                     </p>
                     {/* Tile format (2026-08-29, Danielle's call: "bigger and
-                        more visual... big icon with text below it") — same
-                        amber-card visual language as the condition tiles
-                        below (backgroundColor #fdb600, brown ring when
-                        selected), just applied to shoe type instead. Real
-                        photos now (2026-08-29, Danielle's call, replacing a
-                        hand-drawn icon pass she flagged as "very AI
-                        looking") — see SHOE_TYPE_PHOTO above for the exact
-                        paths/filenames still needed; ShoeTypeTilePhoto shows
-                        a dashed placeholder box until each one exists. */}
+                        more visual... big icon with text below it"), photo
+                        now full-bleed with the label overlaid on a bottom
+                        scrim (2026-09-01, Danielle's call) instead of a
+                        small centered photo + text below — see
+                        SHOE_TYPE_PHOTO above for the exact paths/filenames
+                        still needed; ShoeTypeTile falls back to a camera
+                        icon + label on amber until each one exists. */}
                     <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-4 gap-3">
-                      {SHOE_TYPES.map((t) => {
-                        const selected = newPairShoeType === t;
-                        return (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => {
-                              setNewPairShoeType(t);
-                              setPairError(false);
-                            }}
-                            aria-pressed={selected}
-                            className="flex flex-col items-center gap-2 rounded-xl p-3 transition-all"
-                            style={{
-                              backgroundColor: "#fdb600",
-                              border: selected ? "3px solid #3d1700" : "3px solid transparent",
-                            }}
-                          >
-                            <ShoeTypeTilePhoto src={SHOE_TYPE_PHOTO[t]} label={t} />
-                            <span className="text-[13px] font-medium text-center leading-snug" style={{ color: "#3d1700" }}>
-                              {t}
-                            </span>
-                          </button>
-                        );
-                      })}
+                      {SHOE_TYPES.map((t) => (
+                        <ShoeTypeTile
+                          key={t}
+                          shoeType={t}
+                          selected={newPairShoeType === t}
+                          onSelect={() => {
+                            setNewPairShoeType(t);
+                            setPairError(false);
+                          }}
+                        />
+                      ))}
                     </div>
                   </div>
 
@@ -1103,6 +1306,25 @@ const StartRepair = () => {
                       style={{ border: "1px solid hsl(var(--border))" }}
                     />
                   </div>
+
+                  {/* Resole-unsupported flag (2026-09-01, Danielle's call) —
+                      surfaces the same isResoleSupportedFor check the
+                      checklist tile already grays out for, but right here at
+                      shoe-type/brand selection instead of one step later, so
+                      customers with Sneakers, Louboutin, Margiela, or Golden
+                      Goose know upfront. Doesn't block anything — every
+                      other repair is still fully available for these, only
+                      full-resole isn't. */}
+                  {!resoleSupported && (activeShoeType || activeBrand) && (
+                    <p
+                      className="text-xs rounded-md px-3 py-2"
+                      style={{ backgroundColor: "#fff5cc", color: "#3d1700" }}
+                    >
+                      Full resoles aren't currently offered for{" "}
+                      {[activeShoeType, activeBrand].filter(Boolean).join(" · ")} — every other repair
+                      is still available.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1143,6 +1365,7 @@ const StartRepair = () => {
                     path, not competing with it. */}
                 <Link
                   to="/start-repair/assessment"
+                  state={{ requestedConditions: requestedConditionLabels }}
                   onClick={() => trackEvent("start_repair", { source: "starter_repair_photo_callout" })}
                   className="flex items-center gap-2.5 w-64 shrink-0 rounded-lg px-3 py-2.5 transition-colors hover:opacity-90 shadow-soft"
                   style={{ backgroundColor: "#fdb600" }}
@@ -1168,18 +1391,31 @@ const StartRepair = () => {
                   "pair-details" below), so this is just a read-only recap
                   with a way back to change it — not an editable field with
                   its own validation anymore. */}
-              <div className="mt-6 flex items-center gap-2 flex-wrap">
-                <span className="text-sm" style={{ color: "#7a5c40" }}>
-                  {activePairSummary || "This pair"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setStep("pair-details")}
-                  className="text-xs font-medium underline hover:opacity-80"
-                  style={{ color: "#fdb600" }}
-                >
-                  Change pair
-                </button>
+              {/* Small label above the recap (2026-09-01, Danielle's call —
+                  "Pair details," matching the terminology used everywhere
+                  else this concept shows up (the "pairs" table, PairsContext,
+                  "This pair," "Which pair needs attention?") rather than
+                  introducing a new term like "Shoe details" for the same
+                  thing). Without it the recap line read as an orphaned bit
+                  of text with no label, unlike every other field on this
+                  page. */}
+              <div className="mt-6">
+                <p className="text-sm font-medium" style={{ color: "#7a5c40" }}>
+                  Pair details
+                </p>
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="text-sm" style={{ color: "#7a5c40" }}>
+                    {activePairSummary || "This pair"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setStep("pair-details")}
+                    className="text-xs font-medium underline hover:opacity-80"
+                    style={{ color: "#fdb600" }}
+                  >
+                    Change pair
+                  </button>
+                </div>
               </div>
 
               {/* Category slider — switched from a horizontally-scrolling row
@@ -1502,29 +1738,40 @@ const StartRepair = () => {
       </section>
       <Footer />
 
+      {/* Back-navigation (2026-09-02, Danielle's ask) — each dialog below
+          only gets onBack when followUpIndex > 0, i.e. it isn't the first
+          question in the chain. onOpenChange is the same
+          handleFollowUpOpenChange for all three: it only cancels the whole
+          sequence on a genuine close (X/Cancel/Escape), not the dialog's
+          own auto-close-after-confirm — see that handler's comment above. */}
       <SoleInsoleConditionDialog
         open={soleInsoleOpen}
-        onOpenChange={setSoleInsoleOpen}
+        onOpenChange={handleFollowUpOpenChange}
         showSole={needsSoleQuestion}
         showInsole={needsInsoleQuestion}
         onConfirm={onSoleInsoleConfirm}
+        initialAnswers={soleInsoleAnswers}
+        onBack={followUpIndex > 0 ? goBackFollowUp : undefined}
       />
 
       <SoleSelectionDialog
-        open={soleSelectionOpen}
-        onOpenChange={setSoleSelectionOpen}
-        resoleService={(services ?? []).find((s) => s.slug === "full-resole") ?? null}
+        open={resoleOpen}
+        onOpenChange={handleFollowUpOpenChange}
         onConfirm={onSoleSelectionConfirm}
+        onBack={followUpIndex > 0 ? goBackFollowUp : undefined}
+        requestedConditions={requestedConditionLabels}
       />
 
-      {/* MOCKUP ONLY — see FollowUpSeverityDialog.tsx and proceedPastSoleFlow
-          above. Runs after the two dialogs above, in SEVERITY_QUESTIONS'
-          fixed order, one question at a time. */}
+      {/* MOCKUP ONLY — see FollowUpSeverityDialog.tsx. Runs after the two
+          dialogs above, in SEVERITY_QUESTIONS' fixed order, one question at
+          a time (see followUpSteps above). */}
       <FollowUpSeverityDialog
         open={severityOpen}
-        onOpenChange={setSeverityOpen}
-        question={severityQueue[0] ?? null}
+        onOpenChange={handleFollowUpOpenChange}
+        question={currentSeverityQuestion}
         onConfirm={onSeverityConfirm}
+        onBack={followUpIndex > 0 ? goBackFollowUp : undefined}
+        requestedConditions={requestedConditionLabels}
       />
     </main>
   );

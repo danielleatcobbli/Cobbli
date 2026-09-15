@@ -48,13 +48,13 @@ const SoleMaterialDialog = ({
         <DialogHeader>
           <DialogTitle className="text-2xl">What is your sole made of?</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Not sure? Try our{" "}
-          <Link to="/start-repair/assessment" className="underline">
-            photo assessment
-          </Link>{" "}
-          — we'll identify the right material from your photos.
-        </p>
+        {/* Simplified to just this one fully-hyperlinked line (2026-09-01,
+            Danielle's call: "that will be the only description") — same
+            treatment as SoleSelectionDialog.tsx and
+            FollowUpSeverityDialog.tsx. */}
+        <Link to="/start-repair/assessment" className="block text-sm font-medium underline" style={{ color: "#3d1700" }}>
+          Not sure? Send us a photo instead
+        </Link>
 
         <div className="mt-2 grid grid-cols-2 gap-3">
           {OPTIONS.map((opt) => {

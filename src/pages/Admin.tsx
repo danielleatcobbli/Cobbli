@@ -36,6 +36,17 @@ type AssessmentRow = {
   created_at: string;
   proposed_services: ProposedService[];
   profile?: { first_name: string | null; last_name: string | null; phone: string | null } | null;
+  /** Checklist conditions the customer had already checked on the Start a
+   *  Repair page before jumping to "Not sure? Send us a photo instead"
+   *  (2026-09-02, Danielle's ask) — previously nothing surfaced this, only
+   *  the free-text description below, which is easy for a customer to skip
+   *  entirely. Empty when they came from a page with no checklist context. */
+  requested_conditions?: string[];
+  /** Free-text "Anything else we should know?" field from AssessmentUpload
+   *  — always existed on the row, but was never shown anywhere in this
+   *  staff UI until now (2026-09-02). */
+  description?: string | null;
+  guest_email?: string | null;
 };
 
 type Service = {
@@ -326,6 +337,7 @@ const Admin = () => {
                     <th className="text-left p-3">Phone</th>
                     <th className="text-left p-3">Pairs</th>
                     <th className="text-left p-3">Pair identifier</th>
+                    <th className="text-left p-3">Customer requested</th>
                     <th className="text-left p-3">Submitted</th>
                     <th className="text-left p-3">Action</th>
                   </tr>
@@ -341,6 +353,22 @@ const Admin = () => {
                         <td className="p-3">{r.profile?.phone || "—"}</td>
                         <td className="p-3">{r.pairs?.length ?? 0}</td>
                         <td className="p-3">{id}</td>
+                        {/* Requested-conditions visibility (2026-09-02,
+                            Danielle's ask) — what the customer had already
+                            checked on the checklist before bailing to this
+                            photo flow. Truncated with a title tooltip for
+                            the full list; "—" when they arrived with no
+                            checklist context (e.g. a direct link) or via
+                            the pre-checklist SoleMaterialDialog path. */}
+                        <td className="p-3 max-w-[220px]">
+                          {r.requested_conditions && r.requested_conditions.length > 0 ? (
+                            <span className="block truncate text-xs" title={r.requested_conditions.join(", ")}>
+                              {r.requested_conditions.join(", ")}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
                         <td className="p-3">{new Date(r.created_at).toLocaleString()}</td>
                         <td className="p-3">
                           <div className="flex flex-wrap gap-2">
@@ -416,6 +444,39 @@ const Admin = () => {
               Saving will set the status to "Proposal sent" and copy a shareable link.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Customer's own requested conditions + notes (2026-09-02,
+              Danielle's ask) — surfaced right where staff are deciding what
+              to include, so an omitted service reads as an intentional
+              call rather than something missed. requested_conditions comes
+              from the checklist state carried over when the customer
+              clicked "Not sure?"; description is their free-text "Anything
+              else we should know?" field — neither was visible anywhere in
+              this UI before. */}
+          {(editing?.requested_conditions?.length || editing?.description) && (
+            <div className="rounded-lg p-3 space-y-2" style={{ backgroundColor: "#fff5cc" }}>
+              {editing?.requested_conditions && editing.requested_conditions.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold" style={{ color: "#3d1700" }}>
+                    Customer already flagged:
+                  </p>
+                  <p className="text-sm" style={{ color: "#3d1700" }}>
+                    {editing.requested_conditions.join(", ")}
+                  </p>
+                </div>
+              )}
+              {editing?.description && (
+                <div>
+                  <p className="text-xs font-semibold" style={{ color: "#3d1700" }}>
+                    Customer notes:
+                  </p>
+                  <p className="text-sm whitespace-pre-wrap" style={{ color: "#3d1700" }}>
+                    {editing.description}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2 mt-2">
             {selection.length === 0 ? (

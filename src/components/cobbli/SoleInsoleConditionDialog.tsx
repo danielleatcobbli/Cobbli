@@ -32,6 +32,16 @@ type Props = {
   showInsole: boolean;
   onConfirm: (answers: Answers) => void;
   confirmLabel?: string;
+  /** Re-seeds the picker with a previous answer instead of blanking it —
+   *  needed 2026-09-02 so going "← Back" to this question from a later one
+   *  in the follow-up chain (StartRepair.tsx's followUpSteps) doesn't lose
+   *  what was already picked here. */
+  initialAnswers?: Answers;
+  /** Present only when this isn't the first question in the follow-up
+   *  chain (2026-09-02, Danielle's ask: "let the user go back when they're
+   *  answering the questions"). Omitted entirely (rather than passed as a
+   *  no-op) hides the button below. */
+  onBack?: () => void;
 };
 
 const ActionPicker = ({
@@ -94,15 +104,18 @@ const SoleInsoleConditionDialog = ({
   showInsole,
   onConfirm,
   confirmLabel = "See my recommendations",
+  initialAnswers,
+  onBack,
 }: Props) => {
   const [sole, setSole] = useState<SoleInsoleAction | undefined>(undefined);
   const [insole, setInsole] = useState<SoleInsoleAction | undefined>(undefined);
 
   useEffect(() => {
     if (open) {
-      setSole(undefined);
-      setInsole(undefined);
+      setSole(initialAnswers?.sole);
+      setInsole(initialAnswers?.insole);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const ready = (!showSole || !!sole) && (!showInsole || !!insole);
@@ -123,17 +136,30 @@ const SoleInsoleConditionDialog = ({
         {showSole && <ActionPicker part="sole" value={sole} onChange={setSole} />}
         {showInsole && <ActionPicker part="insole" value={insole} onChange={setInsole} />}
 
-        <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={!ready}
-            className={!ready ? "opacity-50 cursor-not-allowed" : ""}
-          >
-            {confirmLabel}
-          </Button>
+        <DialogFooter className="gap-2 sm:gap-2 sm:justify-between">
+          {/* Back (2026-09-02, Danielle's ask) — only rendered when this
+              isn't the first question in the chain; see onBack above. Kept
+              on the opposite side from Cancel/Confirm so it doesn't read as
+              a third action in the same group. */}
+          {onBack ? (
+            <Button type="button" variant="ghost" onClick={onBack} className="sm:mr-auto">
+              ← Back
+            </Button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirm}
+              disabled={!ready}
+              className={!ready ? "opacity-50 cursor-not-allowed" : ""}
+            >
+              {confirmLabel}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

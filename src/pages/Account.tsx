@@ -153,10 +153,15 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => {
             {item.label}
           </NavLink>
         ))}
+        {/* Bug fix (2026-09-01, Danielle's report) — this button sat inside
+            the <nav>'s uppercase className same as every NavLink above it,
+            but Tailwind's preflight reset sets `text-transform: none` on
+            <button> specifically, silently overriding the inherited
+            uppercase. Explicit `uppercase` here beats that reset. */}
         <button
           type="button"
           onClick={onSignOut}
-          className="text-left py-2 font-bold text-foreground/80 hover:text-primary transition-colors"
+          className="text-left py-2 font-bold uppercase text-foreground/80 hover:text-primary transition-colors"
         >
           Sign Out
         </button>

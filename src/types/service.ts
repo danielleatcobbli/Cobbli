@@ -199,15 +199,18 @@ export const isEligibleForShoeType = (_s: Service, _shoeType: ShoeType) => true;
 
 /** Same brands already called out in SoleSelectionDialog's disclaimer — kept
  *  here as the display-friendly full names, one source of truth for both the
- *  disclaimer and the checklist-tile gating below. */
-export const RESOLE_UNSUPPORTED_BRANDS = ["Christian Louboutin", "Maison Margiela"];
+ *  disclaimer and the checklist-tile gating below. Golden Goose added
+ *  2026-09-01 (Danielle's call) — previously only its sneakers were
+ *  unsupported (via the blanket Sneakers rule below); now the whole brand is
+ *  treated like Louboutin/Margiela regardless of shoe type. */
+export const RESOLE_UNSUPPORTED_BRANDS = ["Christian Louboutin", "Maison Margiela", "Golden Goose"];
 
 /** Matched against whatever the customer typed (BrandCombobox's "list" mode
  *  always sends the exact full name above, but "custom" free text is as
  *  likely to be "Louboutin" or "margiela" as the full name) — so this checks
  *  for the distinctive surname rather than requiring the whole brand name to
  *  appear verbatim. */
-const RESOLE_UNSUPPORTED_BRAND_KEYWORDS = ["louboutin", "margiela"];
+const RESOLE_UNSUPPORTED_BRAND_KEYWORDS = ["louboutin", "margiela", "golden goose"];
 
 /** Full-resole isn't offered for sneakers (any brand) or for the specific
  *  brands above (any shoe type) — mirrors SoleSelectionDialog's existing

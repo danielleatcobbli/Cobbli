@@ -28,15 +28,16 @@ type Mode = "flow" | "standalone";
 // ---------------------------------------------------------------------------
 
 const SERVICE_DETAIL_PRICE: Record<string, string> = {
-  "full-resole":                   "$70–$85",
+  "full-resole":                   "$70–$80",
   "partial-resole":                "$60",
-  "high-heel-tip-replacement":     "$35",
+  "high-heel-tip-replacement":     "$35–$85",
   "heel-reattachment":             "$100",
   "color-restoration":             "$80",
-  "scuff-repair":                  "$80",
+  "scuff-repair":                  "$50–$70",
+  "stain-repair":                  "$40",
   "leather-or-suede-conditioning": "$65",
   "deodorizing-treatment":         "$50",
-  "deep-clean":                    "$50",
+  "deep-clean":                    "$40",
   "shoe-shine":                    "$20",
   "insole-replacement":            "$50",
   "gluing":                        "$50",

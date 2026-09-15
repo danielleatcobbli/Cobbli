@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Plus, X, FileVideo, Play, Camera, Video, Upload } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
@@ -87,8 +87,19 @@ type UploadEntry = { kind: "image" | "video"; promise: Promise<string> };
 
 const AssessmentUpload = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const isGuest = !user;
+  // Conditions the customer had already checked on the Start a Repair
+  // checklist before clicking "Not sure? Send us a photo instead" (Danielle's
+  // ask, 2026-09-01) — passed as router state from StartRepair.tsx and its
+  // follow-up dialogs, so staff can see what the customer thinks they need
+  // even though they never finished the checklist. Read once on mount;
+  // StartRepair.tsx is the only place that ever sets this.
+  const requestedConditions = useState<string[]>(() => {
+    const state = location.state as { requestedConditions?: string[] } | null;
+    return Array.isArray(state?.requestedConditions) ? state.requestedConditions : [];
+  })[0];
   const { setUploads, reset } = useAssessment();
   const [files, setFiles] = useState<Picked[]>([]);
   const [description, setDescription] = useState("");
@@ -261,9 +272,14 @@ const AssessmentUpload = () => {
       };
       const insertRow: Record<string, unknown> = {
         pairs: [pair],
-        status: "submitted",
+        // Fixed 2026-09-02: this used to be "submitted", a status value
+        // nothing downstream ever queried for, so every guest assessment
+        // was invisible in the staff queue. "pending" matches what
+        // Admin.tsx and the ops_assessments backend actually filter on.
+        status: "pending",
         guest_email: email.trim(),
         description: description.trim() || null,
+        requested_conditions: requestedConditions,
       };
       if (user) insertRow.user_id = user.id;
 
@@ -446,6 +462,22 @@ const AssessmentUpload = () => {
             Tip: Upload a short video or photos of the shoe from all sides. Make sure to capture any areas of damage or wear. The more we can see, the better our recommendation.
           </p>
 
+          {/* Carries over what the customer already checked on the Start a
+              Repair checklist (2026-09-02, Danielle's ask) — confirms to
+              them that we didn't lose that context when they jumped here,
+              and gives staff the same list (see requested_conditions on the
+              assessments row, surfaced in Admin.tsx). */}
+          {requestedConditions.length > 0 && (
+            <div className="mt-4 rounded-lg p-4" style={{ backgroundColor: "#fff5cc" }}>
+              <p className="text-sm font-medium" style={{ color: "#3d1700" }}>
+                We'll pass along what you'd already flagged:
+              </p>
+              <p className="mt-1 text-sm" style={{ color: "#3d1700" }}>
+                {requestedConditions.join(", ")}
+              </p>
+            </div>
+          )}
+
           <div className="mt-8 space-y-6">
             <div className="space-y-2">
               <Label htmlFor="assessment-description">Anything else we should know?</Label>
@@ -492,6 +524,20 @@ const AssessmentUpload = () => {
             >
               {busy ? "Submitting…" : "Submit"}
             </Button>
+            {/* Privacy notice (2026-09-01, Danielle's call) — this is the
+                one guest-accessible flow that collects personal data
+                (email, description, photos/video) without requiring
+                sign-in first, so the privacy policy needs to be visible
+                right here rather than only surfacing later at account
+                creation. Not a full T&Cs gate — see the same-day
+                conversation on why that stays at sign-in/order time. */}
+            <p className="mt-3 text-[13px] text-muted-foreground">
+              By submitting, you agree to our{" "}
+              <Link to="/privacy-policy" className="underline">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </div>
         </div>
       </section>

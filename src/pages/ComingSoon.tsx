@@ -83,8 +83,11 @@ const ComingSoon = () => {
 
   usePageMeta({
     title: "Coming Soon — Cobbli",
+    // "shoe and leather" -> "shoe and bag" 2026-09-15 (Danielle's call) —
+    // moving copy away from shoe-only language as the business pivots to
+    // cover bags too. Matches the h1 below.
     description:
-      "Cobbli is coming soon to Manhattan. Expert shoe and leather repair, picked up and delivered to your door. Join the waitlist to be the first to know.",
+      "Cobbli is coming soon to Manhattan. Expert shoe and bag repair, picked up and delivered to your door. Join the waitlist to be the first to know.",
     canonicalPath: "/",
   });
 
@@ -120,30 +123,45 @@ const ComingSoon = () => {
           Sans; headline color switched white -> amber to match Hero.tsx's
           own treatment of the same photo+gradient-hero background. */}
       <section className="relative z-10 flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto py-10">
+        {/* "Free shoe repairs..." -> "Shoe and bag repairs..." 2026-09-15
+            (Danielle's call) — moving away from shoe-only language as the
+            business pivots to cover bags too. Dropped "Free" along with it,
+            matching her own candidate phrasing (neither "leather repairs"
+            nor "shoe and bag repairs" kept the word) — easy to add back if
+            the free-first-repair incentive should stay front and center in
+            the headline itself. */}
         <h1
           className="text-3xl sm:text-4xl md:text-5xl leading-tight"
           style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
         >
-          Free shoe repairs to your doorstep
+          Shoe and bag repairs to your doorstep
         </h1>
         {/* Back below the headline 2026-08-13 (Danielle's call — reverted
-            the earlier move-above-headline change). */}
+            the earlier move-above-headline change). "shoes" -> "items"
+            2026-09-15, same shoe-language pass as the h1 above — the free-
+            first-repair offer itself is untouched, just the noun. */}
         <p
           className="mt-5 text-sm md:text-base font-normal max-w-md"
           style={{ fontFamily: "'Instrument Sans', sans-serif", color: "#ffffff" }}
         >
-          We're selecting a limited number of shoes for a free repair delivered to your door.
-          We'll select shoes based on fit with our services and capacity on a rolling basis.
+          We're selecting a limited number of items for a free repair delivered to your door.
+          We'll select items based on fit with our services and capacity on a rolling basis.
         </p>
 
         {/* Two CTAs, two different intake points (2026-09-01, Danielle's
-            call): the primary button is the free-repair incentive itself
-            (amber/filled, matches Hero.tsx's pill CTA) and still sends
-            people to the Google Form. The second is a standalone inline
-            email capture framed as "join the waitlist" — she plans to
-            reference the growing count directly in social content. See the
-            onWaitlistSubmit comment above for its current preview-only
-            status. */}
+            call): the primary button sends people to the Google Form. The
+            second is a standalone inline email capture framed as "join the
+            waitlist" — she plans to reference the growing count directly in
+            social content. See the onWaitlistSubmit comment above for its
+            current preview-only status.
+
+            Primary button copy simplified from "Get on the list for a free
+            repair" to "Get on the waitlist" 2026-09-15 (Danielle's call) —
+            now reads almost identically to the second CTA's own copy/
+            placeholder just below it, which was fine when the two were
+            differentiated (incentive vs. plain signup) but reads odd
+            stacked together now that both just say "waitlist." Flagged to
+            her; hasn't been asked to consolidate the two into one yet. */}
         {/* Always stacked (not flex-row at sm+) — the "or" divider below only
             reads correctly as a horizontal rule between two stacked items,
             not squeezed into a side-by-side row. Matches the approved
@@ -156,7 +174,7 @@ const ComingSoon = () => {
             className="inline-flex items-center justify-center h-12 rounded-full px-8 font-semibold transition-opacity hover:opacity-90"
             style={{ backgroundColor: "#fdb600", color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}
           >
-            Get on the list for a free repair
+            Get on the waitlist
           </a>
 
           {/* "or" divider (2026-09-01, Danielle's call) — makes it visually
@@ -224,12 +242,11 @@ const ComingSoon = () => {
         </div>
       </section>
 
-      {/* Recolored white -> amber (2026-09-01, Danielle's call) — matches
-          the amber treatment Header.tsx already uses for icons sitting on
-          top of a hero photo, so this page's whole palette stays amber
-          instead of introducing white as a one-off. CSS mask (not a filter)
-          since these are baked monochrome SVGs — same technique used
-          site-wide for icon recoloring, see Header.tsx/Footer.tsx. */}
+      {/* Reverted amber -> white 2026-09-01 (Danielle's call, same day —
+          tried amber to match the rest of the page's palette, but she
+          decided she prefers white here specifically). Back to the simple
+          brightness/invert filter instead of the CSS-mask recolor
+          technique. */}
       <div className="relative z-10 flex items-center gap-4">
         {socials.map((s) => (
           <a
@@ -240,20 +257,11 @@ const ComingSoon = () => {
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center hover:opacity-80 transition-opacity"
           >
-            <span
-              aria-hidden="true"
-              className="h-7 w-7 inline-block"
-              style={{
-                backgroundColor: "#fdb600",
-                WebkitMaskImage: `url(${s.src})`,
-                maskImage: `url(${s.src})`,
-                WebkitMaskSize: "contain",
-                maskSize: "contain",
-                WebkitMaskRepeat: "no-repeat",
-                maskRepeat: "no-repeat",
-                WebkitMaskPosition: "center",
-                maskPosition: "center",
-              }}
+            <img
+              src={s.src}
+              alt=""
+              className="h-7 w-7"
+              style={{ filter: "brightness(0) invert(1)" }}
             />
           </a>
         ))}

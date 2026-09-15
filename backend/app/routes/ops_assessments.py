@@ -10,8 +10,26 @@ from app.supabase_client import get_supabase_for_user
 
 router = APIRouter(prefix="/ops/assessments", tags=["ops", "assessments"])
 
-_ALLOWED_STATUSES = {"pending", "in_review", "proposed", "accepted", "declined", "expired"}
-_SELECT = "id, user_id, pairs, status, proposal_token, created_at, updated_at"
+# Fixed 2026-09-02: this allowlist previously used a status vocabulary
+# ("in_review", "proposed", "accepted", "declined", "expired") that no
+# frontend code has ever written. AssessmentUpload.tsx inserts "pending"
+# (was "submitted" until the same fix), and Admin.tsx's staff queue reads/
+# writes "pending", "proposal_sent", "booked", "service_unavailable" — so
+# PATCH requests from Admin.tsx (e.g. saveProposal setting status:
+# "proposal_sent") were being rejected outright by this allowlist. Aligned
+# to what the frontend actually uses.
+_ALLOWED_STATUSES = {"pending", "proposal_sent", "booked", "service_unavailable"}
+
+# Added proposed_services, description, guest_email, requested_conditions
+# 2026-09-02 — Admin.tsx's saveProposal already sends proposed_services and
+# reads description/guest_email, but this SELECT/model never included them,
+# so proposals silently failed to persist and staff had no visibility into
+# what the customer wrote or which checklist conditions they'd already
+# selected before jumping to the photo-assessment flow.
+_SELECT = (
+    "id, user_id, pairs, status, proposal_token, created_at, updated_at, "
+    "proposed_services, description, guest_email, requested_conditions"
+)
 
 
 class AssessmentUpdate(BaseModel):
@@ -19,6 +37,7 @@ class AssessmentUpdate(BaseModel):
 
     status: str | None = None
     pairs: list[dict[str, Any]] | None = None
+    proposed_services: list[dict[str, Any]] | None = None
 
 
 def _raise_if_error(resp: Any) -> None:
@@ -67,6 +86,8 @@ async def update_assessment(
         updates["status"] = body.status
     if body.pairs is not None:
         updates["pairs"] = body.pairs
+    if body.proposed_services is not None:
+        updates["proposed_services"] = body.proposed_services
     if not updates:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No fields to update")
 
