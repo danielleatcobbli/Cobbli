@@ -15,11 +15,6 @@ import x from "@/assets/icons/x.svg";
 // same as Hero.tsx.
 const hero = "/assets/hero-lifestyle-soho.webp";
 
-// Public beta submission form (Danielle's Google Form) — the primary CTA's
-// destination. Update this link if the form URL ever changes.
-const BETA_FORM_URL =
-  "https://docs.google.com/forms/d/e/1FAIpQLSeABCZMUz8nf1DlQ_NvVuCCPyuvpWkoUQGfVFLayPjQHRIj-Q/viewform?usp=header";
-
 /** Basic client-side shape check before submit — not meant to be exhaustive,
  *  just enough to catch empty/obviously-malformed input before it hits the
  *  (eventual) Supabase insert. */
@@ -136,62 +131,13 @@ const ComingSoon = () => {
         >
           Shoe and bag repairs to your doorstep
         </h1>
-        {/* Back below the headline 2026-08-13 (Danielle's call — reverted
-            the earlier move-above-headline change). "shoes" -> "items"
-            2026-09-15, same shoe-language pass as the h1 above — the free-
-            first-repair offer itself is untouched, just the noun. */}
-        <p
-          className="mt-5 text-sm md:text-base font-normal max-w-md"
-          style={{ fontFamily: "'Instrument Sans', sans-serif", color: "#ffffff" }}
-        >
-          We're selecting a limited number of items for a free repair delivered to your door.
-          We'll select items based on fit with our services and capacity on a rolling basis.
-        </p>
-
-        {/* Two CTAs, two different intake points (2026-09-01, Danielle's
-            call): the primary button sends people to the Google Form. The
-            second is a standalone inline email capture framed as "join the
-            waitlist" — she plans to reference the growing count directly in
-            social content. See the onWaitlistSubmit comment above for its
-            current preview-only status.
-
-            Primary button copy simplified from "Get on the list for a free
-            repair" to "Get on the waitlist" 2026-09-15 (Danielle's call) —
-            now reads almost identically to the second CTA's own copy/
-            placeholder just below it, which was fine when the two were
-            differentiated (incentive vs. plain signup) but reads odd
-            stacked together now that both just say "waitlist." Flagged to
-            her; hasn't been asked to consolidate the two into one yet. */}
-        {/* Always stacked (not flex-row at sm+) — the "or" divider below only
-            reads correctly as a horizontal rule between two stacked items,
-            not squeezed into a side-by-side row. Matches the approved
-            mockup at every width. */}
+        {/* Single CTA now (2026-09-15, Danielle's call) — the primary
+            Google-Form button and the intro paragraph above it were
+            removed; the inline email capture below is the only signup path
+            left, wired to the `waitlist` table (see onWaitlistSubmit
+            above). The "or" divider that used to separate the two CTAs is
+            gone with the first one — nothing left to divide. */}
         <div className="mt-8 flex flex-col items-center gap-3">
-          <a
-            href={BETA_FORM_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center h-12 rounded-full px-8 font-semibold transition-opacity hover:opacity-90"
-            style={{ backgroundColor: "#fdb600", color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}
-          >
-            Get on the waitlist
-          </a>
-
-          {/* "or" divider (2026-09-01, Danielle's call) — makes it visually
-              clear these are two distinct paths (Google Form vs. inline
-              waitlist signup) rather than one flowing block of CTAs. Same
-              pattern as SignIn/SignUp's own "or" divider. */}
-          <div className="w-full sm:w-[300px] flex items-center gap-3">
-            <div className="flex-1 h-px" style={{ backgroundColor: "rgba(253, 182, 0, 0.35)" }} />
-            <span
-              className="text-[11px] uppercase tracking-wide"
-              style={{ color: "rgba(255, 255, 255, 0.55)", fontFamily: "'Instrument Sans', sans-serif" }}
-            >
-              or
-            </span>
-            <div className="flex-1 h-px" style={{ backgroundColor: "rgba(253, 182, 0, 0.35)" }} />
-          </div>
-
           {waitlistStatus === "success" ? (
             <div
               className="inline-flex items-center justify-center h-12 rounded-full px-6 font-semibold border-2 w-full sm:w-[300px]"
