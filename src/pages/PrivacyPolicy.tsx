@@ -6,7 +6,7 @@ const PrivacyPolicy = () => {
   usePageMeta({
     title: "Privacy policy — Cobbli",
     description:
-      "Read Cobbli's privacy policy: how we collect, use and protect personal information when you book shoe repairs and use our door-to-door service.",
+      "Read Cobbli's privacy policy: how we collect, use and protect personal information when you book bag, shoe, and leather repairs and use our door-to-door service.",
   });
 
   // Restyled 2026-08-26 (Danielle's call) — cream page bg, amber Fraunces
@@ -44,7 +44,7 @@ const PrivacyPolicy = () => {
               1. Introduction
             </h2>
             <p className="mt-4">
-              Welcome to Cobbli. Cobbli ("Cobbli," "we," "us," or "our") operates a technology-enabled door-to-door shoe and leather repair service accessible via{" "}
+              Welcome to Cobbli. Cobbli ("Cobbli," "we," "us," or "our") operates a technology-enabled door-to-door bag, shoe, and leather repair service accessible via{" "}
               <a
                 href="https://www.cobbli.com"
                 target="_blank"
@@ -82,10 +82,10 @@ const PrivacyPolicy = () => {
               <strong>Account Registration:</strong> When you create an account, we collect your name, email address, and password.
             </p>
             <p className="mt-4">
-              <strong>Order Information:</strong> When you place an order, we collect your delivery address, pickup and return scheduling preferences, and details about the shoes or leather goods you are submitting for repair.
+              <strong>Order Information:</strong> When you place an order, we collect your delivery address, pickup and return scheduling preferences, and details about the items you are submitting for repair.
             </p>
             <p className="mt-4">
-              <strong>Shoe Photos and Videos:</strong> You may upload photos or videos of your shoes or leather goods to enable us to assess the condition of your items and recommend appropriate repair services. We may in the future use automated tools, including artificial intelligence, to assist in diagnosing repair needs from these images.
+              <strong>Item Photos and Videos:</strong> You may upload photos or videos of your items to enable us to assess their condition and recommend appropriate repair services. We may in the future use automated tools, including artificial intelligence, to assist in diagnosing repair needs from these images.
             </p>
             <p className="mt-4">
               <strong>Payment Information:</strong> Payment card and billing information is collected and processed by Stripe, our third-party payment processor. This applies to both online transactions processed through our Site and in-person transactions processed through Stripe Terminal at any pop-up events or physical locations. We do not store your full payment card details on our systems.
@@ -129,7 +129,7 @@ const PrivacyPolicy = () => {
             <ul className="list-disc pl-5 mt-2 space-y-1">
               <li>Create and manage your account</li>
               <li>Process, fulfill, and communicate about your orders</li>
-              <li>Schedule and coordinate shoe pickup and return</li>
+              <li>Schedule and coordinate item pickup and return</li>
               <li>Share necessary order and item information with our repair and operations staff to fulfill your service</li>
               <li>Process payments through Stripe</li>
               <li>Send you transactional communications, including order confirmations, scheduling updates, and service notifications via email and SMS/text message</li>
@@ -191,7 +191,7 @@ const PrivacyPolicy = () => {
               <li>Google Analytics 4 — website traffic analytics (anonymized/aggregated)</li>
               <li>Supabase — database infrastructure and backend services</li>
               <li>Brevo — transactional email delivery</li>
-              <li>Courier and logistics partners — for the purpose of scheduling and executing shoe pickups and returns</li>
+              <li>Courier and logistics partners — for the purpose of scheduling and executing item pickups and returns</li>
             </ul>
             <p className="mt-4">
               These service providers are permitted to use your information only as necessary to provide services to us and are subject to contractual obligations to protect your information.
@@ -241,7 +241,7 @@ const PrivacyPolicy = () => {
                 <strong>Account and order data:</strong> 7 years from your last account activity, consistent with tax recordkeeping obligations
               </li>
               <li>
-                <strong>Shoe photos and videos:</strong> Deleted within 90 days of order completion, unless you provide separate consent for longer retention (e.g., for repeat order history or service improvement)
+                <strong>Item photos and videos:</strong> Deleted within 90 days of order completion, unless you provide separate consent for longer retention (e.g., for repeat order history or service improvement)
               </li>
               <li>
                 <strong>Payment records:</strong> Retained as required by Stripe and applicable tax and financial recordkeeping laws (typically 7 years)

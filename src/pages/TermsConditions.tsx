@@ -6,12 +6,18 @@ const TermsConditions = () => {
   usePageMeta({
     title: "Terms & conditions — Cobbli",
     description:
-"The terms and conditions that govern your use of Cobbli's NYC shoe repair service, including pickup, return, payment and order guarantees.",
+"The terms and conditions that govern your use of Cobbli's repair service for bags, shoes, and leather goods, including pickup, return, payment, and order guarantees.",
   });
 
-  // Restyled 2026-08-26 (Danielle's call) — same cream/amber pattern as
-  // PrivacyPolicy.tsx (single find/replace across all 54 identical heading
-  // color styles).
+  // Full rewrite 2026-09-23 (Danielle's call) — new item-value cap ($600 ->
+  // $1,500), fair-market-value-based liability (replacing the old "verified
+  // original purchase price" standard), a new "In plain English" summary at
+  // the top of Section 2 (styled as a cream callout box, same #fff5cc/
+  // #3d1700 treatment used for helper callouts elsewhere on the site, since
+  // it's meant to visually break from the surrounding legal text), and
+  // mandatory JAMS arbitration + class action waiver (new Section 11) among
+  // other additions. Same h1/h2/h3 amber-on-white structure and styling as
+  // before — only the content changed, not the page's visual pattern.
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <Header />
@@ -33,7 +39,7 @@ const TermsConditions = () => {
               opacity: 0.7,
             }}
           >
-            Effective Date: June 4, 2026 | Last Updated: June 4, 2026
+            Effective Date: [Insert date] | Last Updated: [Insert date]
           </p>
           <div className="mt-8 leading-relaxed" style={{ color: "#fdb600", opacity: 0.9, fontFamily: "'Instrument Sans', sans-serif" }}>
             <h2
@@ -52,7 +58,7 @@ const TermsConditions = () => {
               >
                 www.cobbli.com
               </a>{" "}
-              and all associated services, including shoe and leather goods repair, pickup, and return delivery (collectively, the &quot;Services&quot;).
+              and all associated services, including the repair of bags, shoes, and leather goods, and related pickup and return delivery (collectively, the &quot;Services&quot;).
             </p>
             <p className="mt-4">
               By creating an account, placing an order, or otherwise using our Services, you agree to be bound by these Terms and our Privacy Policy, which is incorporated herein by reference. If you do not agree to these Terms, do not use our Services.
@@ -65,14 +71,181 @@ const TermsConditions = () => {
               className="text-xl font-semibold mt-8"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              2. Eligibility and Account Registration
+              2. Item Care, Item Value & Liability
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              2.1 Eligibility
+              2.1 Item Value Limit
+            </h3>
+            <p className="mt-4">
+              We accept items with a fair-market value of up to $1,500 per item. When you book, you confirm that each item you submit is worth $1,500 or less. We do not ask you to state a specific value at booking. If you are unsure whether an item exceeds this limit, please contact us at{" "}
+              <a href="mailto:support@cobbli.com" className="underline">
+                support@cobbli.com
+              </a>{" "}
+              before booking.
+            </p>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.2 Our Right to Decline Items
+            </h3>
+            <p className="mt-4">
+              We may decline any item, before or after pickup, if:
+            </p>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li>we reasonably believe its value exceeds $1,500;</li>
+              <li>we consider it too high-risk to repair, for example because it is exceptionally rare, fragile, irreplaceable, or of uncertain authenticity; or</li>
+              <li>it falls outside the accepted items described in Section 4.2.</li>
+            </ul>
+            <p className="mt-4">
+              Where possible, we will decline items before pickup based on the photos and description you submit. If we decline an item after pickup, we will return it at no charge and refund any amounts paid for that item.
+            </p>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.3 Standard of Care
+            </h3>
+            <p className="mt-4">
+              We will exercise reasonable care in handling, transporting, storing, and repairing your items. An item is &quot;in our care&quot; from the moment it is handed to Cobbli or our courier at pickup until it is handed back to you or left at your designated return location. This includes time spent with any courier or repair specialist acting on Cobbli&apos;s behalf. We maintain bailee&apos;s insurance for items in our care.
+            </p>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.4 Maximum Liability
+            </h3>
+            <p className="mt-4">
+              If an item is lost or damaged while in our care due to Cobbli&apos;s negligence or that of anyone acting on our behalf, we will first try to restore the item at our own cost where that can reasonably be done. If the item cannot reasonably be restored, our maximum liability is the lesser of:
+            </p>
+            <p className="mt-2">
+              (a) the item&apos;s fair-market value at the time of intake, determined under Section 2.5; or
+            </p>
+            <p className="mt-2">
+              (b) $1,500 per item.
+            </p>
+            <p className="mt-4">
+              For partial damage, we will pay the reasonable cost of professional restoration or the reduction in the item&apos;s fair-market value, whichever is less, subject to the same cap. In addition to any payment under this Section, we will refund the service fees you paid for the affected item. This limitation applies regardless of the item&apos;s sentimental value, replacement cost, or resale value above the cap.
+            </p>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.5 How Fair-Market Value Is Determined
+            </h3>
+            <p className="mt-4">
+              &quot;Fair-market value&quot; means the price a willing buyer would reasonably pay for the item in the condition it was in at intake, as shown in our intake photographs (Section 5.2). We determine fair-market value when a claim is made, based on documentation you provide, which may include:
+            </p>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li>a receipt, order confirmation, or credit card statement;</li>
+              <li>a professional appraisal or authentication certificate; or</li>
+              <li>credible resale evidence, such as recent sold listings on established resale platforms for the same or a substantially similar item in comparable condition.</li>
+            </ul>
+            <p className="mt-4">
+              Original purchase price is relevant evidence but is not conclusive, because fair-market value reflects the item&apos;s age, wear, and condition at intake. If you cannot provide documentation, we will determine fair-market value in good faith using comparable resale data and our intake photographs. We may request additional reasonable documentation to evaluate a claim.
+            </p>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.6 Accuracy of Your Value Confirmation
+            </h3>
+            <p className="mt-4">
+              You are responsible for confirming accurately that each item is worth $1,500 or less. If an item&apos;s value exceeded $1,500 when you submitted it, our liability for that item remains limited to $1,500. We may return such an item unrepaired, with a refund of amounts paid for it.
+            </p>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.7 Pre-Existing Condition, Vintage, and Aged Materials
+            </h3>
+            <p className="mt-4">
+              Our intake photographs are the agreed record of each item&apos;s condition when it enters our care. Damage, wear, or defects visible in those photographs will not be the basis for a claim.
+            </p>
+            <p className="mt-4">
+              Vintage, aged, and previously repaired items often have weaknesses that are not visible, such as dried or cracked leather, brittle stitching, degraded linings or edge paint, fragile hardware, and prior repairs by others. Even when repair work is done with reasonable care, these materials may tear, crack, discolor, or otherwise deteriorate. Dye and color matching on aged materials may also vary. Where we identify such risks, we will tell you before starting work and, where appropriate, ask for your approval to proceed. We are not liable for damage that results from an item&apos;s inherent condition or materials where we exercised reasonable care.
+            </p>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.8 Exclusions
+            </h3>
+            <p className="mt-4">We are not liable for:</p>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li>pre-existing damage, wear, or defects documented at intake;</li>
+              <li>damage resulting from an item&apos;s inherent condition or materials, as described in Section 2.7;</li>
+              <li>outcomes you were told were uncertain and approved before work began;</li>
+              <li>consequential, incidental, or indirect losses, including loss of use;</li>
+              <li>contents left inside bags or other items (please empty all pockets and compartments before pickup); or</li>
+              <li>losses caused by events beyond our reasonable control, as described in Section 13.5.</li>
+            </ul>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.9 Claims Process
+            </h3>
+            <p className="mt-4">
+              To make a claim for a lost or damaged item, you must notify us in writing at{" "}
+              <a href="mailto:support@cobbli.com" className="underline">
+                support@cobbli.com
+              </a>{" "}
+              within 7 days after your return delivery date. If an item is lost, you must notify us within 7 days after we tell you it is lost. Your claim should include:
+            </p>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li>a description of the loss or damage;</li>
+              <li>photos of the damage, if the item has been returned; and</li>
+              <li>any documentation you have supporting the item&apos;s fair-market value (see Section 2.5).</li>
+            </ul>
+            <p className="mt-4">
+              We will acknowledge your claim within 3 business days and aim to resolve it within 15 business days of receiving the information we need. Claims submitted after the 7-day window may not be honored.
+            </p>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.10 Workmanship Issues
+            </h3>
+            <p className="mt-4">
+              If you are unhappy with the quality of a completed repair, our Repair Satisfaction Guarantee (Section 6) applies. If a repair itself damages an item beyond a workmanship shortfall, we will inspect the item and then repair or re-do the work where reasonably possible. Otherwise, we will resolve the matter under Section 2.4.
+            </p>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              2.11 Your Agreement
+            </h3>
+            <p className="mt-4">
+              At booking, you must confirm that each item is worth $1,500 or less and agree to this Section before your order can be placed.
+            </p>
+
+            <h2
+              className="text-xl font-semibold mt-8"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              3. Eligibility and Account Registration
+            </h2>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              3.1 Eligibility
             </h3>
             <p className="mt-4">
               You must be at least 18 years of age to use the Services. By creating an account, you represent and warrant that you are 18 years of age or older and have the legal capacity to enter into a binding contract. We reserve the right to terminate accounts found to belong to users under 18.
@@ -82,7 +255,7 @@ const TermsConditions = () => {
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              2.2 Account Registration
+              3.2 Account Registration
             </h3>
             <p className="mt-4">
               You must create a registered account to place an order. You agree to provide accurate, current, and complete information during registration and to keep your account information up to date. You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account.
@@ -92,17 +265,17 @@ const TermsConditions = () => {
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              2.3 One Account Per Person
+              3.3 One Account Per Person
             </h3>
             <p className="mt-4">
-              Each individual may maintain only one account. Accounts are personal and non-transferable. Commercial use of the Services — including submitting items on behalf of a business, boutique, reseller, or any third party — is strictly prohibited through the consumer platform.
+              Each individual may maintain only one account. Accounts are personal and non-transferable. Commercial use of the Services, including submitting items on behalf of a business, boutique, reseller, or any third party, is prohibited through the consumer platform.
             </p>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              2.4 Account Termination
+              3.4 Account Termination
             </h3>
             <p className="mt-4">
               We reserve the right to suspend or terminate your account at our sole discretion, with or without notice, for any violation of these Terms, fraudulent activity, or behavior that we determine to be harmful to Cobbli or other users.
@@ -112,103 +285,97 @@ const TermsConditions = () => {
               className="text-xl font-semibold mt-8"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              3. Services
+              4. Services
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              3.1 Scope of Services
+              4.1 Scope of Services
             </h3>
             <p className="mt-4">
-              Cobbli provides technology-enabled door-to-door pickup, repair, and return delivery of shoes and leather goods. Services are currently available within designated service areas in New York City. We reserve the right to modify, expand, or restrict our service area at any time.
+              Cobbli provides technology-enabled repair of bags, shoes, and leather goods, with door-to-door pickup and return delivery. Services are currently available within designated service areas in New York City. The repair categories we offer may vary over time. We reserve the right to modify, expand, or restrict our service area and service categories at any time.
             </p>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              3.2 Accepted Items
+              4.2 Accepted Items
             </h3>
             <p className="mt-4">
-              We accept shoes and leather goods in repairable condition. We reserve the right to refuse any item at our sole discretion, including but not limited to:
+              We accept the following items in repairable condition:
             </p>
             <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li>Items assessed as structurally unsalvageable or beyond reasonable repair, whether determined from customer-submitted photos prior to pickup or upon physical inspection by our cobbler at intake</li>
-              <li>Items that are biohazardous, heavily soiled, contaminated, or present a health or safety risk to our staff</li>
-              <li>Items with an estimated or declared value exceeding $600</li>
-              <li>Items not classified as shoes or leather goods</li>
+              <li>handbags and other bags, whether leather or other materials;</li>
+              <li>shoes; and</li>
+              <li>other leather goods, such as belts, wallets, and small leather accessories, in the categories we offer at the time of booking.</li>
             </ul>
             <p className="mt-4">
-              If an item is refused after pickup, we will return it to you at no additional charge and provide a full refund of any amounts paid.
+              We may refuse any item as described in Section 2.2, including items that:
+            </p>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li>are structurally unsalvageable or beyond reasonable repair, based on submitted photos or inspection at intake;</li>
+              <li>are biohazardous, heavily soiled, contaminated, or otherwise present a health or safety risk; or</li>
+              <li>are worth more than $1,500.</li>
+            </ul>
+
+            <h3
+              className="text-lg font-semibold mt-6"
+              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
+            >
+              4.3 Pricing and Estimates
+            </h3>
+            <p className="mt-4">
+              All pricing is fixed and confirmed at checkout. By completing your order, you agree to the stated service price. We do not adjust pricing after checkout unless additional services are identified and separately agreed with you in writing before work begins.
             </p>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              3.3 Item Value Cap
+              4.4 Service Limitations
             </h3>
             <p className="mt-4">
-              Cobbli accepts items with a market value of up to $600. By submitting an item for service, you represent that the item&apos;s value does not exceed $600. We do not require formal value declaration at the time of order, but reserve the right to request proof of purchase in connection with any claim.
-            </p>
-
-            <h3
-              className="text-lg font-semibold mt-6"
-              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
-            >
-              3.4 Pricing and Estimates
-            </h3>
-            <p className="mt-4">
-              All pricing is fixed and confirmed at the time of checkout. By completing your order, you agree to the stated service price. We do not provide post-checkout estimates or adjustments unless additional services are identified and separately agreed upon in writing prior to work commencing.
-            </p>
-
-            <h3
-              className="text-lg font-semibold mt-6"
-              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
-            >
-              3.5 Service Limitations
-            </h3>
-            <p className="mt-4">
-              Cobbli does not guarantee specific repair outcomes beyond what is reasonably achievable given the condition of the item at intake. Repair results may vary based on the material, age, prior condition, and nature of the damage. We will communicate known limitations before beginning work where feasible.
+              Cobbli does not guarantee specific repair outcomes beyond what is reasonably achievable given the item&apos;s condition at intake. Results may vary based on material, age, prior condition, and the nature of the damage. Where feasible, we will communicate known limitations before beginning work.
             </p>
 
             <h2
               className="text-xl font-semibold mt-8"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              4. Pickup, Handling, and Return
+              5. Pickup, Handling, and Return
             </h2>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              4.1 Scheduling
+              5.1 Scheduling
             </h3>
             <p className="mt-4">
-              Pickup and return delivery windows are scheduled through the Cobbli platform at the time of order. You are responsible for ensuring that someone is available to hand off and receive items within the scheduled window. Cobbli will make reasonable efforts to adhere to scheduled windows but does not guarantee exact arrival times.
+              Pickup and return delivery windows are scheduled through the Cobbli platform. You are responsible for ensuring that someone is available to hand off and receive items within the scheduled window. We will make reasonable efforts to keep to scheduled windows but do not guarantee exact arrival times.
             </p>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              4.2 Item Condition Documentation
+              5.2 Item Condition Documentation
             </h3>
             <p className="mt-4">
-              At the time of pickup, Cobbli will photograph your items to document their pre-existing condition. These photographs constitute the agreed record of item condition at intake. By tendering your items for pickup, you acknowledge and accept this documentation process. Pre-existing damage identified in pickup photographs will not be the basis for a damage claim.
+              At pickup or intake, we will photograph your items to document their condition. These photographs are the agreed record of each item&apos;s condition at intake and will be shared with you in your intake confirmation. If you believe a photograph does not accurately reflect your item&apos;s condition, please tell us within 48 hours of receiving your intake confirmation.
             </p>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              4.3 Cancellations
+              5.3 Cancellations
             </h3>
             <p className="mt-4">
-              You may cancel your order free of charge up to 3 hours before your scheduled pickup time. Cancellations made within 3 hours of the scheduled pickup time will incur a $15 late cancellation fee, which will be charged to your payment method on file. To cancel, log into your account or contact us at{" "}
+              You may cancel your order free of charge up to 3 hours before your scheduled pickup time. Cancellations within 3 hours of the scheduled pickup time incur a $15 late cancellation fee, charged to your payment method on file. To cancel, log into your account or contact{" "}
               <a href="mailto:support@cobbli.com" className="underline">
                 support@cobbli.com
               </a>
@@ -219,117 +386,51 @@ const TermsConditions = () => {
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              4.4 Rescheduling
+              5.4 Rescheduling
             </h3>
             <p className="mt-4">
-              You may reschedule your pickup at no charge if the request is made at least 3 hours before the scheduled pickup time. Reschedule requests made within 3 hours of the scheduled pickup time will be treated as a late cancellation and subject to the $15 fee described in Section 4.3.
+              You may reschedule your pickup at no charge up to 3 hours before the scheduled pickup time. Reschedule requests within 3 hours of pickup are treated as a late cancellation under Section 5.3.
             </p>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              4.5 No-Shows
+              5.5 No-Shows
             </h3>
             <p className="mt-4">
-              If you are unavailable during your scheduled pickup window and have not cancelled or rescheduled in advance, your order will be treated as a no-show. No-shows are subject to a $15 fee charged to your payment method on file. You will be offered one opportunity to reschedule at no additional charge following a no-show. A second no-show on the same order will result in order cancellation without refund.
+              If you are unavailable during your scheduled pickup window and have not cancelled or rescheduled in advance, your order will be treated as a no-show. No-shows incur a $15 fee, charged to your payment method on file. After a no-show, you may reschedule once at no additional charge. A second no-show on the same order will result in cancellation without refund.
             </p>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              4.6 Return Delivery
+              5.6 Return Delivery
             </h3>
             <p className="mt-4">
-              Upon completion of your repair, we will contact you to schedule a return delivery window. You are responsible for ensuring availability during the scheduled return window. If you are unavailable for return delivery, we will make one additional delivery attempt. If the second attempt is also unsuccessful, your items will be held in secure storage and the provisions of Section 4.7 will apply.
+              When your repair is complete, we will contact you to schedule return delivery. You are responsible for being available during the scheduled window. If you are unavailable, we will make one additional delivery attempt. If that attempt also fails, your items will be held in secure storage under Section 5.7.
             </p>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              4.7 Unclaimed Items and Abandoned Property
+              5.7 Unclaimed Items and Abandoned Property
             </h3>
             <p className="mt-4">
-              If your repaired items cannot be returned after two delivery attempts, Cobbli will store your items securely and notify you by email at 14 days and again at 28 days following the first failed delivery attempt. If items remain unclaimed after 30 days from the first failed delivery attempt, Cobbli reserves the right to assess a storage fee of $5 per day and, after 60 days total, to treat the items as abandoned. Cobbli shall have no further liability for abandoned items.
+              If your items cannot be returned after two delivery attempts, we will store them securely and notify you by email 14 days and 28 days after the first failed attempt. If items remain unclaimed 30 days after the first failed attempt, we may charge a storage fee of $5 per day. After 60 days, we may treat the items as abandoned, and Cobbli will have no further liability for them.
             </p>
 
             <h3
               className="text-lg font-semibold mt-6"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              4.8 Items Held Pending Payment
+              5.8 Items Held Pending Payment
             </h3>
             <p className="mt-4">
-              Cobbli reserves a possessory lien over all items in our custody. We are entitled to retain possession of repaired items until full payment has been received and confirmed. In the event of a payment dispute, chargeback, or failed payment, Cobbli will hold your items pending resolution. If payment is not resolved within 30 days of notice, items may be treated as abandoned pursuant to Section 4.7.
+              Cobbli holds a possessory lien over items in our custody and may keep repaired items until full payment is received. In the event of a payment dispute, chargeback, or failed payment, we will hold your items pending resolution. If payment is not resolved within 30 days of notice, items may be treated as abandoned under Section 5.7.
             </p>
-
-            <h2
-              className="text-xl font-semibold mt-8"
-              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
-            >
-              5. Liability for Items in Our Care
-            </h2>
-
-            <h3
-              className="text-lg font-semibold mt-6"
-              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
-            >
-              5.1 Standard of Care
-            </h3>
-            <p className="mt-4">
-              Cobbli will exercise reasonable care in the handling, transportation, and repair of your items. We maintain bailee&apos;s insurance coverage for items in our custody. In the event of loss or damage caused directly by Cobbli&apos;s negligence, we will work with you in good faith to resolve the matter.
-            </p>
-
-            <h3
-              className="text-lg font-semibold mt-6"
-              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
-            >
-              5.2 Limitation of Liability for Items
-            </h3>
-            <p className="mt-4">
-              Cobbli&apos;s maximum liability for any item lost or damaged while in our care is limited to the lesser of: (a) the verified original purchase price of the item, as evidenced by a receipt or proof of purchase provided by you, or (b) $600. This limitation applies regardless of the item&apos;s current market value, sentimental value, or resale value.
-            </p>
-
-            <h3
-              className="text-lg font-semibold mt-6"
-              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
-            >
-              5.3 Claims Process
-            </h3>
-            <p className="mt-4">
-              To submit a claim for a lost or damaged item, you must:
-            </p>
-            <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li>
-                Notify Cobbli in writing at{" "}
-                <a href="mailto:support@cobbli.com" className="underline">
-                  support@cobbli.com
-                </a>{" "}
-                within 7 days of your scheduled return delivery date
-              </li>
-              <li>Provide a description of the loss or damage</li>
-              <li>Provide proof of purchase or other documentation establishing the item&apos;s original value</li>
-            </ul>
-            <p className="mt-4">
-              Claims submitted outside this window or without supporting documentation may not be honored. Cobbli reserves the right to investigate all claims and to deny claims where damage is determined to be pre-existing, based on the pickup photographs taken pursuant to Section 4.2.
-            </p>
-
-            <h3
-              className="text-lg font-semibold mt-6"
-              style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
-            >
-              5.4 Excluded Losses
-            </h3>
-            <p className="mt-4">Cobbli is not liable for:</p>
-            <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li>Pre-existing damage, wear, or defects documented at pickup</li>
-              <li>Damage resulting from the inherent nature of the item (e.g., fragile embellishments, weakened materials, prior repairs by third parties)</li>
-              <li>Consequential, incidental, or indirect losses, including loss of use</li>
-              <li>Items with a value exceeding the $600 cap that were submitted in violation of Section 3.3</li>
-              <li>Damage caused by circumstances beyond our reasonable control, including weather events or third-party courier failures</li>
-            </ul>
 
             <h2
               className="text-xl font-semibold mt-8"
@@ -345,7 +446,7 @@ const TermsConditions = () => {
               6.1 Re-Do Policy
             </h3>
             <p className="mt-4">
-              If you are not satisfied with the quality of a completed repair, Cobbli will re-perform the repair at no additional charge, subject to the conditions in this Section. We do not offer cash refunds for completed repair services except where a re-do is not feasible due to Cobbli&apos;s error.
+              If you are not satisfied with the quality of a completed repair, we will re-perform the repair at no additional charge, subject to this Section. We do not offer cash refunds for completed repairs except where a re-do is not feasible due to Cobbli&apos;s error.
             </p>
 
             <h3
@@ -355,11 +456,11 @@ const TermsConditions = () => {
               6.2 Reporting Window
             </h3>
             <p className="mt-4">
-              To be eligible for a re-do, you must report your dissatisfaction to Cobbli in writing at{" "}
+              To be eligible for a re-do, you must notify us in writing at{" "}
               <a href="mailto:support@cobbli.com" className="underline">
                 support@cobbli.com
               </a>{" "}
-              within 14 days of your return delivery date. Requests submitted after 14 days will not be eligible for a re-do under this guarantee.
+              within 14 days of your return delivery date.
             </p>
 
             <h3
@@ -369,7 +470,14 @@ const TermsConditions = () => {
               6.3 Scope of Re-Do
             </h3>
             <p className="mt-4">
-              The re-do guarantee covers the specific repair service performed. It does not cover dissatisfaction arising from limitations inherent to the item&apos;s condition, material, or prior damage, or from outcomes that were communicated to you as uncertain prior to the repair. Cobbli&apos;s cobbler determination of what constitutes a satisfactory repair outcome is final.
+              The re-do guarantee covers the specific repair performed. It does not cover dissatisfaction arising from:
+            </p>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li>limitations inherent to the item&apos;s condition, material, or prior damage; or</li>
+              <li>outcomes that you were told were uncertain before the repair.</li>
+            </ul>
+            <p className="mt-4">
+              Satisfactory repair outcomes are assessed by our repair specialists against professional repair standards. Damage caused by a repair is handled under Section 2.10.
             </p>
 
             <h2
@@ -386,7 +494,7 @@ const TermsConditions = () => {
               7.1 Payment Processing
             </h3>
             <p className="mt-4">
-              All payments are processed by Stripe, our third-party payment processor, for both online transactions and in-person transactions conducted via Stripe Terminal at any Cobbli pop-up or physical location. By providing payment information, you authorize Cobbli to charge the applicable fees to your payment method.
+              All payments are processed by Stripe, our third-party payment processor, for both online transactions and in-person transactions made via Stripe Terminal at any Cobbli pop-up or physical location. By providing payment information, you authorize Cobbli to charge applicable fees to your payment method.
             </p>
 
             <h3
@@ -396,7 +504,7 @@ const TermsConditions = () => {
               7.2 Fees
             </h3>
             <p className="mt-4">
-              Service fees are displayed and confirmed at checkout. A courier fee of $15 applies per order, which is waived for orders totaling $100 or more. Late cancellation, no-show, and storage fees are as described in Sections 4.3, 4.5, and 4.7 respectively.
+              Service fees are displayed and confirmed at checkout. A courier fee of $15 applies per order and is waived for orders of $100 or more. Late cancellation, no-show, and storage fees are described in Sections 5.3, 5.5, and 5.7.
             </p>
 
             <h3
@@ -406,11 +514,11 @@ const TermsConditions = () => {
               7.3 Disputes and Chargebacks
             </h3>
             <p className="mt-4">
-              If you believe you have been incorrectly charged, please contact us at{" "}
+              If you believe you have been charged incorrectly, please contact{" "}
               <a href="mailto:support@cobbli.com" className="underline">
                 support@cobbli.com
               </a>{" "}
-              before initiating a chargeback with your payment provider. Unauthorized chargebacks on completed services will be disputed. Cobbli reserves the right to suspend or terminate accounts with a history of fraudulent or abusive payment disputes.
+              before starting a chargeback with your payment provider. Unauthorized chargebacks on completed services will be disputed. We may suspend or terminate accounts with a history of fraudulent or abusive payment disputes.
             </p>
 
             <h2
@@ -426,14 +534,12 @@ const TermsConditions = () => {
             >
               8.1 Prohibited Items
             </h3>
-            <p className="mt-4">
-              You may not submit any of the following items through the Services:
-            </p>
+            <p className="mt-4">You may not submit:</p>
             <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li>Items valued above $600</li>
-              <li>Biohazardous, heavily soiled, or contaminated items posing a health or safety risk</li>
-              <li>Items that are not shoes or leather goods</li>
-              <li>Items you do not own or do not have authority to submit for repair</li>
+              <li>items worth more than $1,500;</li>
+              <li>biohazardous, heavily soiled, or contaminated items that pose a health or safety risk;</li>
+              <li>items outside the categories described in Section 4.2; or</li>
+              <li>items you do not own or are not authorized to submit for repair.</li>
             </ul>
 
             <h3
@@ -443,7 +549,7 @@ const TermsConditions = () => {
               8.2 Prohibited Use
             </h3>
             <p className="mt-4">
-              You may not use the Services for any commercial purpose, including submitting items on behalf of a business, boutique, or third party. You may not use the Services in any manner that violates applicable law, these Terms, or the rights of others. Violation of this section may result in immediate account termination and forfeiture of any amounts paid.
+              You may not use the Services for any commercial purpose, including submitting items on behalf of a business, boutique, or third party. You may not use the Services in any way that violates applicable law, these Terms, or the rights of others. Violating this Section may result in immediate account termination.
             </p>
 
             <h2
@@ -460,7 +566,7 @@ const TermsConditions = () => {
               9.1 Cobbli IP
             </h3>
             <p className="mt-4">
-              All content on the Cobbli platform, including but not limited to text, graphics, logos, images, and software, is the property of Cobbli or its licensors and is protected by applicable intellectual property laws. You may not reproduce, distribute, or create derivative works from any Cobbli content without our express written permission.
+              All content on the Cobbli platform, including text, graphics, logos, images, and software, is owned by Cobbli or its licensors and is protected by applicable intellectual property laws. You may not reproduce, distribute, or create derivative works from Cobbli content without our express written permission.
             </p>
 
             <h3
@@ -470,33 +576,33 @@ const TermsConditions = () => {
               9.2 Customer Photo Consent
             </h3>
             <p className="mt-4">
-              By submitting photos or videos of your items through the Services, you grant Cobbli a non-exclusive, royalty-free, worldwide license to use, store, reproduce, and process those images for the following purposes:
+              By submitting photos or videos of your items, and by allowing us to photograph your items at intake, you grant Cobbli a non-exclusive, royalty-free, worldwide license to use, store, reproduce, and process those images for:
             </p>
             <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li>Service fulfillment and repair diagnosis</li>
-              <li>Development and improvement of AI-assisted diagnostic tools</li>
-              <li>Internal service quality improvement and staff training</li>
-              <li>Marketing and promotional materials, including on Cobbli&apos;s website and social media channels</li>
+              <li>service fulfillment and repair diagnosis;</li>
+              <li>development and improvement of AI-assisted diagnostic tools;</li>
+              <li>internal service quality improvement and staff training; and</li>
+              <li>marketing and promotional materials, including on Cobbli&apos;s website and social media channels.</li>
             </ul>
             <p className="mt-4">
-              With respect to marketing use only, you may opt out at any time by notifying us at{" "}
+              You may opt out of marketing use at any time by contacting{" "}
               <a href="mailto:support@cobbli.com" className="underline">
                 support@cobbli.com
               </a>
-              . Opting out of marketing use does not affect our right to use your photos for service fulfillment, AI development, or internal improvement purposes. We will not use photos in a way that identifies you personally without your separate consent.
+              . Opting out does not affect our use of photos for service fulfillment, AI development, or internal improvement. We will not use photos in a way that identifies you personally without your separate consent.
             </p>
 
             <h2
               className="text-xl font-semibold mt-8"
               style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}
             >
-              10. Disclaimers
+              10. Disclaimers and Limitation of Liability
             </h2>
             <p className="mt-4">
-              THE SERVICES ARE PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. COBBLI DOES NOT WARRANT THAT THE SERVICES WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF HARMFUL COMPONENTS.
+              EXCEPT AS EXPRESSLY STATED IN THESE TERMS, THE SERVICES ARE PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. COBBLI DOES NOT WARRANT THAT THE PLATFORM WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF HARMFUL COMPONENTS.
             </p>
             <p className="mt-4">
-              TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, COBBLI&apos;S TOTAL LIABILITY TO YOU FOR ANY CLAIM ARISING OUT OF OR RELATING TO THESE TERMS OR THE SERVICES SHALL NOT EXCEED THE GREATER OF: (A) THE TOTAL AMOUNTS PAID BY YOU TO COBBLI IN THE 12 MONTHS PRECEDING THE CLAIM, OR (B) $600.
+              LIABILITY FOR LOSS OF OR DAMAGE TO ITEMS IN OUR CARE IS GOVERNED BY SECTION 2. FOR ALL OTHER CLAIMS, TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, COBBLI&apos;S TOTAL LIABILITY TO YOU FOR ANY CLAIM ARISING OUT OF OR RELATING TO THESE TERMS OR THE SERVICES SHALL NOT EXCEED THE GREATER OF: (A) THE TOTAL AMOUNTS YOU PAID TO COBBLI IN THE 12 MONTHS BEFORE THE CLAIM, OR (B) $1,500.
             </p>
             <p className="mt-4">
               IN NO EVENT SHALL COBBLI BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
@@ -519,7 +625,7 @@ const TermsConditions = () => {
               PLEASE READ THIS SECTION CAREFULLY. IT AFFECTS YOUR LEGAL RIGHTS, INCLUDING YOUR RIGHT TO FILE A LAWSUIT IN COURT.
             </p>
             <p className="mt-4">
-              Any dispute, claim, or controversy arising out of or relating to these Terms or the Services, including the determination of the scope or applicability of this arbitration agreement, shall be resolved exclusively by final and binding arbitration administered by{" "}
+              Any dispute, claim, or controversy arising out of or relating to these Terms or the Services, including the scope or applicability of this arbitration agreement, shall be resolved exclusively by final and binding arbitration administered by{" "}
               <a
                 href="https://www.jamsadr.com"
                 target="_blank"
@@ -528,7 +634,7 @@ const TermsConditions = () => {
               >
                 JAMS
               </a>{" "}
-              pursuant to its Streamlined Arbitration Rules and Procedures. The arbitration shall be conducted in New York, New York. The arbitrator&apos;s award shall be final and binding and may be entered as a judgment in any court of competent jurisdiction.
+              under its Streamlined Arbitration Rules and Procedures. The arbitration shall take place in New York, New York. The arbitrator&apos;s award shall be final and binding and may be entered as a judgment in any court of competent jurisdiction.
             </p>
 
             <h3
@@ -548,7 +654,7 @@ const TermsConditions = () => {
               11.3 Governing Law
             </h3>
             <p className="mt-4">
-              These Terms shall be governed by and construed in accordance with the laws of the State of New York, without regard to its conflict of law principles. To the extent any matter proceeds in court, you consent to the exclusive jurisdiction of the state and federal courts located in New York County, New York.
+              These Terms are governed by the laws of the State of New York, without regard to its conflict of law principles. To the extent any matter proceeds in court, you consent to the exclusive jurisdiction of the state and federal courts located in New York County, New York.
             </p>
 
             <h2
@@ -590,7 +696,7 @@ const TermsConditions = () => {
               13.1 Entire Agreement
             </h3>
             <p className="mt-4">
-              These Terms, together with our Privacy Policy, constitute the entire agreement between you and Cobbli with respect to the Services and supersede all prior agreements, representations, and understandings.
+              These Terms and our Privacy Policy are the entire agreement between you and Cobbli regarding the Services. They supersede all prior agreements, representations, and understandings.
             </p>
 
             <h3
@@ -600,7 +706,7 @@ const TermsConditions = () => {
               13.2 Severability
             </h3>
             <p className="mt-4">
-              If any provision of these Terms is found to be unenforceable or invalid, that provision will be limited or eliminated to the minimum extent necessary, and the remaining provisions will continue in full force and effect.
+              If any provision of these Terms is found unenforceable or invalid, it will be limited or eliminated to the minimum extent necessary, and the remaining provisions will stay in full force and effect.
             </p>
 
             <h3
@@ -610,7 +716,7 @@ const TermsConditions = () => {
               13.3 No Waiver
             </h3>
             <p className="mt-4">
-              Our failure to enforce any right or provision of these Terms shall not constitute a waiver of that right or provision.
+              Our failure to enforce any right or provision of these Terms is not a waiver of that right or provision.
             </p>
 
             <h3
@@ -630,7 +736,7 @@ const TermsConditions = () => {
               13.5 Force Majeure
             </h3>
             <p className="mt-4">
-              Cobbli shall not be liable for any delay or failure to perform resulting from causes outside our reasonable control, including acts of God, weather events, labor disputes, or government actions.
+              Cobbli is not liable for any delay or failure to perform caused by events outside our reasonable control, including acts of God, severe weather, fire, labor disputes, or government actions.
             </p>
 
             <h3
@@ -640,7 +746,7 @@ const TermsConditions = () => {
               13.6 Contact
             </h3>
             <p className="mt-4">
-              If you have any questions about these Terms, please contact us at{" "}
+              Questions about these Terms can be sent to{" "}
               <a href="mailto:support@cobbli.com" className="underline">
                 support@cobbli.com
               </a>

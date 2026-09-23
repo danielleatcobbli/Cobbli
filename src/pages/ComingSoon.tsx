@@ -78,11 +78,13 @@ const ComingSoon = () => {
 
   usePageMeta({
     title: "Coming Soon — Cobbli",
-    // "shoe and leather" -> "shoe and bag" 2026-09-15 (Danielle's call) —
-    // moving copy away from shoe-only language as the business pivots to
-    // cover bags too. Matches the h1 below.
+    // "shoe and leather" -> "shoe and bag" 2026-09-15, then -> "bag and
+    // leather" 2026-09-21 (Danielle's calls) — kept in sync with the h1
+    // below. Flagging: this drops "shoe" from the meta description
+    // entirely, which could cost some shoe-repair search visibility even
+    // though shoes obviously stay in scope — worth a look if that matters.
     description:
-      "Cobbli is coming soon to Manhattan. Expert shoe and bag repair, picked up and delivered to your door. Join the waitlist to be the first to know.",
+      "Cobbli is coming soon to Manhattan. Expert bag and leather repair, picked up and delivered to your door. Join the waitlist to be the first to know.",
     canonicalPath: "/",
   });
 
@@ -118,18 +120,18 @@ const ComingSoon = () => {
           Sans; headline color switched white -> amber to match Hero.tsx's
           own treatment of the same photo+gradient-hero background. */}
       <section className="relative z-10 flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto py-10">
-        {/* "Free shoe repairs..." -> "Shoe and bag repairs..." 2026-09-15
-            (Danielle's call) — moving away from shoe-only language as the
-            business pivots to cover bags too. Dropped "Free" along with it,
-            matching her own candidate phrasing (neither "leather repairs"
-            nor "shoe and bag repairs" kept the word) — easy to add back if
-            the free-first-repair incentive should stay front and center in
-            the headline itself. */}
+        {/* "Free shoe repairs..." -> "Shoe and bag repairs..." 2026-09-15,
+            then -> "Bag and leather repairs..." 2026-09-21 (Danielle's
+            calls) — moving away from shoe-only language as the business
+            pivots to cover bags too. Dropped "Free" along with the first
+            change, matching her own candidate phrasing — easy to add back
+            if the free-first-repair incentive should stay front and center
+            in the headline itself. */}
         <h1
           className="text-3xl sm:text-4xl md:text-5xl leading-tight"
           style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
         >
-          Shoe and bag repairs to your doorstep
+          Bag and leather repairs to your doorstep
         </h1>
         {/* Single CTA now (2026-09-15, Danielle's call) — the primary
             Google-Form button and the intro paragraph above it were
