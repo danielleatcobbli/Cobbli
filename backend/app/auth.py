@@ -70,6 +70,27 @@ def require_user(
 CurrentUser = Annotated[AuthUser, Depends(require_user)]
 
 
+def optional_user(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthUser | None:
+    """FastAPI dependency: like require_user, but returns None instead of
+    401 when there's no bearer token — for routes that serve both signed-in
+    users and guests (e.g. guest checkout, 2026-09-24 Danielle's call). An
+    invalid/expired token still raises 401 rather than silently downgrading
+    to guest, so a customer who thinks they're signed in never has an order
+    quietly placed as a guest.
+    """
+    started = perf_counter()
+    if not authorization or not authorization.lower().startswith("bearer "):
+        request.state.auth_duration_ms = (perf_counter() - started) * 1000
+        return None
+    return require_user(request, authorization)
+
+
+OptionalUser = Annotated[AuthUser | None, Depends(optional_user)]
+
+
 # Roles that satisfy each gate. 'owner' is legacy → treated as 'admin';
 # 'user' is legacy → 'customer'. Mirrors the frontend useRole normalization.
 _ADMIN_ROLES = {"admin", "owner"}

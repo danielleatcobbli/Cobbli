@@ -185,20 +185,28 @@ const OrderConfirmation = () => {
   });
 
   useEffect(() => {
-    if (localOrder || !id || !user) {
+    if (localOrder || !id) {
       setLoading(false);
       return;
     }
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
+      // Signed-in: scoped to that user's own order (existing RLS policy).
+      // Guest (no `user`): the localStorage mirror from Checkout.tsx already
+      // covers the common case (same browser, right after paying). This
+      // fallback is for returning later / a different device — matched by
+      // the order id alone, which is how guest orders are found (2026-09-24,
+      // Danielle's call: guest checkout). The id is an unguessable UUID, and
+      // the RLS policy ("Guests view own orders by id") only exposes rows
+      // where user_id is null, so this never leaks a signed-in customer's
+      // order to a guest request.
+      const query = supabase
         .from("orders")
         .select(
           "id,order_number,status,contact_email,delivery_address,repairs_subtotal_cents,courier_fee_cents,total_cents,order_items(id,pair_snapshot,service_snapshot,price_cents)",
         )
-        .eq("id", id)
-        .eq("user_id", user.id)
-        .maybeSingle();
+        .eq("id", id);
+      const { data, error } = await (user ? query.eq("user_id", user.id) : query).maybeSingle();
       if (cancelled) return;
       if (!error && data) setRemoteOrder(mapDbOrder(data as unknown as DbOrder));
       setLoading(false);

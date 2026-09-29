@@ -107,7 +107,7 @@ const Services = () => {
               </h1>
             </div>
             <Button asChild size="lg" className="shrink-0">
-              <Link to="/start-repair" onClick={() => trackEvent("start_repair", { source: "services_header" })}>
+              <Link to="/start-repair/assessment" onClick={() => trackEvent("start_repair", { source: "services_header" })}>
                 Start a repair
               </Link>
             </Button>

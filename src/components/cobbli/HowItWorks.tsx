@@ -21,19 +21,19 @@ const steps = [
   {
     n: "1",
     title: "Tell us what's wrong",
-    desc: "Tell us what's wrong with your shoes or send us a photo or video. Either way, we'll recommend the right repairs.",
+    desc: "Upload photos of your bag and we'll recommend the right repairs.",
     photo: photoTellUs,
   },
   {
     n: "2",
     title: "Schedule your pickup",
-    desc: "Check out and select the pickup window that works best for you. We'll come to you then.",
+    desc: "Check out and select the pickup window that works best for you.",
     photo: photoSchedule,
   },
   {
     n: "3",
     title: "We handle the rest",
-    desc: "We repair your shoes in-house and let you know as soon as they're ready to schedule your return.",
+    desc: "We repair your bag and return to your doorstep.",
     photo: photoWeHandle,
   },
 ];

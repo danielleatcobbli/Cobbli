@@ -75,6 +75,10 @@ const Checkout = () => {
 
   // Stripe returns user here with ?session_id=...&order_id=...
   const returningSessionId = searchParams.get("session_id");
+  // Set when arriving from AssessmentProposal.tsx's "Continue to checkout" —
+  // carried through to the order so staff can trace it back to the source
+  // assessment's photos (2026-09-24, Danielle's call).
+  const assessmentId = searchParams.get("assessment_id");
 
 
   // ---------- Contact ----------
@@ -131,13 +135,25 @@ const Checkout = () => {
   const [pickupKey, setPickupKey] = useState(0);
   const pickupDone = !!selectedWindow;
 
+  // ---------- Terms ----------
+  // Guests haven't agreed to anything yet (no account signup step where this
+  // would normally live), so they see an explicit, unchecked-by-default
+  // checkbox here before paying — this is the "clickwrap" moment for the
+  // arbitration/class-action-waiver clause in the T&Cs (2026-09-24, legality
+  // discussion with Danielle). Signed-in users skip it for now; once account
+  // signup itself captures T&Cs agreement, this can gate on "did this user
+  // ever agree" instead of just auth state.
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const termsRequired = !authUser;
+  const termsOk = !termsRequired || termsAccepted;
+
   // ---------- Payment ----------
   // Card collection (including any saved cards) is handled entirely by
   // Stripe's Embedded Checkout below — it's passed the Stripe customer id,
   // so it automatically offers that customer's real saved cards alongside
   // "enter a new card," with no separate picker needed here.
   const paymentDone = addressDone;
-  const allDone = contactDone && addressDone && pickupDone && paymentDone;
+  const allDone = contactDone && addressDone && pickupDone && paymentDone && termsOk;
 
 
   // ---------- Step orchestration ----------
@@ -311,7 +327,10 @@ const Checkout = () => {
   };
 
   const placeOrder = async () => {
-    if (!paymentDone || !selectedAddress || !authUser || placing) return;
+    // Guest checkout is in scope (2026-09-24, Danielle's call) — authUser is
+    // no longer required here. termsOk still gates guests on the T&Cs
+    // checkbox above.
+    if (!paymentDone || !selectedAddress || !termsOk || placing) return;
     const prepGeneration = ++paymentPrepGenerationRef.current;
     setPlacing(true);
     setPaymentError(null);
@@ -343,11 +362,12 @@ const Checkout = () => {
       const payload = {
         contact_email: email,
         contact_phone: phone,
-        contact_name: user.name || authUser.email?.split("@")[0] || "Customer",
+        contact_name: user.name || authUser?.email?.split("@")[0] || email.split("@")[0] || "Customer",
         delivery_address: selectedAddress,
         repairs_subtotal_cents: subtotal,
         courier_fee_cents: courierFee,
         total_cents: orderSubtotal,
+        ...(assessmentId && { assessment_id: assessmentId }),
         ...(selectedWindow && {
           pickup_window: {
             start: selectedWindow.start_time,
@@ -374,14 +394,20 @@ const Checkout = () => {
       // Revalidate the selected pickup window and create the Stripe Checkout
       // Session concurrently. The payment UI remains hidden until both finish,
       // but neither network request has to wait for the other.
+      //
+      // Guest checkout (2026-09-24, Danielle's call): a guest has no Supabase
+      // session, so there's no access token to attach. cal-availability still
+      // works without an explicit Authorization override — supabase-js falls
+      // back to the anon key, which satisfies that function's verify_jwt
+      // requirement on its own (it doesn't check *who* the caller is, just
+      // that the JWT is valid). apiFetchJson does the equivalent fallback for
+      // the backend call — it only attaches a Bearer token when a session
+      // actually exists (see src/integrations/api/client.ts).
       const accessToken = authSession?.access_token;
-      if (!accessToken) {
-        throw new Error("Your session expired. Please sign in again.");
-      }
-      const authorization = `Bearer ${accessToken}`;
+      const authHeaders = accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined;
       const availabilityPromise = selectedWindow
         ? supabase.functions.invoke("cal-availability", {
-            headers: { Authorization: authorization },
+            ...(authHeaders && { headers: authHeaders }),
             body: {
               start_time: new Date().toISOString(),
               end_time: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
@@ -392,7 +418,7 @@ const Checkout = () => {
         { clientSecret?: string } & Partial<CanonicalTotals>
       >("/checkout/", {
         method: "POST",
-        headers: { Authorization: authorization },
+        ...(authHeaders && { headers: authHeaders }),
         body: JSON.stringify({
           kind: "cart",
           cartPayload: payload,
@@ -490,11 +516,11 @@ const Checkout = () => {
       return;
     }
     if (showStripe || placing || attemptedPaymentPrepRef.current) return;
-    if (!paymentDone || !selectedAddress || !authUser) return;
+    if (!paymentDone || !selectedAddress || !termsOk) return;
     attemptedPaymentPrepRef.current = true;
     placeOrder();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openStep, paymentDone, selectedAddress, authUser, showStripe, placing]);
+  }, [openStep, paymentDone, selectedAddress, termsOk, showStripe, placing]);
 
   const returnUrl = `${window.location.origin}/checkout?session_id={CHECKOUT_SESSION_ID}`;
 
@@ -833,6 +859,26 @@ const Checkout = () => {
                       <p className="text-xs text-muted-foreground">
                         We accept all major credit and debit cards. You'll review your total before confirming the payment.
                       </p>
+
+                      {termsRequired && (
+                        <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={termsAccepted}
+                            onCheckedChange={(v) => setTermsAccepted(!!v)}
+                            className="mt-0.5"
+                          />
+                          <span className="text-foreground/80">
+                            I agree to Cobbli's{" "}
+                            <Link to="/terms-conditions" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">
+                              Terms &amp; Conditions
+                            </Link>{" "}
+                            and{" "}
+                            <Link to="/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">
+                              Privacy Policy
+                            </Link>
+                          </span>
+                        </label>
+                      )}
 
                       {!pickupDone && (
                         <p className="text-xs text-muted-foreground">

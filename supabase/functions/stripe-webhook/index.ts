@@ -20,6 +20,11 @@ interface CartPayload {
   contact_email: string;
   contact_phone: string;
   contact_name?: string;
+  /** Set when checkout was reached via AssessmentProposal.tsx's "Continue to
+   * checkout" — traces the resulting order back to the source assessment's
+   * photos/request (2026-09-24, Danielle's call). Absent for orders built
+   * from the old checklist flow (StartRepair.tsx / SelectServices.tsx). */
+  assessment_id?: string;
   delivery_address: unknown;
   repairs_subtotal_cents: number;
   courier_fee_cents: number;
@@ -150,9 +155,14 @@ async function createOrderFromCart(
   paymentIntentId: string | null,
   paidAmountCents: number | null,
 ) {
-  const userId = meta.userId;
-  if (!userId) {
-    throw new Error("cart webhook missing userId metadata");
+  // Guest checkout (2026-09-24, Danielle's call): a cart session created
+  // without a signed-in user carries "guestEmail" instead of "userId" (see
+  // create_checkout.py). Either is acceptable here; the order row just ends
+  // up with a null user_id and contact_email as the only identifier, same
+  // pattern already used for guest assessments (assessments.guest_email).
+  const userId = meta.userId || null;
+  if (!userId && !meta.guestEmail) {
+    throw new Error("cart webhook missing userId/guestEmail metadata");
   }
 
   const lookupCol = paymentIntentId ? "stripe_payment_intent_id" : "stripe_session_id";
@@ -221,6 +231,9 @@ async function createOrderFromCart(
       .insert({
         user_id: userId,
         status: "pending_payment",
+        // null user_id is only ever the guest-checkout path above — Stripe
+        // still has the contact_email set on the session (customer_email)
+        // even though there's no Supabase customer record behind it.
         delivery_method: "door-to-door",
         delivery_address: payload.delivery_address as never,
         contact_email: payload.contact_email,
@@ -237,6 +250,7 @@ async function createOrderFromCart(
         pickup_date: pickupDate,
         pickup_time_label: pickupTimeLabel,
         pickup_calendly_event_uri: pickupCalendlyEventUri,
+        assessment_id: payload.assessment_id ?? null,
       })
       .select("id,status")
       .maybeSingle();

@@ -4,7 +4,6 @@ import { useRole } from "@/hooks/useRole";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
-import { displayBrand } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -31,6 +30,11 @@ type AssessmentRow = {
     brand?: string | null;
     photoPaths?: string[];
     videoPaths?: string[];
+    /** Per-item "what's going on with this bag?" note (2026-09-24) —
+     *  AssessmentUpload.tsx now writes one of these per item instead of a
+     *  single description for the whole assessment (see the assessment-level
+     *  `description` field below, which older single-item rows still use). */
+    description?: string | null;
   }>;
   status: string;
   created_at: string;
@@ -47,6 +51,8 @@ type AssessmentRow = {
    *  staff UI until now (2026-09-02). */
   description?: string | null;
   guest_email?: string | null;
+  /** Delivery zip captured on AssessmentUpload.tsx (2026-09-24). */
+  guest_zip?: string | null;
 };
 
 type Service = {
@@ -73,9 +79,18 @@ type SelectionRow = {
 
 const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
 
-const STATUS_TABS: { id: "pending" | "proposal_sent" | "booked" | "service_unavailable"; label: string }[] = [
+// Fixed 2026-09-24 (Danielle's call): this tab used to be "proposal_sent",
+// but saveProposal() below was writing a status AssessmentProposal.tsx (the
+// customer-facing page) never checks for — only "quote_ready" makes a
+// proposal actually show as ready to the customer. Staff-saved proposals
+// were silently invisible to the customer this whole time. Renamed the tab
+// to match what's now actually written. "waitlisted" is new — lets staff
+// preview the waitlist experience without the full status-machine rework
+// (task #124).
+const STATUS_TABS: { id: "pending" | "quote_ready" | "waitlisted" | "booked" | "service_unavailable"; label: string }[] = [
   { id: "pending", label: "Pending" },
-  { id: "proposal_sent", label: "Proposal sent" },
+  { id: "quote_ready", label: "Quote ready" },
+  { id: "waitlisted", label: "Waitlisted" },
   { id: "booked", label: "Booked" },
   { id: "service_unavailable", label: "Service unavailable" },
 ];
@@ -87,6 +102,18 @@ const Admin = () => {
   const [error, setError] = useState<string | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]["id"]>("pending");
+  // Signed thumbnail URLs per assessment id, keyed by row id — this is the
+  // "clear place to view assessments with photos" Danielle asked for
+  // (2026-09-24). Fetched lazily whenever the visible rows change.
+  //
+  // Grouped per item (2026-09-24, multi-item submissions) — each entry is
+  // one array per pair/item, rather than one flat array across the whole
+  // assessment, so staff can tell which photos belong to which item instead
+  // of seeing them all jumbled together. photosByRow[rowId][itemIndex] is
+  // that item's photo URLs, in upload order — photosByRow[rowId][itemIndex][0]
+  // is that item's identifying "first photo" (2026-09-24, Danielle's call:
+  // items are identified by their first photo, not a customer-typed name).
+  const [photosByRow, setPhotosByRow] = useState<Record<string, string[][]>>({});
 
   // Editor state
   const [editing, setEditing] = useState<AssessmentRow | null>(null);
@@ -133,6 +160,44 @@ const Admin = () => {
       setServices(data ?? []);
     })();
   }, []);
+
+  // Signed URLs for every pair's photos across the visible rows, grouped per
+  // pair — same signed-URL pattern AssessmentProposal.tsx uses. Skips rows
+  // already fetched so switching tabs back and forth doesn't keep re-signing.
+  useEffect(() => {
+    if (!rows) return;
+    const pending = rows.filter((r) => !(r.id in photosByRow));
+    if (pending.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        pending.map(async (r) => {
+          const perPair = await Promise.all(
+            (r.pairs ?? []).map(async (p) => {
+              const urls: string[] = [];
+              for (const path of (p.photoPaths ?? []).slice(0, 6)) {
+                const { data } = await supabase.storage
+                  .from("assessment-uploads")
+                  .createSignedUrl(path, 3600);
+                if (data?.signedUrl) urls.push(data.signedUrl);
+              }
+              return urls;
+            }),
+          );
+          return [r.id, perPair] as const;
+        }),
+      );
+      if (cancelled) return;
+      setPhotosByRow((prev) => {
+        const next = { ...prev };
+        for (const [id, perPair] of entries) next[id] = perPair;
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rows, photosByRow]);
 
   const openEditor = (row: AssessmentRow) => {
     const existing = new Map(row.proposed_services?.map((s) => [s.service_id, s]) ?? []);
@@ -197,7 +262,7 @@ const Admin = () => {
         method: "PATCH",
         body: JSON.stringify({
           proposed_services,
-          status: "proposal_sent",
+          status: "quote_ready",
         }),
       });
     } catch (e) {
@@ -211,7 +276,7 @@ const Admin = () => {
     }
     setSaving(false);
     toast({
-      title: "Proposal sent",
+      title: "Quote ready",
       description: "Shareable link copied to clipboard.",
     });
     const url = `${window.location.origin}/proposal/${editing.id}`;
@@ -261,6 +326,30 @@ const Admin = () => {
         description: fnErr instanceof Error ? fnErr.message : "Notification failed",
         variant: "destructive",
       });
+    }
+    fetchRows(tab);
+  };
+
+  // Preview-enabling action (2026-09-24, Danielle's call) — lets staff move
+  // a quote-ready proposal to "waitlisted" so the waitlist experience
+  // (AssessmentProposal.tsx) can actually be tested end to end before the
+  // real capacity/waitlist logic exists on the backend (task #124). No
+  // transactional email fires here — Brevo lifecycle emails are unlinked
+  // pending the copy rework (see cobbli_mvp_order_flow.pptx).
+  const markWaitlisted = async (row: AssessmentRow) => {
+    try {
+      await apiFetch(`/ops/assessments/${row.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "waitlisted" }),
+      });
+      toast({ title: "Marked as waitlisted" });
+    } catch (e) {
+      toast({
+        title: "Could not update",
+        description: e instanceof Error ? e.message : "Update failed",
+        variant: "destructive",
+      });
+      return;
     }
     fetchRows(tab);
   };
@@ -321,8 +410,10 @@ const Admin = () => {
               <p className="text-muted-foreground">
                 {tab === "pending"
                   ? "New customer photo submissions will show up here."
-                  : tab === "proposal_sent"
+                  : tab === "quote_ready"
                   ? "Proposals you've sent will show up here."
+                  : tab === "waitlisted"
+                  ? "Assessments you've waitlisted will show up here."
                   : tab === "booked"
                   ? "Booked orders from approved proposals will show up here."
                   : "Assessments marked as service unavailable will show up here."}
@@ -333,10 +424,10 @@ const Admin = () => {
               <table className="w-full text-sm">
                 <thead className="bg-secondary/60 text-primary">
                   <tr>
+                    <th className="text-left p-3">Items</th>
                     <th className="text-left p-3">Customer</th>
+                    <th className="text-left p-3">Zip</th>
                     <th className="text-left p-3">Phone</th>
-                    <th className="text-left p-3">Pairs</th>
-                    <th className="text-left p-3">Pair identifier</th>
                     <th className="text-left p-3">Customer requested</th>
                     <th className="text-left p-3">Submitted</th>
                     <th className="text-left p-3">Action</th>
@@ -345,14 +436,48 @@ const Admin = () => {
                 <tbody>
                   {rows.map((r) => {
                     const name = [r.profile?.first_name, r.profile?.last_name].filter(Boolean).join(" ") || "—";
-                    const first = r.pairs?.[0];
-                    const id = [first?.colors?.join(" / "), displayBrand(first?.brand), first?.shoeType].filter(Boolean).join(" · ") || "—";
+                    // One thumbnail per item — its first photo — rather than
+                    // a flat mixed gallery, so staff can tell at a glance how
+                    // many items are in this submission and roughly what
+                    // each one is (2026-09-24, multi-item submissions;
+                    // Danielle's call: items are identified by their first
+                    // photo, not a customer-typed name).
+                    const perPairPhotos = photosByRow[r.id] ?? [];
+                    const itemCount = r.pairs?.length ?? 0;
                     return (
                       <tr key={r.id} className="border-t border-border">
+                        <td className="p-3">
+                          {itemCount > 0 ? (
+                            <div className="flex items-center gap-1">
+                              {perPairPhotos.slice(0, 4).map((urls, i) =>
+                                urls[0] ? (
+                                  <img
+                                    key={i}
+                                    src={urls[0]}
+                                    alt={itemCount > 1 ? `Item ${i + 1}` : "Item photo"}
+                                    title={itemCount > 1 ? `Item ${i + 1}` : undefined}
+                                    className="h-10 w-10 rounded-md object-cover border border-border"
+                                  />
+                                ) : (
+                                  <div
+                                    key={i}
+                                    className="h-10 w-10 rounded-md bg-secondary/50 border border-border"
+                                  />
+                                ),
+                              )}
+                              {itemCount > 4 && (
+                                <span className="text-xs text-muted-foreground self-center">
+                                  +{itemCount - 4}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
                         <td className="p-3">{name}</td>
+                        <td className="p-3">{r.guest_zip || "—"}</td>
                         <td className="p-3">{r.profile?.phone || "—"}</td>
-                        <td className="p-3">{r.pairs?.length ?? 0}</td>
-                        <td className="p-3">{id}</td>
                         {/* Requested-conditions visibility (2026-09-02,
                             Danielle's ask) — what the customer had already
                             checked on the checklist before bailing to this
@@ -386,7 +511,7 @@ const Admin = () => {
                                 </Button>
                               </>
                             )}
-                            {tab === "proposal_sent" && (
+                            {tab === "quote_ready" && (
                               <>
                                 <Button size="sm" variant="outline" onClick={() => openEditor(r)}>
                                   Edit
@@ -402,11 +527,28 @@ const Admin = () => {
                                 <Button
                                   size="sm"
                                   variant="outline"
+                                  onClick={() => markWaitlisted(r)}
+                                >
+                                  Waitlist
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
                                   onClick={() => markUnavailable(r)}
                                 >
                                   Service unavailable
                                 </Button>
                               </>
+                            )}
+                            {tab === "waitlisted" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => copyLink(r.id)}
+                                className="gap-1"
+                              >
+                                <Copy size={14} /> Copy link
+                              </Button>
                             )}
                             {tab === "booked" && (
                               <a
@@ -441,20 +583,63 @@ const Admin = () => {
             <DialogTitle>Build proposal</DialogTitle>
             <DialogDescription>
               Tick the services to include, choose Essential vs Recommended, and adjust the price.
-              Saving will set the status to "Proposal sent" and copy a shareable link.
+              Saving will set the status to "Quote ready" and copy a shareable link.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Customer's own requested conditions + notes (2026-09-02,
-              Danielle's ask) — surfaced right where staff are deciding what
-              to include, so an omitted service reads as an intentional
-              call rather than something missed. requested_conditions comes
-              from the checklist state carried over when the customer
-              clicked "Not sure?"; description is their free-text "Anything
-              else we should know?" field — neither was visible anywhere in
-              this UI before. */}
+          {/* Photos + notes grouped per item (2026-09-24, multi-item
+              submissions) — replaces the old flat photo gallery + single
+              assessment-level description, so staff can see which photos
+              and which "what's going on with this bag?" note go together
+              when a customer submitted more than one item. Each item's own
+              first photo doubles as its identifier, same as everywhere else
+              this data shows up (AssessmentProposal.tsx, Bag.tsx). */}
+          {editing && editing.pairs.length > 0 && (
+            <div className="space-y-3">
+              {editing.pairs.map((p, i) => {
+                const urls = photosByRow[editing.id]?.[i] ?? [];
+                return (
+                  <div key={i} className="rounded-lg border border-border p-3">
+                    {editing.pairs.length > 1 && (
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                        Item {i + 1}
+                      </p>
+                    )}
+                    {urls.length > 0 ? (
+                      <div className="flex gap-2 flex-wrap">
+                        {urls.map((src, j) => (
+                          <img
+                            key={j}
+                            src={src}
+                            alt={`Item ${i + 1} photo ${j + 1}`}
+                            className="h-20 w-20 rounded-md object-cover border border-border"
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No photos</p>
+                    )}
+                    {p.description && (
+                      <p className="mt-2 text-sm whitespace-pre-wrap" style={{ color: "#3d1700" }}>
+                        {p.description}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Customer's own requested conditions (2026-09-02, Danielle's
+              ask) + legacy assessment-level notes (older, single-item
+              rows only — new submissions write description per item above
+              instead) — surfaced right where staff are deciding what to
+              include, so an omitted service reads as an intentional call
+              rather than something missed. requested_conditions comes from
+              the checklist state carried over when the customer clicked
+              "Not sure?". */}
           {(editing?.requested_conditions?.length || editing?.description) && (
-            <div className="rounded-lg p-3 space-y-2" style={{ backgroundColor: "#fff5cc" }}>
+            <div className="mt-3 rounded-lg p-3 space-y-2" style={{ backgroundColor: "#fff5cc" }}>
               {editing?.requested_conditions && editing.requested_conditions.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold" style={{ color: "#3d1700" }}>

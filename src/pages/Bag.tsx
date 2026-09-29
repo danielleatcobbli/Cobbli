@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useNavigate } from "react-router-dom";
 import { Pencil, Trash2 } from "lucide-react";
@@ -20,6 +20,7 @@ import { formatPairLabel, usePairs } from "@/context/PairsContext";
 import { trackEvent } from "@/lib/analytics";
 import bagIcon from "@/assets/icons/bag.svg";
 import { usePricingConfig } from "@/hooks/usePricingConfig";
+import { supabase } from "@/integrations/supabase/client";
 
 const Bag = () => {
   const navigate = useNavigate();
@@ -28,6 +29,38 @@ const Bag = () => {
   const pricing = usePricingConfig();
   const { getPair } = usePairs();
   const { setSelectedPairId, setSelectedServiceSlugs, setActiveCategory } = useRepairFlow();
+
+  // Resolve each item's identifying photo (2026-09-24, Danielle's call —
+  // items from a multi-item photo submission are identified by their first
+  // uploaded photo rather than a customer-typed name). Same signed-URL
+  // pattern as AssessmentProposal.tsx/Admin.tsx; keyed by bag entry id so
+  // switching tabs or re-rendering doesn't re-sign paths already resolved.
+  const [thumbByPairId, setThumbByPairId] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const pending = rawPairs.filter((p) => p.thumbnailPath && !(p.id in thumbByPairId));
+    if (pending.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        pending.map(async (p) => {
+          const { data } = await supabase.storage
+            .from("assessment-uploads")
+            .createSignedUrl(p.thumbnailPath!, 3600);
+          return [p.id, data?.signedUrl ?? null] as const;
+        }),
+      );
+      if (cancelled) return;
+      setThumbByPairId((prev) => {
+        const next = { ...prev };
+        for (const [id, url] of entries) if (url) next[id] = url;
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawPairs]);
 
   const handleEditRepair = (pairId: string | undefined, serviceSlugs: string[]) => {
     if (!pairId) return;
@@ -100,13 +133,29 @@ const Bag = () => {
                   const pairTotal = pair.services.reduce((s, svc) => s + svc.price, 0);
                   const savedPair = pair.pairId ? getPair(pair.pairId) : undefined;
                   const pairLabel = pair.label ?? (savedPair ? formatPairLabel(savedPair) : "Unnamed pair");
+                  const thumb = pair.thumbnailPath ? thumbByPairId[pair.id] : undefined;
                   return (
                     <li
                       key={pair.id}
                       className="rounded-lg border border-border bg-card p-6 shadow-soft"
                     >
                       <div className="flex items-start justify-between gap-4 mb-4">
-                        <h2 className="text-lg font-semibold">{pairLabel}</h2>
+                        {/* The item's own first uploaded photo is its
+                            identifier when it came from a multi-item photo
+                            submission (2026-09-24, Danielle's call) — shown
+                            alongside the label rather than replacing it, so
+                            items added the old way (no photo) still read
+                            fine with just text. */}
+                        <div className="flex items-center gap-3 min-w-0">
+                          {thumb && (
+                            <img
+                              src={thumb}
+                              alt={pairLabel}
+                              className="h-12 w-12 rounded-md object-cover border border-border shrink-0"
+                            />
+                          )}
+                          <h2 className="text-lg font-semibold truncate">{pairLabel}</h2>
+                        </div>
                         <div className="flex items-center gap-4">
                           {pair.pairId && (
                             <button
@@ -263,7 +312,7 @@ const EmptyBag = () => (
       You haven't added any repairs yet. Start a repair to get your shoes looking their best.
     </p>
     <Button asChild variant="hero" size="lg">
-      <Link to="/start-repair" onClick={() => trackEvent("start_repair", { source: "empty_bag" })}>
+      <Link to="/start-repair/assessment" onClick={() => trackEvent("start_repair", { source: "empty_bag" })}>
         Start a repair
       </Link>
     </Button>

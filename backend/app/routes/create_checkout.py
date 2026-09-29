@@ -9,7 +9,7 @@ import stripe
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from app.auth import CurrentUser
+from app.auth import OptionalUser
 from app.pricing import CartQuote, quote_cart
 from app.settings import get_settings
 from app.stripe_customers import resolve_or_create_customer
@@ -99,7 +99,7 @@ def create_checkout(
     request: Request,
     response: Response,
     background_tasks: BackgroundTasks,
-    user: CurrentUser,
+    user: OptionalUser,
 ) -> CheckoutResponse:
     route_started = perf_counter()
     stripe.api_key = get_settings().stripe_secret_key
@@ -110,8 +110,15 @@ def create_checkout(
     if body.kind not in ("deposit", "order", "cart"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown kind")
 
-    if body.kind in ("deposit", "order") and not body.rowId:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing rowId")
+    # "deposit" and "order" both reference a row already scoped to a specific
+    # signed-in user (assessments.user_id / orders.user_id) — guests never
+    # reach these. Only "cart" (2026-09-24, Danielle's call: guest checkout is
+    # in scope) allows a null user.
+    if body.kind in ("deposit", "order"):
+        if user is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in required")
+        if not body.rowId:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing rowId")
 
     if body.kind == "cart":
         _validate_cart(body.cartPayload)
@@ -124,10 +131,13 @@ def create_checkout(
         pricing_duration_ms = (perf_counter() - pricing_started) * 1000
 
     customer_started = perf_counter()
-    customer_id = user.stripe_customer_id
-    should_persist_customer = customer_id is None
-    if customer_id is None:
-        customer_id = resolve_or_create_customer(email=user.email, user_id=user.id)
+    customer_id: str | None = None
+    should_persist_customer = False
+    if user is not None:
+        customer_id = user.stripe_customer_id
+        should_persist_customer = customer_id is None
+        if customer_id is None:
+            customer_id = resolve_or_create_customer(email=user.email, user_id=user.id)
     customer_duration_ms = (perf_counter() - customer_started) * 1000
     sb = get_supabase_admin()
 
@@ -136,6 +146,7 @@ def create_checkout(
     metadata: dict[str, str]
 
     if body.kind == "deposit":
+        assert user is not None  # enforced above: deposit/order require sign-in
         resp = (
             sb.table("assessments")
             .select("id, user_id, deposit_status")
@@ -165,6 +176,7 @@ def create_checkout(
         metadata = {"userId": user.id, "kind": "deposit", "assessmentId": body.rowId}
 
     elif body.kind == "order":
+        assert user is not None  # enforced above: deposit/order require sign-in
         resp = (
             sb.table("orders")
             .select("id, user_id, payment_status, total_cents, order_number")
@@ -211,13 +223,26 @@ def create_checkout(
             }
         ]
         description = "Cobbli order"
+        # Guest checkout (2026-09-24, Danielle's call): no signed-in user, so
+        # no "userId" key at all — the webhook branches on its presence to
+        # decide whether the resulting order gets a user_id or is a guest
+        # order (user_id null, contact_email is the only identifier).
         metadata = {
-            "userId": user.id,
+            **({"userId": user.id} if user is not None else {"guestEmail": payload["contact_email"]}),
             "kind": "cart",
             **_chunk_payload(payload),
         }
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown kind")
+
+    # Signed-in customers attach their Stripe customer id (saved cards, etc.).
+    # Guests have none — pass customer_email instead so Stripe still collects
+    # and displays it on the Checkout Session.
+    customer_kwargs: dict[str, Any] = (
+        {"customer": customer_id}
+        if customer_id
+        else {"customer_email": (body.cartPayload or {}).get("contact_email")}
+    )
 
     stripe_session_started = perf_counter()
     session = stripe.checkout.Session.create(
@@ -225,13 +250,14 @@ def create_checkout(
         mode="payment",
         ui_mode="embedded",
         return_url=body.returnUrl,
-        customer=customer_id,
         payment_intent_data={"description": description, "metadata": metadata},
         metadata=metadata,
         # Redisplays this customer's cards saved with allow_redisplay="always"
         # (see app/routes/payment_methods.py), and lets them save a new card
-        # from checkout itself for next time.
+        # from checkout itself for next time. Guests have no Stripe customer
+        # to attach — Stripe collects/displays their email directly instead.
         saved_payment_method_options={"payment_method_save": "enabled"},
+        **customer_kwargs,
     )
     stripe_session_duration_ms = (perf_counter() - stripe_session_started) * 1000
 

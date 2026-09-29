@@ -426,7 +426,7 @@ const Orders = () => {
               <EmptyState
                 message="No orders yet."
                 cta="Start a repair"
-                to="/start-repair"
+                to="/start-repair/assessment"
               />
             ) : (
               <ul className="space-y-4">
@@ -446,7 +446,7 @@ const Orders = () => {
               <EmptyState
                 message="No repairs yet. Start a repair to get started."
                 cta="Start a repair"
-                to="/start-repair"
+                to="/start-repair/assessment"
               />
             ) : (
               <ul className="space-y-4">

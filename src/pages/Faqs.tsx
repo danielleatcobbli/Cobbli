@@ -82,7 +82,7 @@ const CoverageRequestForm = () => {
           <p className="text-sm font-medium text-green-700">
             Great news — we already service your area!{" "}
             <Link
-              to="/start-repair"
+              to="/start-repair/assessment"
               className="underline underline-offset-4"
               onClick={() => trackEvent("start_repair", { source: "faqs" })}
             >
@@ -121,16 +121,16 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "How does Cobbli work?",
     a: (
       <p>
-        Tell us what's wrong with your shoes through our quick{" "}
+        Tell us what's wrong with your bag through our quick{" "}
         <Link
-          to="/start-repair"
+          to="/start-repair/assessment"
           className="underline underline-offset-4 hover:text-primary"
           onClick={() => trackEvent("start_repair", { source: "faqs" })}
         >
           Start a Repair
         </Link>{" "}
         form or by sending us a photo or video and we'll recommend the right repairs. From there, we pick
-        up your shoes, repair them in-house, and return them to your door.
+        up your items, repair them, and return them to your door.
       </p>
     ),
   },
@@ -160,7 +160,7 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "How do I schedule my pickup and return?",
     a: (
       <p>
-        Schedule your pickup during checkout. Once your shoes are ready, we will text you to schedule your
+        Schedule your pickup during checkout. Once your order is ready, we will text you to schedule your
         return.
       </p>
     ),
@@ -177,61 +177,9 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "How long do repairs take?",
     a: (
       <p>
-        Most repairs are completed within 7–10 days of us receiving your shoes. If your shoes are ready
+        Most repairs are completed within 2 weeks of us receiving your item(s). If your order is ready
         early, we'll let you know.
       </p>
-    ),
-  },
-  {
-    q: "What if I don't know what services I need?",
-    a: (
-      <p>
-        Not sure what your shoes need? Upload photos or a short video and we'll recommend the right repairs.{" "}
-        <Link to="/start-repair/assessment" className="underline underline-offset-4 hover:text-primary">
-          Get a personalized recommendation →
-        </Link>
-      </p>
-    ),
-  },
-  {
-    q: "Is it worth repairing my shoes?",
-    a: (
-      <p>
-        Well-made shoes are built to last – with the right care, a repair is more
-        cost-effective than replacement. Repair is also more sustainable than replacement, as manufacturing
-        new shoes is a resource-intensive process.
-      </p>
-    ),
-  },
-  {
-    q: "Are my shoes repairable?",
-    a: (
-      <div className="space-y-3">
-        <p>
-          Well-made shoes crafted from leather (including nubuck and suede) or canvas are almost always
-          repairable and can last a lifetime with the right care. However, even well-made shoes can become
-          impossible to repair with neglect – it's important to repair good shoes when you notice an issue
-          so they don't get beyond fixing.
-        </p>
-        <div>
-          <p className="font-medium text-foreground">Signs it's time to replace:</p>
-          <ul className="list-disc pl-6 mt-2 space-y-1">
-            <li>The leather on the shoe has cracked</li>
-            <li>The shoe has lost its shape and the structure has collapsed</li>
-            <li>
-              The shoe was cheaply constructed (made from synthetic or thin materials, soles that were
-              glued instead of stitched on)
-            </li>
-          </ul>
-        </div>
-        <p>
-        If you're unsure whether your shoes are worth repairing,{" "}
-        <Link to="/start-repair/assessment" className="underline underline-offset-4 hover:text-primary">
-          get a personalized recommendation
-        </Link>{" "}
-        before booking and we'll give you an honest assessment. We'd rather save you the money.
-      </p>
-      </div>
     ),
   },
   {
@@ -239,7 +187,7 @@ const faqs: { q: string; a: ReactNode }[] = [
     a: (
       <p>
         Yes. If you're not satisfied with your repair, contact us at <Email /> within 14 days of receiving
-        your shoes.
+        your order.
       </p>
     ),
   },

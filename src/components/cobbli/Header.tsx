@@ -20,7 +20,7 @@ import { trackEvent } from "@/lib/analytics";
 // (pricing on the checklist, linking a checklist item to its service page)
 // are a separate, deliberately deferred pass.
 const navLinks = [
-  { label: "Start a Repair", to: "/start-repair" },
+  { label: "Start a Repair", to: "/start-repair/assessment" },
   { label: "How It Works", to: "/#how-it-works" },
   { label: "FAQs", to: "/faqs" },
 ];

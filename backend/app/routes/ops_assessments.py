@@ -18,7 +18,7 @@ router = APIRouter(prefix="/ops/assessments", tags=["ops", "assessments"])
 # PATCH requests from Admin.tsx (e.g. saveProposal setting status:
 # "proposal_sent") were being rejected outright by this allowlist. Aligned
 # to what the frontend actually uses.
-_ALLOWED_STATUSES = {"pending", "proposal_sent", "booked", "service_unavailable"}
+_ALLOWED_STATUSES = {"pending", "proposal_sent", "quote_ready", "waitlisted", "booked", "service_unavailable"}
 
 # Added proposed_services, description, guest_email, requested_conditions
 # 2026-09-02 — Admin.tsx's saveProposal already sends proposed_services and
@@ -28,7 +28,7 @@ _ALLOWED_STATUSES = {"pending", "proposal_sent", "booked", "service_unavailable"
 # selected before jumping to the photo-assessment flow.
 _SELECT = (
     "id, user_id, pairs, status, proposal_token, created_at, updated_at, "
-    "proposed_services, description, guest_email, requested_conditions"
+    "proposed_services, description, guest_email, guest_zip, requested_conditions"
 )
 
 

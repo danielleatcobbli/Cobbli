@@ -7,13 +7,7 @@ import instagram from "@/assets/icons/instagram.svg";
 import tiktok from "@/assets/icons/tiktok.svg";
 import x from "@/assets/icons/x.svg";
 
-// Same hero photo as the real homepage (src/components/cobbli/Hero.tsx), so
-// the waitlist page reads as "the real site with an email gate" rather than
-// a bare placeholder. Hero.tsx swapped to this lifestyle shot 2026-08-25
-// (Danielle's call) — this page had drifted onto the older workshop photo
-// until now; keep these two in sync going forward. Served from /public,
-// same as Hero.tsx.
-const hero = "/assets/hero-lifestyle-soho.webp";
+const hero = "/assets/hero-bags-v2.webp";
 
 /** Basic client-side shape check before submit — not meant to be exhaustive,
  *  just enough to catch empty/obviously-malformed input before it hits the
@@ -78,81 +72,52 @@ const ComingSoon = () => {
 
   usePageMeta({
     title: "Coming Soon — Cobbli",
-    // "shoe and leather" -> "shoe and bag" 2026-09-15, then -> "bag and
-    // leather" 2026-09-21 (Danielle's calls) — kept in sync with the h1
-    // below. Flagging: this drops "shoe" from the meta description
-    // entirely, which could cost some shoe-repair search visibility even
-    // though shoes obviously stay in scope — worth a look if that matters.
     description:
-      "Cobbli is coming soon to Manhattan. Expert bag and leather repair, picked up and delivered to your door. Join the waitlist to be the first to know.",
+      "Expert bag repair, made simple. We pick up, repair, and return the bags you love. Coming soon to NYC. Join the waitlist.",
     canonicalPath: "/",
   });
 
   return (
     <main
-      className="relative min-h-screen flex flex-col items-center justify-between px-6 py-10 text-white overflow-hidden"
+      className="relative min-h-screen min-h-[100svh] flex flex-col items-center justify-between px-[22px] pt-[30px] pb-6 sm:px-7 sm:pt-9 text-[#fff5e9] bg-[#3d1700] overflow-hidden"
       style={{ fontFamily: "'Instrument Sans', sans-serif" }}
     >
       <img
         src={hero}
-        alt="Woman walking down a cobblestone SoHo street in black slingback heels"
-        className="absolute inset-0 h-full w-full object-cover"
+        alt="Burgundy leather handbag carried along a rainy SoHo street"
+        className="absolute inset-0 h-full w-full object-cover object-center sm:object-[center_75%]"
+        style={{ filter: "saturate(1.15) contrast(1.05)" }}
         loading="eager"
         decoding="async"
       />
-      {/* Same gradient the homepage hero uses, plus a flat wash so the logo,
-          form, and social icons stay legible everywhere on the page, not just
-          where the homepage's gradient is darkest. */}
-      <div className="absolute inset-0 bg-gradient-hero" />
-      <div className="absolute inset-0" style={{ backgroundColor: "rgba(61, 23, 0, 0.45)" }} />
-
-      {/* Sized down 2026-08-26, same fix/reasoning as Header.tsx — the old
-          h-32/h-40 was tuned for the previous SVG's ~18.5%-of-canvas glyph
-          height; the new tightly-cropped logo.webp needs a much smaller
-          class to render the same actual visual size. */}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,rgba(35,18,10,.27),rgba(35,18,10,.52) 38%,rgba(35,18,10,.48) 65%,rgba(35,18,10,.65))" }} />
       <div className="relative z-10 w-full flex justify-center">
-        <img src={logo} alt="Cobbli" className="h-6 md:h-7 w-auto" />
+        <img src={logo} alt="Cobbli" className="h-[29px] w-auto" />
       </div>
-
-      {/* Restyled 2026-08-30 (Danielle's call) — "align to what we're doing
-          on the site." Fraunces + Instrument Sans (2026-08-26 site-wide
-          headline/body pairing, see index.html) replace Montserrat/Albert
-          Sans; headline color switched white -> amber to match Hero.tsx's
-          own treatment of the same photo+gradient-hero background. */}
-      <section className="relative z-10 flex-1 flex flex-col items-center justify-center text-center max-w-xl mx-auto py-10">
-        {/* "Free shoe repairs..." -> "Shoe and bag repairs..." 2026-09-15,
-            then -> "Bag and leather repairs..." 2026-09-21 (Danielle's
-            calls) — moving away from shoe-only language as the business
-            pivots to cover bags too. Dropped "Free" along with the first
-            change, matching her own candidate phrasing — easy to add back
-            if the free-first-repair incentive should stay front and center
-            in the headline itself. */}
+      <section className="relative z-10 flex-1 w-full flex flex-col items-center justify-center text-center max-w-[700px] mx-auto pt-[65px] pb-[60px]">
         <h1
-          className="text-3xl sm:text-4xl md:text-5xl leading-tight"
+          className="text-[clamp(32px,8vw,40px)] min-[481px]:text-[clamp(44px,6.8vw,68px)] leading-[1.04] tracking-[-1px] sm:tracking-[-1.8px] mb-6"
           style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
         >
-          Bag and leather repairs to your doorstep
+          Bag repair,<br /><em style={{ fontWeight: 500 }}>without the hassle.</em>
         </h1>
-        {/* Single CTA now (2026-09-15, Danielle's call) — the primary
-            Google-Form button and the intro paragraph above it were
-            removed; the inline email capture below is the only signup path
-            left, wired to the `waitlist` table (see onWaitlistSubmit
-            above). The "or" divider that used to separate the two CTAs is
-            gone with the first one — nothing left to divide. */}
-        <div className="mt-8 flex flex-col items-center gap-3">
+        <p className="text-base sm:text-lg leading-[1.6] max-w-[290px] sm:max-w-[480px] text-balance">
+          Snap a pic, get a recommendation, and we take care of the rest - pickup, repair, and return to your doorstep.
+        </p>
+        <div className="w-full max-w-[340px] flex flex-col items-center gap-3 mt-[34px] sm:mt-10">
           {waitlistStatus === "success" ? (
             <div
-              className="inline-flex items-center justify-center h-12 rounded-full px-6 font-semibold border-2 w-full sm:w-[300px]"
+              className="inline-flex items-center justify-center h-[52px] rounded-full px-6 font-semibold border-2 w-full"
               style={{ borderColor: "#fdb600", color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }}
             >
               <Check className="h-4 w-4 mr-2" />
               You're on the list
             </div>
           ) : (
-            <div className="w-full sm:w-[300px]">
+            <div className="w-full">
               <form
                 onSubmit={onWaitlistSubmit}
-                className="flex items-center h-12 rounded-full pl-5 pr-1.5 gap-2 border-2 bg-white/10 backdrop-blur-sm"
+                className="flex items-center h-[52px] rounded-full pl-[19px] pr-[5px] gap-2 border-2 bg-[rgba(30,15,5,.3)] backdrop-blur-sm"
                 style={{ borderColor: "#fdb600" }}
               >
                 <input
@@ -162,16 +127,17 @@ const ComingSoon = () => {
                     setWaitlistEmail(e.target.value);
                     if (waitlistError) setWaitlistError("");
                   }}
-                  placeholder="Get on the waitlist"
+                  placeholder="Join the waitlist"
+                  autoComplete="email"
                   aria-label="Email address"
-                  className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder-white/70 text-white"
+                  className="flex-1 min-w-0 bg-transparent text-base outline-offset-4 placeholder-[#fff5e9]/85 text-[#fff5e9]"
                   style={{ fontFamily: "'Instrument Sans', sans-serif" }}
                 />
                 <button
                   type="submit"
                   aria-label="Join the waitlist"
                   disabled={waitlistStatus === "submitting"}
-                  className="inline-flex items-center justify-center h-9 w-9 rounded-full shrink-0 transition-opacity hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex items-center justify-center h-10 w-10 rounded-full shrink-0 transition-opacity hover:opacity-90 disabled:opacity-60"
                   style={{ backgroundColor: "#fdb600" }}
                 >
                   <ArrowRight className="h-4 w-4" style={{ color: "#3d1700" }} />
@@ -189,13 +155,7 @@ const ComingSoon = () => {
           )}
         </div>
       </section>
-
-      {/* Reverted amber -> white 2026-09-01 (Danielle's call, same day —
-          tried amber to match the rest of the page's palette, but she
-          decided she prefers white here specifically). Back to the simple
-          brightness/invert filter instead of the CSS-mask recolor
-          technique. */}
-      <div className="relative z-10 flex items-center gap-4">
+      <div className="relative z-10 flex items-center gap-[22px]">
         {socials.map((s) => (
           <a
             key={s.label}
@@ -208,7 +168,7 @@ const ComingSoon = () => {
             <img
               src={s.src}
               alt=""
-              className="h-7 w-7"
+              className="h-[22px] w-[22px]"
               style={{ filter: "brightness(0) invert(1)" }}
             />
           </a>

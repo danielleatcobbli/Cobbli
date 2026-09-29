@@ -19,7 +19,6 @@ import Account from "./pages/Account";
 import StartRepair from "./pages/StartRepair";
 import PairFlowDialog from "./components/cobbli/PairFlowDialog";
 import AssessmentUpload from "./pages/AssessmentUpload";
-import AssessmentDeposit from "./pages/AssessmentDeposit";
 import AssessmentConfirmation from "./pages/AssessmentConfirmation";
 import AssessmentProposal from "./pages/AssessmentProposal";
 import Admin from "./pages/Admin";
@@ -149,7 +148,10 @@ const App = () => (
                         <Route path="/link-expired" element={<LinkExpired />} />
                         <Route path="/start-repair" element={<StartRepair />} />
                         <Route path="/start-repair/assessment" element={<AssessmentUpload />} />
-                        <Route path="/start-repair/assessment/deposit" element={<AssessmentDeposit />} />
+                        {/* /start-repair/assessment/deposit retired 2026-09-24
+                            (Danielle's call: no deposit structure) — was
+                            already dead code, nothing in the live intake flow
+                            linked to it. */}
                         <Route path="/start-repair/assessment/confirmation" element={<AssessmentConfirmation />} />
                         <Route
                           path="/start-repair/assessment/proposal/:id"
@@ -185,7 +187,9 @@ const App = () => (
                         <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
                         <Route path="/packages/:slug" element={<PackageDetail />} />
                         <Route path="/bag" element={<Bag />} />
-                        <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+                        {/* Guest checkout is in scope (2026-09-24, Danielle's
+                            call) — no longer gated behind sign-in. */}
+                        <Route path="/checkout" element={<Checkout />} />
                         <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
                         <Route path="/faqs" element={<Faqs />} />
                         <Route path="/blog" element={<Blog />} />

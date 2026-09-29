@@ -3,11 +3,21 @@ import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
 
 // Served from /public so the preload link in index.html resolves to the same URL.
-// Swapped to the SoHo lifestyle shot 2026-08-25 (Danielle's call) — testing a
-// lifestyle-led hero vs. the original workshop photo. Revert by pointing this
-// back at "/assets/hero-cobbler.webp" (left in place, untouched, still used
-// as the site-wide og:image/twitter:image default in index.html).
-const hero = "/assets/hero-lifestyle-soho.webp";
+// Swapped to hero-bags-v2 (2026-09-24, Danielle's call) — she re-uploaded
+// "hero-bags v2.png" with the bag's embossed brand tag removed. The version
+// actually referenced here (hero-bags-v2.webp) is a cropped + re-encoded copy
+// I generated from her v2 upload, not the raw file: only the top ~200px is
+// removed (hairline up, including chin/jaw/lips) so no facial features exist
+// in the file at all — needed because at the hero's mobile aspect ratio,
+// object-fit:cover doesn't crop vertically, so tuning object-position alone
+// wouldn't hide the face on phones. Full 1024px width is kept (an earlier
+// pass trimmed this to 880px to shift the bag off-center horizontally, but
+// Danielle asked to recenter it back to how it looked before that change).
+// Original v1 crop (hero-bags.webp) and the older lifestyle shot
+// (hero-lifestyle-soho.webp) are both left in place, unused. hero-cobbler.webp
+// remains the site-wide og:image/twitter:image default in index.html,
+// untouched.
+const hero = "/assets/hero-bags-v2.webp";
 
 // Headline rebuilt 2026-08-26 (Danielle's call) to match her Canva homepage
 // mockup — centered, bold + italic Fraunces pairing (free stand-in for
@@ -21,9 +31,18 @@ const Hero = () => {
       <div className="relative min-h-[560px] md:min-h-[720px] flex items-center justify-center">
         <img
           src={hero}
-          alt="Woman walking down a cobblestone SoHo street in black slingback heels"
+          alt="Woman on a rainy SoHo street carrying a burgundy leather handbag"
           className="absolute inset-0 h-full w-full object-cover"
-          style={{ objectPosition: "center 70%" }}
+          // Recentered horizontally (2026-09-24, Danielle's call — she asked
+          // to undo the rightward shift and go back to how it looked before,
+          // just nudged up a little further). "center 94%" keeps the crop
+          // centered on the image, at a hair higher than the "center 90%"
+          // position she'd liked previously — confirmed by rendering
+          // candidate crops locally, this is as high as it can go before
+          // starting to clip the top of the bag/handle. Saturation +
+          // contrast nudged up slightly so the burgundy leather reads richer
+          // against the muted coat/street tones.
+          style={{ objectPosition: "center 94%", filter: "saturate(1.15) contrast(1.05)" }}
           loading="eager"
           decoding="async"
           // @ts-expect-error fetchpriority is a valid HTML attribute, React typing lags
@@ -32,16 +51,26 @@ const Hero = () => {
         <div className="absolute inset-0 bg-gradient-hero" />
         <div className="container relative z-10 py-24 md:py-32 text-center">
           <div className="max-w-3xl mx-auto animate-fade-up">
+            {/* Dropped "Good things are worth keeping." (2026-09-24,
+                Danielle's call) — down to just "Expert bag repair delivered
+                to you.", split across two lines the same way the original
+                "Your cobbler. / At your door." was, so back to the original
+                max-w-3xl + text-8xl sizing that fills the same visual space
+                as before. First line bold, second stays the lighter italic
+                treatment. */}
             <h1
-              className="text-5xl md:text-8xl leading-[0.95] text-balance"
+              className="text-5xl md:text-7xl leading-[0.95] text-balance"
               style={{ fontFamily: "'Fraunces', serif", color: "#fdb600" }}
             >
-              <span style={{ fontWeight: 700 }}>Your cobbler.</span>
+              <span style={{ fontWeight: 700 }}>Expert bag repair</span>
               <br />
-              <span style={{ fontWeight: 500, fontStyle: "italic" }}>At your door.</span>
+              <span style={{ fontWeight: 500, fontStyle: "italic" }}>delivered to you</span>
             </h1>
             <div className="mt-9 flex flex-wrap gap-3 justify-center">
-              <Link to="/start-repair" onClick={() => trackEvent("start_repair", { source: "hero" })}>
+              {/* Repointed 2026-09-24 (Danielle's call) from the old
+                  checklist flow (/start-repair) to the photo-submission +
+                  staff-review flow this app is now built around. */}
+              <Link to="/start-repair/assessment" onClick={() => trackEvent("start_repair", { source: "hero" })}>
                 {/* Sized up 2026-08-27 (Danielle's call: "I want it to
                     really stand out because the goal is for people to click
                     that") — the className overrides win over size="lg"'s

@@ -3,17 +3,13 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
-import { displayBrand } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/context/AuthContext";
-import { useAccount } from "@/context/AccountContext";
-import { usePricingConfig } from "@/hooks/usePricingConfig";
-import { formatPrice } from "@/context/BagContext";
+import { useBag, formatPrice, type BagService } from "@/context/BagContext";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
-import { ShieldCheck, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 const COURIER_FEE_CENTS = 0;
 
@@ -22,12 +18,10 @@ type Pair = {
   colors?: string[];
   brand?: string | null;
   photoPaths?: string[];
-  deposit?: {
-    amount_cents: number;
-    currency: string;
-    status: string;
-    payment_intent_id: string;
-  };
+  /** Per-item "what's going on with this bag?" note, added alongside
+   *  multi-item submissions (2026-09-24) — AssessmentUpload.tsx now writes
+   *  this per pair instead of one description for the whole assessment. */
+  description?: string | null;
 };
 
 type ProposedService = {
@@ -38,8 +32,6 @@ type ProposedService = {
   tier: "essential" | "recommended";
 };
 
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 const AssessmentProposal = () => {
   // Supports two URL shapes:
   //   /start-repair/assessment/proposal/:id  (protected, UUID lookup)
@@ -48,9 +40,7 @@ const AssessmentProposal = () => {
   const { id: routeId, token } = useParams<{ id?: string; token?: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { user: accountUser, addresses, paymentMethods, addOrder } = useAccount();
-  const pricing = usePricingConfig();
-  const depositCents = pricing.fee("assessment_deposit_cents");
+  const { addPair } = useBag();
 
   // The resolved assessment UUID — set after either lookup path completes.
   // All mutations (order insert, assessment update) use this rather than the
@@ -65,10 +55,15 @@ const AssessmentProposal = () => {
   const [thumbsByPair, setThumbsByPair] = useState<string[][]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [selectedRecommended, setSelectedRecommended] = useState<Set<string>>(new Set());
+  // Local-only confirmation state for the waitlist branch (2026-09-24,
+  // Danielle's call) — no DB column tracks "customer confirmed joining the
+  // waitlist" yet, so a page reload loses this and shows the form again.
+  // Fine for now since re-confirming is harmless; flag if that changes.
+  const [waitlistJoined, setWaitlistJoined] = useState(false);
 
   usePageMeta({
     title: "Your repair proposal — Cobbli",
-    description: "Review your repair proposal, approve, and pay the remaining balance.",
+    description: "Review your repair recommendations and continue to checkout.",
   });
 
   useEffect(() => {
@@ -146,13 +141,22 @@ const AssessmentProposal = () => {
     .filter((l) => selectedRecommended.has(l.service_id))
     .reduce((a, l) => a + l.price_cents, 0);
   const repairsSubtotal = essentialSubtotal + recommendedSubtotal;
-  const depositHeld = pairs.length * depositCents;
-  const totalDueToday = Math.max(0, repairsSubtotal + COURIER_FEE_CENTS - depositHeld);
+  // No deposit structure (2026-09-24, Danielle's call) — nothing is charged
+  // until checkout, so this is a plain estimate, not "due today."
+  const estimatedTotal = repairsSubtotal + COURIER_FEE_CENTS;
 
   // "quote_ready" is the value written by mark_quote_ready; "booked" is set
   // after the customer approves via this page. "proposal_sent" was the old value
   // and is no longer written anywhere live.
-  const proposalReady = status === "quote_ready" || status === "booked";
+  //
+  // "waitlisted" (2026-09-24, Danielle's call) has no staff-facing trigger
+  // yet — nothing in Admin.tsx or AdminOrderDetail.tsx can set an assessment
+  // to this status today. This branch is built so the customer-facing side
+  // is ready; wiring a real "Waitlist" action into staff tooling is backend
+  // work (needs its own RPC, same shape as mark_quote_ready). Until then,
+  // reaching this branch requires setting the status by hand.
+  const isWaitlisted = status === "waitlisted";
+  const proposalReady = status === "quote_ready" || status === "booked" || isWaitlisted;
   const alreadyBooked = status === "booked";
 
   const toggleRecommended = (sid: string) =>
@@ -163,122 +167,50 @@ const AssessmentProposal = () => {
       return next;
     });
 
-  const onApprove = async () => {
-    if (!assessmentId || !user || submitting || alreadyBooked || !proposalReady) return;
+  // Waitlist join has no payment and no auth requirement — guests can join
+  // the waitlist same as signed-in users (2026-09-24, Danielle: "guest
+  // approval is in scope"). Nothing is written to the DB yet since there's
+  // no column for it (see waitlistJoined comment above); this just flips
+  // the page into its confirmation state.
+  const onJoinWaitlist = () => {
+    if (submitting) return;
+    setWaitlistJoined(true);
+  };
+
+  // Accepted proposals go to the real Checkout experience — no in-page
+  // payment here (2026-09-24, Danielle's call: "only pay if the order's been
+  // accepted," and no deposit structure). This just loads the accepted
+  // services into the cart and hands off; Checkout.tsx collects pickup +
+  // payment (guests included — see Checkout.tsx guest-checkout changes).
+  //
+  // Known gap: nothing here marks the assessment as accepted/consumed, so
+  // this page stays clickable (re-adds to the bag) if revisited — there's no
+  // "accepted" status wired into the assessment status machine yet (that's
+  // part of the backend rework in task #124).
+  const onAcceptAndCheckout = () => {
+    if (!assessmentId || alreadyBooked || !proposalReady) return;
     if (essential.length + recommended.length === 0) return;
-    setSubmitting(true);
-    try {
-      const acceptedServices: ProposedService[] = [
-        ...essential,
-        ...recommended.filter((r) => selectedRecommended.has(r.service_id)),
-      ];
 
-      // (1) Mock capture of each pair's pi_mock_... PaymentIntent already on the assessment.
-      const updatedPairs = pairs.map((p, i) => ({
-        ...p,
-        deposit: {
-          amount_cents: p.deposit?.amount_cents ?? depositCents,
-          currency: p.deposit?.currency ?? "usd",
-          status: "captured" as const,
-          payment_intent_id:
-            p.deposit?.payment_intent_id ?? `pi_mock_${Date.now()}_${i}`,
-          captured_at: new Date().toISOString(),
-        },
-      }));
+    const acceptedServices: BagService[] = [
+      ...essential,
+      ...recommended.filter((r) => selectedRecommended.has(r.service_id)),
+    ].map((l) => ({ id: l.service_id, name: l.name, price: l.price_cents }));
 
-      await wait(600); // simulate Stripe round-trips
+    // Label is just an ordinal fallback for contexts that need plain text
+    // (e.g. a screen reader, or before the thumbnail has loaded) — the real
+    // identifier customers and staff see is each item's first photo
+    // (thumbnailPath), not a customer-authored name (2026-09-24, Danielle's
+    // call: don't ask customers to name their items).
+    pairs.forEach((p, i) => {
+      const label = pairs.length > 1 ? `Item ${i + 1}` : "Your item";
+      const thumbnailPath = p.photoPaths?.[0];
+      addPair(acceptedServices, undefined, label, p.shoeType as never, undefined, thumbnailPath);
+    });
 
-      // (2) Create the order record in Supabase.
-      const address = addresses[0];
-      const pm = paymentMethods[0];
-      const { data: orderRow, error: orderErr } = await supabase
-        .from("orders")
-        .insert({
-          user_id: user.id,
-          status: "placed",
-          delivery_method: "door-to-door",
-          delivery_address: (address as unknown as never) ?? null,
-          contact_email: user.email ?? accountUser.email,
-          contact_phone: accountUser.phone ?? "",
-          payment_method_snapshot: pm
-            ? ({ brand: pm.brand, last4: pm.last4 } as unknown as never)
-            : null,
-          repairs_subtotal_cents: repairsSubtotal,
-          courier_fee_cents: COURIER_FEE_CENTS,
-          tax_cents: 0,
-          total_cents: repairsSubtotal + COURIER_FEE_CENTS,
-          assessment_id: assessmentId,  // link back to the source proposal for traceability
-        })
-        .select("id")
-        .single();
-      if (orderErr) throw orderErr;
-
-      const itemRows = pairs.flatMap((p) =>
-        acceptedServices.map((l) => ({
-          order_id: orderRow.id,
-          pair_snapshot: p as unknown as never,
-          service_snapshot: {
-            id: l.service_id,
-            slug: l.slug,
-            name: l.name,
-            tier: l.tier,
-          } as unknown as never,
-          price_cents: l.price_cents,
-        })),
-      );
-      if (itemRows.length) {
-        const { error: itemsErr } = await supabase.from("order_items").insert(itemRows);
-        if (itemsErr) throw itemsErr;
-      }
-
-      // (3) Update assessment with captured deposit + status='booked'.
-      const { error: aErr } = await supabase
-        .from("assessments")
-        .update({
-          pairs: updatedPairs as unknown as never,
-          status: "booked",
-        })
-        .eq("id", assessmentId);
-      if (aErr) throw aErr;
-
-      // Mirror into local AccountContext so OrderConfirmation can render it.
-      const localOrder = addOrder({
-        email: user.email ?? accountUser.email,
-        phone: accountUser.phone ?? "",
-        address: address ?? ({
-          id: "stub",
-          street: "—",
-          city: "—",
-          state: "NY",
-          zip: "00000",
-          isDefault: false,
-        } as never),
-        paymentLast4: pm?.last4 ?? "0000",
-        pairs: pairs.map((p, i) => ({
-          id: `pair-${i}`,
-          label: `Pair ${i + 1}`,
-          addedAt: new Date().toISOString(),
-          services: acceptedServices.map((l) => ({
-            id: `${l.service_id}-${i}`,
-            name: l.name,
-            price: l.price_cents,
-          })),
-        })),
-        repairsSubtotal,
-        courierFee: COURIER_FEE_CENTS,
-        subtotal: repairsSubtotal + COURIER_FEE_CENTS,
-      });
-
-      navigate(`/order-confirmation/${localOrder.id}`, { replace: true });
-    } catch (e: any) {
-      console.error("approve proposal failed", e);
-      toast({
-        title: "Could not complete payment",
-        description: e?.message || "Please try again.",
-        variant: "destructive",
-      });
-      setSubmitting(false);
-    }
+    // Carries the source assessment through to the order (see Checkout.tsx
+    // and the stripe-webhook cart handler) so staff can trace an order back
+    // to its photos/request — 2026-09-24, Danielle's call.
+    navigate(`/checkout?assessment_id=${assessmentId}`);
   };
 
   return (
@@ -350,11 +282,12 @@ const AssessmentProposal = () => {
                 </div>
                 <div>
                   <h1 className="font-display text-2xl md:text-3xl text-primary">
-                    Your repair proposal is ready
+                    {isWaitlisted ? "Here's what we recommend" : "Your repair proposal is ready"}
                   </h1>
                   <p className="mt-1 text-sm md:text-base text-primary/80">
-                    Our cobblers have reviewed your photos. Approve below to capture your deposit
-                    and charge the remaining balance to your saved card.
+                    {isWaitlisted
+                      ? "We're at capacity right now. Review your recommendations below, then join the waitlist — we'll email you the moment a spot opens."
+                      : "Our cobblers have reviewed your photos. Review your recommendations below, then continue to checkout to schedule pickup and pay."}
                   </p>
                 </div>
               </div>
@@ -365,35 +298,63 @@ const AssessmentProposal = () => {
                 </div>
               )}
 
-              {/* Pair identifiers */}
+              {isWaitlisted && waitlistJoined ? (
+                <div className="mt-8 rounded-xl border border-border p-10 text-center">
+                  <p className="text-lg text-primary">
+                    We've saved your selections. We'll email{" "}
+                    <span className="font-medium">{user?.email ?? "the email on this request"}</span>{" "}
+                    the moment a spot opens so you can book.
+                  </p>
+                </div>
+              ) : (
+              <>
+              {/* Item identifiers — each item's own first photo is the
+                  identifier, shown larger than the rest of its thumbnails
+                  (2026-09-24, Danielle's call: don't ask customers to name
+                  items; use the first photo they uploaded instead — a name
+                  field doesn't scale well past a couple of items and photos
+                  are unambiguous). "Item N" is just an ordinal, only shown
+                  when there's more than one item to disambiguate. */}
               <div className="mt-8 space-y-4">
                 {pairs.map((p, i) => {
-                  const identifier =
-                    [p.colors?.join(" / "), displayBrand(p.brand), p.shoeType].filter(Boolean).join(" · ") ||
-"Your pair";
+                  const thumbs = thumbsByPair[i] ?? [];
+                  const [firstThumb, ...restThumbs] = thumbs;
                   return (
                     <div
                       key={i}
-                      className="rounded-xl border border-border p-5 flex items-start justify-between gap-4"
+                      className="rounded-xl border border-border p-5 flex items-start gap-4"
                     >
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                          Pair {i + 1}
-                        </p>
-                        <p className="mt-1 text-lg text-primary">{identifier}</p>
+                      {firstThumb ? (
+                        <img
+                          src={firstThumb}
+                          alt={pairs.length > 1 ? `Item ${i + 1}` : "Your item"}
+                          className="h-16 w-16 rounded-lg object-cover border border-border shrink-0"
+                        />
+                      ) : (
+                        <div className="h-16 w-16 rounded-lg bg-secondary/50 border border-border shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        {pairs.length > 1 && (
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Item {i + 1}
+                          </p>
+                        )}
+                        {p.description && (
+                          <p className="mt-1 text-sm text-primary/90">{p.description}</p>
+                        )}
+                        {restThumbs.length > 0 && (
+                          <div className="mt-2 flex gap-2">
+                            {restThumbs.map((src, j) => (
+                              <img
+                                key={j}
+                                src={src}
+                                alt={`Additional photo ${j + 2}`}
+                                className="h-10 w-10 rounded-md object-cover border border-border"
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      {thumbsByPair[i]?.length ? (
-                        <div className="flex gap-2">
-                          {thumbsByPair[i].map((src, j) => (
-                            <img
-                              key={j}
-                              src={src}
-                              alt={`Pair ${i + 1} photo ${j + 1}`}
-                              className="h-14 w-14 rounded-md object-cover border border-border"
-                            />
-                          ))}
-                        </div>
-                      ) : null}
                     </div>
                   );
                 })}
@@ -402,17 +363,17 @@ const AssessmentProposal = () => {
               {/* Essential services */}
               <section className="mt-8">
                 <div className="flex items-baseline justify-between">
-                  <h2 className="text-xl text-primary">Essential</h2>
+                  <h2 className="text-xl text-primary">Recommended</h2>
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">
                     Included
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  These services are required to restore your shoes properly.
+                  These repairs are recommended to restore your bag properly.
                 </p>
                 {essential.length === 0 ? (
                   <div className="mt-4 rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground text-center">
-                    No essential services proposed.
+                    No services proposed.
                   </div>
                 ) : (
                   <ul className="mt-4 divide-y divide-border border border-border rounded-lg">
@@ -432,13 +393,13 @@ const AssessmentProposal = () => {
               {/* Recommended services */}
               <section className="mt-8">
                 <div className="flex items-baseline justify-between">
-                  <h2 className="text-xl text-primary">Recommended</h2>
+                  <h2 className="text-xl text-primary">Nice to have</h2>
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">
                     Optional
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Add-ons our cobblers suggest. Tick to include in your order.
+                  Extra touches our cobblers suggest. Tick to include in your order.
                 </p>
                 {recommended.length === 0 ? (
                   <div className="mt-4 rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground text-center">
@@ -472,98 +433,84 @@ const AssessmentProposal = () => {
                 )}
               </section>
 
-              {/* Deposit credit pill */}
-              <div
-                className="mt-8 rounded-full px-4 py-3 flex items-start gap-3"
-                style={{ backgroundColor: "#fff5cc", border: "1px solid #fdb600" }}
-              >
-                <ShieldCheck className="mt-0.5 shrink-0" />
-                <p className="text-sm text-primary">
-                  The $20 deposit per pair already held on your card will be applied to your
-                  total.
-                </p>
-              </div>
-
               {/* Order summary */}
-              <section className="mt-6 rounded-xl border border-border p-5">
+              <section className="mt-8 rounded-xl border border-border p-5">
                 <h2 className="text-xl text-primary">Order summary</h2>
                 <dl className="mt-4 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Essential repairs</dt>
+                    <dt className="text-muted-foreground">Recommended repairs</dt>
                     <dd>{formatPrice(essentialSubtotal)}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Recommended add-ons</dt>
+                    <dt className="text-muted-foreground">Nice-to-have add-ons</dt>
                     <dd>{formatPrice(recommendedSubtotal)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Delivery & pickup</dt>
                     <dd>{COURIER_FEE_CENTS === 0 ? "Free" : formatPrice(COURIER_FEE_CENTS)}</dd>
                   </div>
-                  <div className="flex justify-between text-primary">
-                    <dt>
-                      Assessment deposit (already held)
-                      {pairs.length > 1 ? ` × ${pairs.length}` : ""}
-                    </dt>
-                    <dd>−{formatPrice(depositHeld)}</dd>
-                  </div>
                   <div className="border-t border-border pt-3 flex justify-between font-semibold text-base">
-                    <dt>Total due today</dt>
-                    <dd>{formatPrice(totalDueToday)}</dd>
+                    <dt>Estimated total</dt>
+                    <dd>{formatPrice(estimatedTotal)}</dd>
                   </div>
                 </dl>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Nothing is charged yet — you'll pay at checkout, only once your order is
+                  confirmed.
+                </p>
               </section>
 
               <div className="mt-8 flex flex-wrap gap-3">
                 {user && (
-                  <Button asChild variant="outline" disabled={submitting}>
+                  <Button asChild variant="outline">
                     <Link to="/account">Back to account</Link>
                   </Button>
                 )}
-                {user ? (
+                {isWaitlisted ? (
+                  // No payment and no sign-in requirement to join the waitlist
+                  // (2026-09-24, Danielle: "guest approval is in scope").
                   <Button
                     type="button"
                     size="lg"
-                    onClick={onApprove}
-                    disabled={
-                      submitting ||
-                      alreadyBooked ||
-                      essential.length + recommended.length === 0
-                    }
+                    onClick={onJoinWaitlist}
+                    disabled={essential.length + recommended.length === 0}
+                  >
+                    Join the waitlist
+                  </Button>
+                ) : (
+                  // Guests can accept and check out too — no sign-in gate
+                  // (2026-09-24, Danielle: "guest checkout... let's make it
+                  // exist"). Takes them to the real Checkout experience;
+                  // nothing is charged on this page.
+                  <Button
+                    type="button"
+                    size="lg"
+                    onClick={onAcceptAndCheckout}
+                    disabled={alreadyBooked || essential.length + recommended.length === 0}
                     className={
-                      submitting ||
-                      alreadyBooked ||
-                      essential.length + recommended.length === 0
+                      alreadyBooked || essential.length + recommended.length === 0
                         ? "opacity-50 cursor-not-allowed"
                         : ""
                     }
                   >
-                    {submitting
-                      ? "Processing payment…"
-                      : alreadyBooked
-                      ? "Already approved"
-                      : `Approve proposal & pay ${formatPrice(totalDueToday)}`}
-                  </Button>
-                ) : (
-                  // Public token-based route: user not logged in.
-                  // The proposal_token is the access credential; login is still
-                  // required to actually place the order (so we have a user_id
-                  // for the orders row). After login the browser returns here
-                  // via the redirect param and the page re-renders with the user.
-                  <Button asChild size="lg">
-                    <Link to={`/auth?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`}>
-                      Sign in to approve
-                    </Link>
+                    {alreadyBooked ? "Already booked" : "Continue to checkout"}
                   </Button>
                 )}
               </div>
-              <p className="mt-3 text-xs text-muted-foreground">
-                Payment processing is mocked for now — no card is charged. Questions? Email{" "}
-                <a href="mailto:support@cobbli.com" className="underline">
-                  support@cobbli.com
-                </a>
-                .
-              </p>
+              </>
+              )}
+              {!(isWaitlisted && waitlistJoined) && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {isWaitlisted
+                    ? "No payment or sign-in needed to join the waitlist."
+                    : "No sign-in needed — you'll enter payment and schedule pickup at checkout."}{" "}
+                  Questions? Email{" "}
+                  <a href="mailto:support@cobbli.com" className="underline">
+                    support@cobbli.com
+                  </a>
+                  .
+                </p>
+              )}
             </>
           )}
         </div>

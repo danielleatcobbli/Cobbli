@@ -46,6 +46,14 @@ async def send_order_confirmation(request: Request) -> JSONResponse:
         if order.get("delivery_method") != "door-to-door":
             return JSONResponse(content={"skipped": "not door-to-door"})
 
+        # Temporarily disabled 2026-09-24 (Danielle's call) — the whole
+        # repair-lifecycle email set is being rewritten for the bag pivot
+        # before any of it goes back out to customers. Remove this early
+        # return once the new copy/template is ready. See
+        # cobbli_mvp_order_flow.pptx for the status list this and the other
+        # lifecycle emails now map to.
+        return JSONResponse(content={"skipped": "email content being reworked for bag pivot"})
+
         admin = get_supabase_admin()
 
         profile_resp = (

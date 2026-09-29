@@ -1,115 +1,62 @@
-import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import CategoryFilterBar, {
-  ALL_CATEGORIES_LABEL,
-  categoryMatches,
-  type CategoryFilter,
-} from "@/components/cobbli/CategoryFilterBar";
-import ServiceCard from "@/components/cobbli/ServiceCard";
-import BrandSpinner from "@/components/cobbli/BrandSpinner";
-import { useServices } from "@/hooks/useServices";
-import { POPULAR_SERVICE_SLUGS, sortServices } from "@/data/serviceOrder";
-import { addressesLine } from "@/data/starterRepairConditions";
+import { trackEvent } from "@/lib/analytics";
 
 // ---------------------------------------------------------------------------
-// Section
-//
-// Packages removed from the homepage entirely (2026-07-23, Danielle's call
-// after weighing packages vs. individual services vs. the Starter repair
-// flow out loud). Reasoning: Start a Repair is already the primary hero CTA,
-// and computeRecommendation() in starterRepairConditions.ts already
-// recommends a package automatically whenever it's a genuine match — a
-// separate "browse packages" section here just duplicated a decision the
-// guided flow already makes, and led with it ahead of individual services,
-// which /services stopped doing back on 2026-07-15 for the same reason
-// ("most customers arrive condition-first, not by browsing bundles"). This
-// component now only shows individual services; packages are still
-// browsable on /services for anyone who clicks through, and still get
-// recommended automatically from Start a Repair.
+// Section — rebuilt from a live services catalog teaser into a static brand
+// philosophy statement (2026-09-24, Danielle's call, Rhode-style reference:
+// centered header + short body copy + single CTA, no product/service grid).
+// Reasoning: we're not publicly listing individual services right now (at
+// least initially) since Start a Repair's photo-review flow is the only
+// intake path — a live "browse services" carousel implied a catalog/pricing
+// experience that doesn't match how people are actually getting quoted
+// anymore. The component name/file/section id stay the same (Index.tsx
+// still imports `Services` and nothing scrolls to #services by id elsewhere)
+// even though the content itself is no longer a services listing. The old
+// catalog/filter-bar/ServiceCard version is still fully intact in git
+// history if this ever needs to come back.
 // ---------------------------------------------------------------------------
 
 const Services = () => {
-  const [active, setActive] = useState<CategoryFilter>(ALL_CATEGORIES_LABEL);
-  const { data: services, isLoading } = useServices();
-
-  const visibleServices = useMemo(() => {
-    const list = (services ?? []).filter((s) => !s.isComingSoon);
-    const filtered = list.filter((s) => categoryMatches(s.categories, active));
-    return sortServices(filtered);
-  }, [services, active]);
-
-  const viewAllServicesHref =
-    active === ALL_CATEGORIES_LABEL
-      ? "/services"
-      : `/services?category=${encodeURIComponent(active)}`;
-
   return (
     <section id="services" className="relative overflow-hidden" style={{ backgroundColor: "#fff5cc" }}>
-      {/* Cream section (Danielle's exact "cobbli cream" hex, #fff5cc) with an
-          amber wave divider at the bottom leading into How it works, and
-          amber cards (ServiceCard theme="amber") — matches her homepage
-          mockup and her cream-section/yellow-accent, yellow-section/cream-
-          accent rule, 2026-08-26. Filter bar and card grid logic are
-          unchanged; only ServiceCard's color theme differs here. */}
-      <div className="container py-14 md:py-20">
-
-        {/* Heading enlarged + uppercased 2026-08-26 (Danielle's call) to
-            match the consistent big-heading treatment across every homepage
-            section now (Services/How it works/Reviews/Get to know us all
-            text-5xl md:text-7xl uppercase). Left-aligned (Danielle's call —
-            not every homepage heading needs to be centered; other section
-            headings stay centered). "View all" sits in the same row,
-            vertically centered against the heading text via items-center,
-            rather than stacked above it. */}
-        <div className="flex items-center justify-between mb-4">
+      {/* Spread out + enlarged (2026-09-24, Danielle's call — the section
+          felt thin/undersized next to Hero and How It Works). More vertical
+          padding, a wider heading that stays on one line at md+ instead of
+          wrapping to two, and more breathing room between the heading/body/
+          CTA. */}
+      <div className="container py-28 md:py-40 text-center">
+        <div className="max-w-3xl mx-auto">
           <h2
-            className="text-left text-5xl md:text-7xl uppercase"
+            className="text-3xl md:text-5xl uppercase md:whitespace-nowrap"
             style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
           >
-            Services
+            Good things are worth keeping
           </h2>
-          <Link
-            to={viewAllServicesHref}
-            className="text-sm underline font-medium shrink-0"
-            style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }}
+          <p
+            className="mt-8 text-base md:text-lg leading-relaxed"
+            style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif", opacity: 0.9 }}
           >
-            View all →
+            We're here to make taking care of the things you love as easy as owning them. With expert repair
+            brought right to your door, Cobbli makes it simple to keep your favorite pieces looking good and in
+            your life for longer.
+          </p>
+          {/* Text color moved from inline style into the same text-[#fdb600]
+              class as the hover variant (2026-09-24, Danielle's call — the
+              text was unreadable on hover). Inline styles always win over
+              classes in CSS specificity, so the old setup (color set inline,
+              hover:text-[#fff5cc] as a class) meant the hover class never
+              actually took effect — the text stayed amber against the now-
+              amber hover background and disappeared. Both colors as classes
+              now so the :hover cascade works normally. */}
+          <Link
+            to="/start-repair/assessment"
+            onClick={() => trackEvent("start_repair", { source: "services_statement" })}
+            className="inline-block mt-10 rounded-full border-2 px-8 py-3 text-sm font-medium uppercase tracking-wide text-[#fdb600] transition-colors hover:bg-[#fdb600] hover:text-[#fff5cc]"
+            style={{ borderColor: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }}
+          >
+            Start a repair
           </Link>
         </div>
-
-        <CategoryFilterBar
-          active={active}
-          onChange={setActive}
-          scrollable
-          iconSize={22}
-          className="mb-5"
-          theme="amber"
-        />
-
-        {isLoading ? (
-          <BrandSpinner className="py-12" size="lg" />
-        ) : visibleServices.length === 0 ? (
-          <p className="text-muted-foreground py-8 text-sm">
-            No services in this category yet.
-          </p>
-        ) : (
-          <div className="flex gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1">
-            {visibleServices.map((s) => (
-              // Widened 160 -> 280 2026-08-26 (Danielle's call, matches her
-              // Canva mockup's larger tiles) — ServiceCard's photo box is
-              // aspect-[4/5], so it scales up with the wider card automatically.
-              <div key={s.slug} className="shrink-0" style={{ width: 280 }}>
-                <ServiceCard
-                  s={s}
-                  isPopular={POPULAR_SERVICE_SLUGS.has(s.slug)}
-                  addresses={addressesLine(s.slug)}
-                  theme="amber"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
       </div>
 
       <svg

@@ -53,6 +53,14 @@ async def send_service_unavailable(payload: ServiceUnavailableRequest) -> Any:
         if not assessment_id:
             raise ValueError("Missing assessment_id")
 
+        # Temporarily disabled 2026-09-24 (Danielle's call) — the whole
+        # repair-lifecycle email set is being rewritten for the bag pivot
+        # before any of it goes back out to customers. Remove this early
+        # return once the new copy/template is ready. See
+        # cobbli_mvp_order_flow.pptx for the status list this and the other
+        # lifecycle emails now map to.
+        return {"skipped": "email content being reworked for bag pivot"}
+
         supabase = get_supabase_admin()
 
         a_resp = (

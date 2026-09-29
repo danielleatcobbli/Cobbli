@@ -28,8 +28,20 @@ export type BagPair = {
   id: string;
   /** Optional reference to the SavedPair this bag entry corresponds to */
   pairId?: string;
-  /** Display label, snapshotted at add time so it survives sign-out / saved-pair deletion */
+  /** Display label, snapshotted at add time so it survives sign-out / saved-pair deletion.
+   *  Used as a text fallback (e.g. alt text, or before the thumbnail loads) —
+   *  the primary visual identifier for items that came from a multi-item
+   *  assessment is thumbnailPath below, not this label (2026-09-24,
+   *  Danielle's call: don't ask customers to name their items). */
   label?: string;
+  /** Storage path (in the "assessment-uploads" bucket) of this item's first
+   *  uploaded photo, carried through from AssessmentProposal.tsx's onAccept
+   *  — used as the item's identifier wherever the bag is summarized (Bag.tsx,
+   *  Checkout.tsx) instead of a customer-authored name. Resolved to a signed
+   *  URL at render time, same pattern as AssessmentProposal.tsx/Admin.tsx.
+   *  Undefined for items added the old way (StartRepair.tsx's checklist
+   *  flow), which never had photos to begin with. */
+  thumbnailPath?: string;
   /** Shoe type snapshot — required to recompute live prices without depending on the saved pair */
   shoeType?: ShoeType;
   /** Free-text notes for this specific repair/visit — captured once on the
@@ -51,7 +63,14 @@ type BagState = {
   /** Sum of snapshot service prices. Not authoritative — UIs should recompute from the live price list. */
   subtotal: number;
   /** Add a new bag entry, or update an existing one if pairId matches */
-  addPair: (services: BagService[], pairId?: string, label?: string, shoeType?: ShoeType, notes?: string) => void;
+  addPair: (
+    services: BagService[],
+    pairId?: string,
+    label?: string,
+    shoeType?: ShoeType,
+    notes?: string,
+    thumbnailPath?: string,
+  ) => void;
   removePair: (pairId: string) => void;
   removeService: (pairId: string, serviceId: string) => void;
   /** Find an existing bag entry for a given saved pair id */
@@ -181,7 +200,7 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const addPair: BagState["addPair"] = useCallback((services, pairId, label, shoeType, notes) => {
+  const addPair: BagState["addPair"] = useCallback((services, pairId, label, shoeType, notes, thumbnailPath) => {
     setPairs((prev) => {
       if (pairId) {
         const idx = prev.findIndex((p) => p.pairId === pairId);
@@ -193,6 +212,7 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
             label: label ?? next[idx].label,
             shoeType: shoeType ?? next[idx].shoeType,
             notes: notes ?? next[idx].notes,
+            thumbnailPath: thumbnailPath ?? next[idx].thumbnailPath,
             addedAt: new Date().toISOString(),
           };
           return next;
@@ -200,7 +220,7 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
       }
       return [
         ...prev,
-        { id: genId(), pairId, label, shoeType, notes, addedAt: new Date().toISOString(), services },
+        { id: genId(), pairId, label, shoeType, notes, thumbnailPath, addedAt: new Date().toISOString(), services },
       ];
     });
   }, []);
