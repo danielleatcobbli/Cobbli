@@ -28,7 +28,7 @@ _ALLOWED_STATUSES = {"pending", "proposal_sent", "quote_ready", "waitlisted", "b
 # selected before jumping to the photo-assessment flow.
 _SELECT = (
     "id, user_id, pairs, status, proposal_token, created_at, updated_at, "
-    "proposed_services, description, guest_email, guest_zip, requested_conditions"
+    "proposed_services, description, guest_email, guest_zip, requested_conditions, complimentary"
 )
 
 
@@ -38,6 +38,10 @@ class AssessmentUpdate(BaseModel):
     status: str | None = None
     pairs: list[dict[str, Any]] | None = None
     proposed_services: list[dict[str, Any]] | None = None
+    # Deliberate complimentary-confirmation path (2026-10-01) — explicit
+    # staff flag, never inferred from price. See the assessments.complimentary
+    # column comment.
+    complimentary: bool | None = None
 
 
 def _raise_if_error(resp: Any) -> None:
@@ -88,6 +92,8 @@ async def update_assessment(
         updates["pairs"] = body.pairs
     if body.proposed_services is not None:
         updates["proposed_services"] = body.proposed_services
+    if body.complimentary is not None:
+        updates["complimentary"] = body.complimentary
     if not updates:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No fields to update")
 

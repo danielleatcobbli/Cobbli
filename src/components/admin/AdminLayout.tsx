@@ -5,14 +5,22 @@ import { useRole, type Role } from "@/hooks/useRole";
 import { cn } from "@/lib/utils";
 
 // Nav entries with the roles allowed to see them. UI layer of enforcement:
-// staff never see reports/settings/user-management; the links simply don't
-// render. (Middleware-equivalent guards + RLS enforce the rest.)
+// staff never see reports/settings; the links simply don't render.
+// (Middleware-equivalent guards + RLS enforce the rest.)
+//
+// Relabeled 2026-10-01 — the old "User management" entry actually pointed at
+// /admin, which is the real operations dashboard (orders/workshop/dispatch/
+// QC), not any kind of staff-account management (that doesn't exist yet).
+// "Orders" now points at /admin directly instead of the never-finished
+// /admin/orders placeholder. "Proposals" is new: the pre-purchase queue
+// (src/pages/Admin.tsx) where staff build priced proposals from a
+// customer's submitted photos — previously built but not routed anywhere.
 const NAV: { to: string; label: string; allow: Role[] }[] = [
-  { to: "/admin/orders", label: "Orders", allow: ["staff", "admin"] },
+  { to: "/admin", label: "Orders", allow: ["staff", "admin"] },
+  { to: "/admin/proposals", label: "Proposals", allow: ["staff", "admin"] },
   { to: "/admin/reworks", label: "Reworks", allow: ["staff", "admin"] },
   { to: "/admin/reports", label: "Reports", allow: ["admin"] },
   { to: "/admin/settings", label: "Settings", allow: ["admin"] },
-  { to: "/admin", label: "User management", allow: ["admin"] },
 ];
 
 const AdminLayout = ({ children }: { children: React.ReactNode }) => {

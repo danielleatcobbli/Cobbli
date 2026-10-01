@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Camera, Eye, EyeOff, Pencil } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-
+import { Eye, EyeOff, Pencil, ShoppingBag } from "lucide-react";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
-import { displayBrand } from "@/components/cobbli/BrandCombobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,8 +18,8 @@ import {
 } from "@/components/ui/select";
 import { US_STATES } from "@/context/AccountContext";
 import { useServiceableZips } from "@/hooks/useServiceableZips";
-import { usePricingConfig } from "@/hooks/usePricingConfig";
 import { cn } from "@/lib/utils";
+import { REQUEST_STATUS, REPAIR_STATUS, fallbackMeta, type StatusMeta } from "@/lib/repairStatus";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
@@ -55,8 +52,23 @@ type PaymentMethod = {
   is_default: boolean;
 };
 
+// pair_snapshot is a direct copy of BagContext's BagPair (see
+// src/context/BagContext.tsx) — thumbnailPath is the customer's own first
+// uploaded photo (bucket "assessment-uploads"), carried through from the
+// proposal they accepted. shoeType/colors/brand are legacy fields from the
+// pre-bag-repair era and are empty on every item that went through the
+// current photo-intake flow — kept here only so old orders don't crash.
+type PairSnapshot = {
+  thumbnailPath?: string | null;
+  label?: string | null;
+  notes?: string | null;
+  shoeType?: string | null;
+  colors?: string[] | null;
+  brand?: string | null;
+};
+
 type OrderItem = {
-  pair_snapshot: { shoeType?: string; colors?: string[]; brand?: string } | null;
+  pair_snapshot: PairSnapshot | null;
   service_snapshot: { name?: string } | null;
 };
 
@@ -69,18 +81,30 @@ type Order = {
   order_items: OrderItem[];
 };
 
-type AssessmentPair = { shoeType?: string; colors?: string[]; brand?: string };
+// Matches what AssessmentUpload.tsx actually writes to assessments.pairs —
+// see that file's onSubmit (2026-09-24, multi-item rewrite). shoeType/colors/
+// brand are legacy fields from the pre-bag-repair era, always empty here.
+type AssessmentPair = {
+  photoPaths?: string[];
+  description?: string | null;
+  shoeType?: string | null;
+  colors?: string[] | null;
+  brand?: string | null;
+};
+
+type ProposedService = { service_id: string; name: string; price_cents: number; tier: "essential" | "recommended" };
 
 type Assessment = {
   id: string;
   status: string;
   created_at: string;
   pairs: AssessmentPair[];
+  proposed_services: ProposedService[] | null;
 };
 
 
 const NAV = [
-  { to: "/account/orders", label: "My Orders" },
+  { to: "/account/orders", label: "My Repairs" },
   { to: "/account/addresses", label: "My Addresses" },
   { to: "/account/payment-methods", label: "My Payment Methods" },
   { to: "/account/password", label: "My Password" },
@@ -170,67 +194,8 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => {
   );
 };
 
-const pairIdentifier = (p: { shoeType?: string; colors?: string[]; brand?: string } | null | undefined) =>
-  [p?.colors?.join(" / "), displayBrand(p?.brand), p?.shoeType].filter(Boolean).join(" · ") || "Your pair";
-
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-
-const ORDER_STATUS_PILL: Record<string, string> = {
-  placed: "bg-blue-100 text-blue-800",
-  in_progress: "bg-amber-100 text-amber-900",
-  completed: "bg-green-100 text-green-800",
-  cancelled: "bg-gray-200 text-gray-700",
-};
-
-const orderStatusLabel = (s: string) =>
-  s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
-const PROPOSAL_STATUS: Record<
-  string,
-  { label: string; pill: string; desc: string; action: string; active: boolean; depositReleased: boolean }
-> = {
-  pending: {
-    label: "Pending review",
-    pill: "bg-amber-100 text-amber-900",
-    desc: "We're preparing your proposal",
-    action: "View details",
-    active: true,
-    depositReleased: false,
-  },
-  proposal_sent: {
-    label: "Proposal sent",
-    pill: "bg-blue-100 text-blue-800",
-    desc: "Your proposal is ready to review",
-    action: "Review proposal →",
-    active: true,
-    depositReleased: false,
-  },
-  expired: {
-    label: "Expired",
-    pill: "bg-gray-200 text-gray-700",
-    desc: "Your proposal expired. You can still review and place your order",
-    action: "Review proposal →",
-    active: false,
-    depositReleased: true,
-  },
-  declined: {
-    label: "Declined",
-    pill: "bg-red-100 text-red-800",
-    desc: "You declined this proposal. Changed your mind? Review and place your order",
-    action: "Review proposal →",
-    active: false,
-    depositReleased: true,
-  },
-  service_unavailable: {
-    label: "Service unavailable",
-    pill: "bg-gray-200 text-gray-700",
-    desc: "We don't currently offer the service your item needs. No charge has been made.",
-    action: "View details",
-    active: false,
-    depositReleased: true,
-  },
-};
 
 const ClickableCard = ({
   to,
@@ -265,74 +230,55 @@ const ClickableCard = ({
   );
 };
 
-const OrderCard = ({ o }: { o: Order }) => {
-  const firstPair = o.order_items[0]?.pair_snapshot ?? null;
-  const services = Array.from(
-    new Set(o.order_items.map((it) => it.service_snapshot?.name).filter(Boolean) as string[]),
-  );
-  const pillCls = ORDER_STATUS_PILL[o.status] ?? "bg-gray-100 text-gray-800";
-  return (
-    <ClickableCard to={`/order-confirmation/${o.id}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-semibold">Order #{o.order_number}</p>
-          <p className="text-sm text-muted-foreground">Placed {formatDate(o.placed_at)}</p>
-          <p className="mt-2 text-sm font-medium text-primary">{pairIdentifier(firstPair)}</p>
-          {services.length > 0 && (
-            <p className="text-sm text-foreground/80">{services.join(", ")}</p>
-          )}
-        </div>
-        <div className="text-right shrink-0">
-          <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold mb-2", pillCls)}>
-            {orderStatusLabel(o.status)}
-          </span>
-          <p className="font-semibold">{formatPrice(o.total_cents)}</p>
-          <span className="text-sm text-primary underline underline-offset-4">View order</span>
-        </div>
-      </div>
-    </ClickableCard>
-  );
+// Normalized shape both a request (assessment) and a confirmed repair
+// (order) render into, so there's one card component and one sort order —
+// "the repair appears once in the customer's list" per Danielle's spec.
+type Repair = {
+  key: string;
+  date: number;
+  to: string;
+  /** "Repair #<order_number>" or "Repair #<ref8>" — the SAME reference
+   *  number shown as the page heading on Repair Details (2026-10-01,
+   *  Danielle's call: this is the card's primary heading now, replacing the
+   *  customer-entered item name/description that used to lead the card). No
+   *  new reference numbers are generated here — this is the existing
+   *  order_number / assessment id, just relabeled. */
+  refLabel: string;
+  dateLabel: string;
+  thumbnailPath: string | null;
+  meta: StatusMeta;
+  priceLabel: string;
 };
 
-const ProposalCard = ({ a }: { a: Assessment }) => {
-  const pricing = usePricingConfig();
-  const meta = PROPOSAL_STATUS[a.status] ?? PROPOSAL_STATUS.pending;
-  const ref = a.id.slice(0, 8).toUpperCase();
-  const firstPair = a.pairs?.[0];
-  const numPairs = a.pairs?.length ?? 1;
-  const depositAmount = Math.round(pricing.fee("assessment_deposit_cents") / 100) * numPairs;
-  const depositLine = `$${depositAmount} deposit ${meta.depositReleased ? "released" : "held"}`;
-  const link =
-    a.status === "pending" ? `/proposal/${a.id}` : `/proposal/${a.id}`;
-  return (
-    <ClickableCard
-      to={`/proposal/${a.id}`}
-      borderLeftColor={meta.active ? "#fdb600" : "#9ca3af"}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+const RepairCard = ({ r, thumbUrl }: { r: Repair; thumbUrl: string | null | undefined }) => (
+  <ClickableCard to={r.to}>
+    <div className="flex gap-4">
+      <div className="shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-md overflow-hidden bg-muted/40 border border-border flex items-center justify-center">
+        {thumbUrl ? (
+          <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <ShoppingBag className="text-muted-foreground/50" size={26} />
+        )}
+      </div>
+      <div className="min-w-0 flex-1 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold text-foreground">
-              <Camera size={12} /> Proposal
-            </span>
-            <span className="text-xs text-muted-foreground">#{ref}</span>
-          </div>
-          <p className="text-sm text-muted-foreground">Submitted {formatDate(a.created_at)}</p>
-          <p className="mt-2 text-sm font-medium text-primary">{pairIdentifier(firstPair)}</p>
-          <p className="text-sm text-foreground/80 mt-1">{meta.desc}</p>
+          <p className="font-semibold leading-snug">{r.refLabel}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{r.dateLabel}</p>
+          {r.meta.next && <p className="text-sm text-foreground/80 mt-2">{r.meta.next}</p>}
         </div>
         <div className="text-right shrink-0">
-          <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold", meta.pill)}>
-            {meta.label}
+          <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold mb-2", r.meta.pill)}>
+            {r.meta.label}
           </span>
+          <p className="font-semibold text-sm">{r.priceLabel}</p>
         </div>
       </div>
-      <div className="mt-4 flex justify-end">
-        <span className="text-sm text-primary underline underline-offset-4">{meta.action}</span>
-      </div>
-    </ClickableCard>
-  );
-};
+    </div>
+    <div className="mt-3 flex justify-end">
+      <span className="text-sm text-primary underline underline-offset-4">{r.meta.action}</span>
+    </div>
+  </ClickableCard>
+);
 
 const EmptyState = ({
   message,
@@ -351,14 +297,47 @@ const EmptyState = ({
   </div>
 );
 
+// First-photo lookup, same pattern as AssessmentProposal.tsx/Admin.tsx —
+// signed URLs from the "assessment-uploads" bucket, since that's where both
+// a request's own uploads and an accepted order's carried-through
+// thumbnailPath (see BagContext.tsx's BagPair) live.
+const useThumbnails = (paths: (string | null)[]) => {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const key = paths.filter(Boolean).join("|");
+  useEffect(() => {
+    let cancelled = false;
+    const toFetch = Array.from(new Set(paths.filter((p): p is string => !!p)));
+    if (toFetch.length === 0) return;
+    (async () => {
+      const entries = await Promise.all(
+        toFetch.map(async (path) => {
+          const { data } = await supabase.storage.from("assessment-uploads").createSignedUrl(path, 3600);
+          return [path, data?.signedUrl] as const;
+        }),
+      );
+      if (cancelled) return;
+      setUrls((prev) => {
+        const next = { ...prev };
+        for (const [path, url] of entries) if (url) next[path] = url;
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return urls;
+};
+
 const Orders = () => {
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [assessments, setAssessments] = useState<Assessment[] | null>(null);
   usePageMeta({
-    title: "My orders — Cobbli",
+    title: "My repairs — Cobbli",
     description:
-      "View your Cobbli shoe repair orders and proposals in one place, track their status, and place new repairs from your account dashboard.",
+      "Track your Cobbli bag repair requests and confirmed repairs in one place, and start a new repair from your account dashboard.",
   });
 
   useEffect(() => {
@@ -369,110 +348,111 @@ const Orders = () => {
       .eq("user_id", user.id)
       .order("placed_at", { ascending: false })
       .then(({ data }) => setOrders((data ?? []) as unknown as Order[]));
+    // "booked" assessments are excluded here — once accepted, that repair
+    // lives on as an order instead, so it isn't shown twice (see
+    // AssessmentProposal.tsx's onAcceptAndCheckout / the booked-assessment→
+    // order handoff this page intentionally didn't touch).
     supabase
       .from("assessments")
-      .select("id,status,created_at,pairs")
+      .select("id,status,created_at,pairs,proposed_services")
       .eq("user_id", user.id)
       .neq("status", "booked")
       .order("created_at", { ascending: false })
       .then(({ data }) => setAssessments((data ?? []) as unknown as Assessment[]));
   }, [user]);
 
-  const visibleProposals = useMemo(() => {
+  const visibleRequests = useMemo(() => {
     if (!assessments) return [];
     const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
     return assessments.filter((a) => {
-      if ((a.status === "expired" || a.status === "declined" || a.status === "service_unavailable") && new Date(a.created_at).getTime() < cutoff) {
+      if ((a.status === "declined" || a.status === "service_unavailable") && new Date(a.created_at).getTime() < cutoff) {
         return false;
       }
       return true;
     });
   }, [assessments]);
 
-  const combined = useMemo(() => {
-    type Combined = { date: number; kind: "order" | "proposal"; order?: Order; proposal?: Assessment };
-    const items: Combined[] = [];
-    (orders ?? []).forEach((o) => items.push({ date: new Date(o.placed_at).getTime(), kind: "order", order: o }));
-    visibleProposals.forEach((p) =>
-      items.push({ date: new Date(p.created_at).getTime(), kind: "proposal", proposal: p }),
-    );
-    return items.sort((a, b) => b.date - a.date);
-  }, [orders, visibleProposals]);
+  const combined = useMemo<Repair[]>(() => {
+    const items: Repair[] = [];
 
+    (orders ?? []).forEach((o) => {
+      const firstItem = o.order_items[0];
+      const firstPair = firstItem?.pair_snapshot ?? null;
+      items.push({
+        key: `o-${o.id}`,
+        date: new Date(o.placed_at).getTime(),
+        to: `/repair/order/${o.id}`,
+        // "Placed" uses the order's actual placement timestamp (placed_at)
+        // — never relabeled from a request's submission date or an "updated
+        // at" value (2026-10-01).
+        refLabel: `Repair #${o.order_number}`,
+        dateLabel: `Placed ${formatDate(o.placed_at)}`,
+        thumbnailPath: firstPair?.thumbnailPath ?? null,
+        meta: REPAIR_STATUS[o.status] ?? fallbackMeta(o.status),
+        priceLabel: formatPrice(o.total_cents),
+      });
+    });
+
+    visibleRequests.forEach((a) => {
+      const ref = a.id.slice(0, 8).toUpperCase();
+      const firstPair = a.pairs?.[0];
+      const meta = REQUEST_STATUS[a.status] ?? fallbackMeta(a.status);
+      const essentialServices = (a.proposed_services ?? []).filter((s) => s.tier === "essential");
+      const essentialCents = essentialServices.reduce((sum, s) => sum + s.price_cents, 0);
+      // Distinguish "staff hasn't priced this yet" from "staff priced it at
+      // $0 on purpose" (e.g. a complimentary test repair) — same distinction
+      // RepairDetails.tsx's Pricing section makes; a flat `>0` check here
+      // would mislabel a genuine $0 service as still-pending (2026-10-01 fix).
+      const priceLabel =
+        essentialServices.length === 0
+          ? "Price pending assessment"
+          : essentialCents > 0
+            ? formatPrice(essentialCents)
+            : "Complimentary repair";
+      items.push({
+        key: `a-${a.id}`,
+        date: new Date(a.created_at).getTime(),
+        to: `/repair/request/${a.id}`,
+        // "Submitted" uses the assessment's original created_at — never
+        // relabeled "Placed" unless/until it actually becomes an order
+        // (2026-10-01).
+        refLabel: `Repair #${ref}`,
+        dateLabel: `Submitted ${formatDate(a.created_at)}`,
+        thumbnailPath: firstPair?.photoPaths?.[0] ?? null,
+        meta,
+        priceLabel,
+      });
+    });
+
+    return items.sort((a, b) => b.date - a.date);
+  }, [orders, visibleRequests]);
+
+  const thumbUrls = useThumbnails(combined.map((r) => r.thumbnailPath));
   const loading = orders === null || assessments === null;
 
   return (
     <section>
       <h1
-        className="text-2xl md:text-3xl uppercase"
+        className="text-2xl md:text-3xl uppercase mb-6"
         style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
       >
-        My orders
+        My Repairs
       </h1>
-      <p className="text-muted-foreground mt-1 mb-6">Your repairs and proposals</p>
 
       {loading ? (
         <BrandSpinner className="py-10" />
+      ) : combined.length === 0 ? (
+        <EmptyState
+          message="No repairs yet. Upload photos of your bag and we'll recommend the right repairs."
+          cta="Start a repair"
+          to="/start-repair/assessment"
+        />
       ) : (
-        <Tabs defaultValue="all">
-          <TabsList className="mb-6">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="orders">Orders</TabsTrigger>
-            <TabsTrigger value="proposals">Proposals</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="all">
-            {combined.length === 0 ? (
-              <EmptyState
-                message="No orders yet."
-                cta="Start a repair"
-                to="/start-repair/assessment"
-              />
-            ) : (
-              <ul className="space-y-4">
-                {combined.map((c) =>
-                  c.kind === "order" ? (
-                    <OrderCard key={`o-${c.order!.id}`} o={c.order!} />
-                  ) : (
-                    <ProposalCard key={`p-${c.proposal!.id}`} a={c.proposal!} />
-                  ),
-                )}
-              </ul>
-            )}
-          </TabsContent>
-
-          <TabsContent value="orders">
-            {(orders ?? []).length === 0 ? (
-              <EmptyState
-                message="No repairs yet. Start a repair to get started."
-                cta="Start a repair"
-                to="/start-repair/assessment"
-              />
-            ) : (
-              <ul className="space-y-4">
-                {(orders ?? []).map((o) => (
-                  <OrderCard key={o.id} o={o} />
-                ))}
-              </ul>
-            )}
-          </TabsContent>
-
-          <TabsContent value="proposals">
-            {visibleProposals.length === 0 ? (
-              <EmptyState
-                message="No proposals yet. Upload photos or a short video of your shoes and we'll recommend the right repairs."
-                cta="Get a recommendation"
-                to="/start-repair/assessment"
-              />
-            ) : (
-              <ul className="space-y-4">
-                {visibleProposals.map((a) => (
-                  <ProposalCard key={a.id} a={a} />
-                ))}
-              </ul>
-            )}
-          </TabsContent>
-        </Tabs>
+        <ul className="space-y-4">
+          {combined.map((r) => (
+            <RepairCard key={r.key} r={r} thumbUrl={r.thumbnailPath ? thumbUrls[r.thumbnailPath] : null} />
+          ))}
+        </ul>
       )}
     </section>
   );

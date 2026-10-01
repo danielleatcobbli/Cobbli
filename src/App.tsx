@@ -21,11 +21,11 @@ import PairFlowDialog from "./components/cobbli/PairFlowDialog";
 import AssessmentUpload from "./pages/AssessmentUpload";
 import AssessmentConfirmation from "./pages/AssessmentConfirmation";
 import AssessmentProposal from "./pages/AssessmentProposal";
+import RepairDetails from "./pages/RepairDetails";
 import Admin from "./pages/Admin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminOrderDetail from "./pages/AdminOrderDetail";
 import OwnerSettings from "./pages/OwnerSettings";
-import AdminOrders from "./pages/admin/AdminOrders";
 import AdminReworks from "./pages/admin/AdminReworks";
 import AdminReports from "./pages/admin/AdminReports";
 import Blog from "./pages/Blog";
@@ -191,6 +191,21 @@ const App = () => (
                             call) — no longer gated behind sign-in. */}
                         <Route path="/checkout" element={<Checkout />} />
                         <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
+                        {/* Unified "Repair details" page (2026-10-01) — what
+                            My Repairs (Account.tsx) links to for both a
+                            still-pending request and a confirmed repair.
+                            Protected since it's only ever reached from a
+                            signed-in customer's own account list; the
+                            separate public /proposal/t/:token route is
+                            untouched for guest/email links. */}
+                        <Route
+                          path="/repair/:kind/:id"
+                          element={
+                            <ProtectedRoute>
+                              <RepairDetails />
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route path="/faqs" element={<Faqs />} />
                         <Route path="/blog" element={<Blog />} />
                         <Route path="/blog/:slug" element={<BlogPost />} />
@@ -210,11 +225,23 @@ const App = () => (
                             </RoleRoute>
                           }
                         />
+                        {/* /admin/orders was a never-finished placeholder
+                            (2026-10-01 finding) — the real operations
+                            dashboard already lives at /admin. Redirect any
+                            old bookmarks/links rather than leaving a dead
+                            page up. */}
+                        <Route path="/admin/orders" element={<Navigate to="/admin" replace />} />
+                        {/* Pre-purchase proposal-building queue (previously
+                            orphaned at no route at all, 2026-10-01 fix) —
+                            staff reviews a customer's submitted photos here
+                            and builds their priced proposal before checkout.
+                            Separate stage of the pipeline from the post-
+                            purchase operations dashboard at /admin. */}
                         <Route
-                          path="/admin/orders"
+                          path="/admin/proposals"
                           element={
                             <RoleRoute allow={["admin", "staff"]}>
-                              <AdminOrders />
+                              <Admin />
                             </RoleRoute>
                           }
                         />

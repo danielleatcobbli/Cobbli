@@ -85,7 +85,7 @@ const ComingSoon = () => {
       <img
         src={hero}
         alt="Burgundy leather handbag carried along a rainy SoHo street"
-        className="absolute inset-0 h-full w-full object-cover object-center sm:object-[center_75%]"
+        className="absolute inset-0 h-full w-full object-cover object-[90%_82%] sm:object-[center_92%]"
         style={{ filter: "saturate(1.15) contrast(1.05)" }}
         loading="eager"
         decoding="async"

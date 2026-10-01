@@ -9,11 +9,17 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { useAuth } from "@/context/AuthContext";
 import { useBag, formatPrice, type BagService } from "@/context/BagContext";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetchJson } from "@/integrations/api/client";
+import { readSelectedRecommended, writeSelectedRecommended } from "@/lib/repairSelections";
 import { Sparkles } from "lucide-react";
 
 const COURIER_FEE_CENTS = 0;
 
 type Pair = {
+  /** Stable per-bag id, written by AssessmentUpload.tsx starting 2026-10-01
+   *  — absent on older rows. Used to give each bag only its own tagged
+   *  services at checkout (see onAcceptAndCheckout). */
+  id?: string;
   shoeType?: string | null;
   colors?: string[];
   brand?: string | null;
@@ -30,6 +36,10 @@ type ProposedService = {
   name: string;
   price_cents: number;
   tier: "essential" | "recommended";
+  /** Which bag this service applies to (assessments.pairs[].id) — added
+   *  2026-10-01 so checkout carries each bag only its own services. Absent
+   *  on proposals saved before that date. */
+  pair_id?: string;
 };
 
 const AssessmentProposal = () => {
@@ -40,7 +50,20 @@ const AssessmentProposal = () => {
   const { id: routeId, token } = useParams<{ id?: string; token?: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addPair } = useBag();
+  const { addPair, clear, taggedAssessmentIds } = useBag();
+
+  // Matches RepairDetails.tsx's confirmClearIfOtherRequestPending (2026-10-02)
+  // — clear() below used to silently discard another request's not-yet-
+  // checked-out selections. Now it asks first, rather than guessing or
+  // dropping them unannounced.
+  const confirmClearIfOtherRequestPending = (thisId: string): boolean => {
+    const others = taggedAssessmentIds().filter((aid) => aid !== thisId);
+    if (others.length === 0) return true;
+    return window.confirm(
+      "You have selections saved from another repair request that haven't been checked out yet. " +
+        "Continuing will remove them from your cart — you can re-accept that request's recommendations later. Continue?",
+    );
+  };
 
   // The resolved assessment UUID — set after either lookup path completes.
   // All mutations (order insert, assessment update) use this rather than the
@@ -55,11 +78,6 @@ const AssessmentProposal = () => {
   const [thumbsByPair, setThumbsByPair] = useState<string[][]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [selectedRecommended, setSelectedRecommended] = useState<Set<string>>(new Set());
-  // Local-only confirmation state for the waitlist branch (2026-09-24,
-  // Danielle's call) — no DB column tracks "customer confirmed joining the
-  // waitlist" yet, so a page reload loses this and shows the form again.
-  // Fine for now since re-confirming is harmless; flag if that changes.
-  const [waitlistJoined, setWaitlistJoined] = useState(false);
 
   usePageMeta({
     title: "Your repair proposal — Cobbli",
@@ -75,20 +93,54 @@ const AssessmentProposal = () => {
         return;
       }
 
-      // Choose the right column to filter on.
-      const query = token
-        ? supabase
-            .from("assessments")
-            .select("id, pairs, status, proposed_services")
-            .eq("proposal_token", token)
-            .maybeSingle()
-        : supabase
-            .from("assessments")
-            .select("id, pairs, status, proposed_services")
-            .eq("id", routeId!)
-            .maybeSingle();
+      // Guest-access fix (2026-10-02, Item 3 follow-up): the token path used
+      // to query Supabase directly as the anon/authenticated browser client,
+      // which RLS tracing found silently returns zero rows for anyone who
+      // isn't already signed in as the assessment's own owner or staff —
+      // meaning this link never actually worked from a second device/
+      // browser, guest or not. It now goes through a dedicated backend
+      // endpoint (GET /public/proposal/:token) that looks the row up with
+      // the service-role client — the token itself (a long random UUID) is
+      // the only credential it trusts, same security model as a password-
+      // reset link. The signed-in id path is unchanged; "Users view own
+      // assessments" already scopes that correctly.
+      if (token) {
+        try {
+          const data = await apiFetchJson<{
+            id: string;
+            pairs: Pair[];
+            status: string;
+            proposed_services: ProposedService[];
+            photo_urls: Record<string, string>;
+          }>(`/public/proposal/${token}`);
+          if (cancelled) return;
+          setAssessmentId(data.id);
+          const ps = data.pairs ?? [];
+          const services = data.proposed_services ?? [];
+          setPairs(ps);
+          setStatus(data.status);
+          setProposedServices(services);
+          setSelectedRecommended(
+            readSelectedRecommended(data.id) ??
+              new Set(services.filter((s) => s.tier === "recommended").map((s) => s.service_id)),
+          );
+          setThumbsByPair(
+            ps.map((p) =>
+              (p.photoPaths ?? []).slice(0, 4).map((path) => data.photo_urls[path]).filter(Boolean),
+            ),
+          );
+        } catch {
+          if (!cancelled) setError("Proposal not found");
+        }
+        if (!cancelled) setLoading(false);
+        return;
+      }
 
-      const { data, error: e } = await query;
+      const { data, error: e } = await supabase
+        .from("assessments")
+        .select("id, pairs, status, proposed_services")
+        .eq("id", routeId!)
+        .maybeSingle();
       if (cancelled) return;
       if (e || !data) {
         setError(e?.message || "Proposal not found");
@@ -103,9 +155,11 @@ const AssessmentProposal = () => {
       setPairs(ps);
       setStatus(data.status);
       setProposedServices(services);
-      // Pre-select all recommended by default
+      // Restore a saved-this-visit selection if there is one; otherwise
+      // pre-select all recommended by default (original behavior).
       setSelectedRecommended(
-        new Set(services.filter((s) => s.tier === "recommended").map((s) => s.service_id)),
+        readSelectedRecommended(data.id as string) ??
+          new Set(services.filter((s) => s.tier === "recommended").map((s) => s.service_id)),
       );
 
       const all: string[][] = [];
@@ -164,18 +218,9 @@ const AssessmentProposal = () => {
       const next = new Set(prev);
       if (next.has(sid)) next.delete(sid);
       else next.add(sid);
+      if (assessmentId) writeSelectedRecommended(assessmentId, next);
       return next;
     });
-
-  // Waitlist join has no payment and no auth requirement — guests can join
-  // the waitlist same as signed-in users (2026-09-24, Danielle: "guest
-  // approval is in scope"). Nothing is written to the DB yet since there's
-  // no column for it (see waitlistJoined comment above); this just flips
-  // the page into its confirmation state.
-  const onJoinWaitlist = () => {
-    if (submitting) return;
-    setWaitlistJoined(true);
-  };
 
   // Accepted proposals go to the real Checkout experience — no in-page
   // payment here (2026-09-24, Danielle's call: "only pay if the order's been
@@ -187,14 +232,32 @@ const AssessmentProposal = () => {
   // this page stays clickable (re-adds to the bag) if revisited — there's no
   // "accepted" status wired into the assessment status machine yet (that's
   // part of the backend rework in task #124).
+  // Each bag gets only its OWN tagged services here, not every service in
+  // the whole proposal (2026-10-01 fix, alongside per-bag service tagging in
+  // Admin.tsx) — otherwise two bags with different services would both end
+  // up with every service duplicated onto them at checkout. Untagged
+  // services (proposals saved before 2026-10-01, or a bag with no stable id)
+  // attach to the first bag only, so the common single-bag case is
+  // unaffected.
   const onAcceptAndCheckout = () => {
     if (!assessmentId || alreadyBooked || !proposalReady) return;
     if (essential.length + recommended.length === 0) return;
 
-    const acceptedServices: BagService[] = [
-      ...essential,
-      ...recommended.filter((r) => selectedRecommended.has(r.service_id)),
-    ].map((l) => ({ id: l.service_id, name: l.name, price: l.price_cents }));
+    // One checkout = one request for the MVP (2026-10-01 fix) — see the
+    // matching comment in RepairDetails.tsx's onAcceptAndCheckout for why
+    // this has to happen before adding this request's own items. Confirmed
+    // with the customer first (2026-10-02) if it would discard another
+    // request's pending selections.
+    if (!confirmClearIfOtherRequestPending(assessmentId)) return;
+    clear();
+
+    const acceptedFor = (bagId: string | undefined, isFirst: boolean): BagService[] => {
+      const tagged = proposedServices.filter((s) => s.pair_id === bagId);
+      const extra = isFirst ? proposedServices.filter((s) => !s.pair_id) : [];
+      return [...tagged, ...extra]
+        .filter((s) => s.tier === "essential" || selectedRecommended.has(s.service_id))
+        .map((l) => ({ id: l.service_id, name: l.name, price: l.price_cents }));
+    };
 
     // Label is just an ordinal fallback for contexts that need plain text
     // (e.g. a screen reader, or before the thumbnail has loaded) — the real
@@ -204,7 +267,9 @@ const AssessmentProposal = () => {
     pairs.forEach((p, i) => {
       const label = pairs.length > 1 ? `Item ${i + 1}` : "Your item";
       const thumbnailPath = p.photoPaths?.[0];
-      addPair(acceptedServices, undefined, label, p.shoeType as never, undefined, thumbnailPath);
+      const services = acceptedFor(p.id, i === 0);
+      if (services.length === 0) return;
+      addPair(services, undefined, label, p.shoeType as never, undefined, thumbnailPath, assessmentId);
     });
 
     // Carries the source assessment through to the order (see Checkout.tsx
@@ -286,7 +351,7 @@ const AssessmentProposal = () => {
                   </h1>
                   <p className="mt-1 text-sm md:text-base text-primary/80">
                     {isWaitlisted
-                      ? "We're at capacity right now. Review your recommendations below, then join the waitlist — we'll email you the moment a spot opens."
+                      ? "We're at capacity right now. Review your recommendations below — we'll reach out as soon as we can take on your repair."
                       : "Our cobblers have reviewed your photos. Review your recommendations below, then continue to checkout to schedule pickup and pay."}
                   </p>
                 </div>
@@ -298,16 +363,6 @@ const AssessmentProposal = () => {
                 </div>
               )}
 
-              {isWaitlisted && waitlistJoined ? (
-                <div className="mt-8 rounded-xl border border-border p-10 text-center">
-                  <p className="text-lg text-primary">
-                    We've saved your selections. We'll email{" "}
-                    <span className="font-medium">{user?.email ?? "the email on this request"}</span>{" "}
-                    the moment a spot opens so you can book.
-                  </p>
-                </div>
-              ) : (
-              <>
               {/* Item identifiers — each item's own first photo is the
                   identifier, shown larger than the rest of its thumbnails
                   (2026-09-24, Danielle's call: don't ask customers to name
@@ -467,16 +522,17 @@ const AssessmentProposal = () => {
                   </Button>
                 )}
                 {isWaitlisted ? (
-                  // No payment and no sign-in requirement to join the waitlist
-                  // (2026-09-24, Danielle: "guest approval is in scope").
-                  <Button
-                    type="button"
-                    size="lg"
-                    onClick={onJoinWaitlist}
-                    disabled={essential.length + recommended.length === 0}
-                  >
-                    Join the waitlist
-                  </Button>
+                  // "Join the waitlist" used to be a button that only flipped
+                  // local state — nothing was ever saved, so it implied an
+                  // action that didn't exist (2026-10-02, Danielle's call:
+                  // remove/disable until it truly persists). This request
+                  // already is waitlisted (staff set that) and the
+                  // recommendations above are already saved regardless of
+                  // any click, so there's nothing left for the customer to
+                  // do here but wait to hear back.
+                  <p className="text-sm text-foreground/80">
+                    We've saved your selections — we'll reach out as soon as we can take on your repair.
+                  </p>
                 ) : (
                   // Guests can accept and check out too — no sign-in gate
                   // (2026-09-24, Danielle: "guest checkout... let's make it
@@ -497,20 +553,16 @@ const AssessmentProposal = () => {
                   </Button>
                 )}
               </div>
-              </>
-              )}
-              {!(isWaitlisted && waitlistJoined) && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  {isWaitlisted
-                    ? "No payment or sign-in needed to join the waitlist."
-                    : "No sign-in needed — you'll enter payment and schedule pickup at checkout."}{" "}
-                  Questions? Email{" "}
-                  <a href="mailto:support@cobbli.com" className="underline">
-                    support@cobbli.com
-                  </a>
-                  .
-                </p>
-              )}
+              <p className="mt-3 text-xs text-muted-foreground">
+                {isWaitlisted
+                  ? "No action needed — we'll reach out when we can take on your repair."
+                  : "No sign-in needed — you'll enter payment and schedule pickup at checkout."}{" "}
+                Questions? Email{" "}
+                <a href="mailto:support@cobbli.com" className="underline">
+                  support@cobbli.com
+                </a>
+                .
+              </p>
             </>
           )}
         </div>

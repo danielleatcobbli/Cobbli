@@ -128,18 +128,45 @@ const SignUp = () => {
 
     setSubmitting(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/account?verified=1`,
-          data: {
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
-            phone: `+1${phoneDigits}`,
-          },
-        },
-      });
+      // If this browser already has an anonymous session — e.g. they
+      // submitted a repair request as a guest earlier in this session (see
+      // AssessmentUpload.tsx's 2026-10-01 guest-upload fix) — upgrade that
+      // exact identity to a real account via updateUser() instead of
+      // signUp(), which would mint a disconnected new uid and orphan their
+      // photos/request. Supabase keeps the same auth.uid() across this
+      // upgrade, so everything already stored under it (the storage folder,
+      // assessments.user_id) becomes this account's automatically, with
+      // nothing to migrate. This is also why knowing someone's email alone
+      // can never grant access to their guest submission: claiming it
+      // requires completing a real signup/password flow from the SAME
+      // browser session that holds that exact anonymous identity, not just
+      // knowing the address it was submitted under.
+      const isUpgradingGuestSession = !!user?.is_anonymous;
+      const { data, error } = isUpgradingGuestSession
+        ? await supabase.auth.updateUser(
+            {
+              email: email.trim(),
+              password,
+              data: {
+                first_name: firstName.trim(),
+                last_name: lastName.trim(),
+                phone: `+1${phoneDigits}`,
+              },
+            },
+            { emailRedirectTo: `${window.location.origin}/account?verified=1` },
+          )
+        : await supabase.auth.signUp({
+            email: email.trim(),
+            password,
+            options: {
+              emailRedirectTo: `${window.location.origin}/account?verified=1`,
+              data: {
+                first_name: firstName.trim(),
+                last_name: lastName.trim(),
+                phone: `+1${phoneDigits}`,
+              },
+            },
+          });
       if (error) {
         const msg = error.message.toLowerCase();
         if (msg.includes("already") || msg.includes("registered")) {
@@ -157,8 +184,13 @@ const SignUp = () => {
       // Supabase returns an empty `identities` array when the email is
       // already registered (and "Confirm email" is enabled). No verification
       // email is sent in this case — surface a clear error instead of
-      // advancing to the "check your inbox" screen.
-      const identities = data.user?.identities;
+      // advancing to the "check your inbox" screen. (Known simplification,
+      // 2026-10-01: `updateUser`'s response doesn't carry `identities` the
+      // same way `signUp`'s does, so this check is effectively a no-op on
+      // the upgrade path — worth a dedicated test against the real API
+      // response shape before relying on it to catch an upgrade attempt
+      // that collides with an existing account.)
+      const identities = (data.user as { identities?: unknown[] } | null)?.identities;
       if (identities && identities.length === 0) {
         setEmailExists(true);
         setEmail("");

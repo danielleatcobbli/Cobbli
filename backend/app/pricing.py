@@ -327,3 +327,74 @@ def quote_cart(payload: dict[str, Any]) -> CartQuote:
         tax_cents=tax_cents,
         total_cents=total_cents,
     )
+
+
+def quote_cart_complimentary(payload: dict[str, Any]) -> CartQuote:
+    """Deliberate complimentary-confirmation path (2026-10-01). Mirrors
+    quote_cart's item canonicalization — every price still comes from the
+    server-side catalog by submitted service id, never trusted from the
+    client — so a comp confirmation can't be used to sneak an inflated or
+    tampered price into an order either. The only difference: the real
+    catalog total is computed and recorded for staff visibility (see
+    `catalog_total_cents` on the returned payload) but the order itself is
+    charged $0 across the board, and quote_cart's `total_cents < 50` floor
+    (meant to reject a broken/empty paid cart) does not apply here, since a
+    genuine comp can legitimately total zero including the courier fee."""
+    catalog = get_pricing_catalog()
+    submitted_items = payload.get("items")
+    if (
+        not isinstance(submitted_items, list)
+        or not submitted_items
+        or len(submitted_items) > MAX_CART_ITEMS
+    ):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid cart items")
+
+    canonical_items: list[dict[str, Any]] = []
+    for item in submitted_items:
+        if not isinstance(item, dict):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid cart item")
+        service_snapshot = item.get("service_snapshot")
+        if not isinstance(service_snapshot, dict):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Invalid service snapshot"
+            )
+        submitted_id = service_snapshot.get("id")
+        if not isinstance(submitted_id, str) or not submitted_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing service ID")
+
+        if submitted_id.startswith("bundle-"):
+            canonical_item = _canonical_package_item(item, submitted_id, catalog)
+        else:
+            service = catalog.services.get(submitted_id)
+            if service is None:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"Unknown or inactive service '{submitted_id}'",
+                )
+            canonical_item = _canonical_service_item(item, submitted_id, service)
+        canonical_items.append(canonical_item)
+
+    catalog_total_cents = sum(item["price_cents"] for item in canonical_items)
+
+    delivery_address = payload.get("delivery_address")
+    if not isinstance(delivery_address, dict):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid delivery address")
+
+    # Comped items are still recorded with their real catalog price per line
+    # (so order history/reporting shows what was waived), but the amounts
+    # that drive charging are forced to zero.
+    canonical_payload = deepcopy(payload)
+    canonical_payload["items"] = canonical_items
+    canonical_payload["repairs_subtotal_cents"] = 0
+    canonical_payload["courier_fee_cents"] = 0
+    canonical_payload["tax_cents"] = 0
+    canonical_payload["total_cents"] = 0
+    canonical_payload["catalog_total_cents"] = catalog_total_cents
+
+    return CartQuote(
+        payload=canonical_payload,
+        repairs_subtotal_cents=0,
+        courier_fee_cents=0,
+        tax_cents=0,
+        total_cents=0,
+    )

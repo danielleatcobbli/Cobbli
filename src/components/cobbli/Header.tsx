@@ -138,6 +138,12 @@ const Header = ({ transparent = false, theme = "amber" }: Props) => {
   const [open, setOpen] = useState(false);
   const { itemCount } = useBag();
   const { user } = useAuth();
+  // A guest who just submitted a repair request now has a real Supabase
+  // anonymous-auth session under the hood (2026-10-01 guest-upload fix) so
+  // their photos satisfy the same RLS rules a real account's do — but they
+  // never created a password or saw an "account" anywhere, so the header
+  // should keep showing them the Sign In link, not the account icon.
+  const isSignedIn = !!user && !user.is_anonymous;
 
   const handleHowItWorksClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (location.pathname === "/") {
@@ -207,7 +213,7 @@ const Header = ({ transparent = false, theme = "amber" }: Props) => {
         </nav>
 
         <div className="flex items-center gap-2 ml-auto">
-          {user ? (
+          {isSignedIn ? (
             <Link to="/account" aria-label="My account" className="p-2 rounded-md hover:bg-primary-glow transition-colors">
               <HeaderIcon src={accountIcon} color={iconColor} />
             </Link>

@@ -54,6 +54,18 @@ export type BagPair = {
   /** ISO timestamp; used to display in reverse order of addition */
   addedAt: string;
   services: BagService[];
+  /** Which repair request (assessments.id) these services were accepted
+   *  from, if any — set by RepairDetails.tsx / AssessmentProposal.tsx's
+   *  onAccept flows (2026-10-02). Undefined for items added the regular way
+   *  (StartRepair.tsx's checklist flow has no request to tag). Used only to
+   *  detect — and warn about, rather than silently discard — the case where
+   *  the bag already holds another request's accepted selections when a
+   *  customer accepts a second one before checking out (see clear()'s
+   *  caller in RepairDetails.tsx for the one-request-per-checkout guard this
+   *  supports). Not read anywhere that enforces which items get submitted;
+   *  Checkout.tsx still sends the whole bag, which is the known limitation
+   *  this tag lets the caller detect and confirm rather than hide. */
+  assessmentId?: string;
 };
 
 type BagState = {
@@ -70,11 +82,17 @@ type BagState = {
     shoeType?: ShoeType,
     notes?: string,
     thumbnailPath?: string,
+    assessmentId?: string,
   ) => void;
   removePair: (pairId: string) => void;
   removeService: (pairId: string, serviceId: string) => void;
   /** Find an existing bag entry for a given saved pair id */
   findByPairId: (pairId: string) => BagPair | undefined;
+  /** Every distinct assessmentId currently tagged on items in the bag
+   *  (2026-10-02) — lets a caller about to clear() and add a different
+   *  request's items check whether it would be discarding another request's
+   *  still-unsaved selections first. */
+  taggedAssessmentIds: () => string[];
   clear: () => void;
 };
 
@@ -200,30 +218,44 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const addPair: BagState["addPair"] = useCallback((services, pairId, label, shoeType, notes, thumbnailPath) => {
-    setPairs((prev) => {
-      if (pairId) {
-        const idx = prev.findIndex((p) => p.pairId === pairId);
-        if (idx !== -1) {
-          const next = [...prev];
-          next[idx] = {
-            ...next[idx],
-            services,
-            label: label ?? next[idx].label,
-            shoeType: shoeType ?? next[idx].shoeType,
-            notes: notes ?? next[idx].notes,
-            thumbnailPath: thumbnailPath ?? next[idx].thumbnailPath,
-            addedAt: new Date().toISOString(),
-          };
-          return next;
+  const addPair: BagState["addPair"] = useCallback(
+    (services, pairId, label, shoeType, notes, thumbnailPath, assessmentId) => {
+      setPairs((prev) => {
+        if (pairId) {
+          const idx = prev.findIndex((p) => p.pairId === pairId);
+          if (idx !== -1) {
+            const next = [...prev];
+            next[idx] = {
+              ...next[idx],
+              services,
+              label: label ?? next[idx].label,
+              shoeType: shoeType ?? next[idx].shoeType,
+              notes: notes ?? next[idx].notes,
+              thumbnailPath: thumbnailPath ?? next[idx].thumbnailPath,
+              assessmentId: assessmentId ?? next[idx].assessmentId,
+              addedAt: new Date().toISOString(),
+            };
+            return next;
+          }
         }
-      }
-      return [
-        ...prev,
-        { id: genId(), pairId, label, shoeType, notes, thumbnailPath, addedAt: new Date().toISOString(), services },
-      ];
-    });
-  }, []);
+        return [
+          ...prev,
+          {
+            id: genId(),
+            pairId,
+            label,
+            shoeType,
+            notes,
+            thumbnailPath,
+            assessmentId,
+            addedAt: new Date().toISOString(),
+            services,
+          },
+        ];
+      });
+    },
+    [],
+  );
 
   const removePair = useCallback((pairId: string) => {
     setPairs((prev) => prev.filter((p) => p.id !== pairId));
@@ -245,6 +277,11 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
     [pairs],
   );
 
+  const taggedAssessmentIds = useCallback(
+    () => Array.from(new Set(pairs.map((p) => p.assessmentId).filter((id): id is string => !!id))),
+    [pairs],
+  );
+
   const clear = useCallback(() => setPairs([]), []);
 
   const value = useMemo<BagState>(() => {
@@ -253,8 +290,18 @@ export const BagProvider = ({ children }: { children: ReactNode }) => {
       (sum, p) => sum + p.services.reduce((s, svc) => s + svc.price, 0),
       0,
     );
-    return { pairs, itemCount, subtotal, addPair, removePair, removeService, findByPairId, clear };
-  }, [pairs, addPair, removePair, removeService, findByPairId, clear]);
+    return {
+      pairs,
+      itemCount,
+      subtotal,
+      addPair,
+      removePair,
+      removeService,
+      findByPairId,
+      taggedAssessmentIds,
+      clear,
+    };
+  }, [pairs, addPair, removePair, removeService, findByPairId, taggedAssessmentIds, clear]);
 
   return <BagContext.Provider value={value}>{children}</BagContext.Provider>;
 };

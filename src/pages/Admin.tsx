@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { useRole } from "@/hooks/useRole";
-import Header from "@/components/cobbli/Header";
-import Footer from "@/components/cobbli/Footer";
+import AdminLayout from "@/components/admin/AdminLayout";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,6 +22,11 @@ type AssessmentRow = {
   id: string;
   user_id: string;
   pairs: Array<{
+    /** Stable per-bag id, written by AssessmentUpload.tsx starting
+     *  2026-10-01 — absent on older rows submitted before that date. Used to
+     *  tag proposed_services[] entries to a specific bag (see SelectionRow's
+     *  pairIds below) rather than associating by array position. */
+    id?: string;
     shoeType?: string | null;
     colors?: string[];
     brand?: string | null;
@@ -53,6 +55,12 @@ type AssessmentRow = {
   guest_email?: string | null;
   /** Delivery zip captured on AssessmentUpload.tsx (2026-09-24). */
   guest_zip?: string | null;
+  /** Deliberate complimentary-confirmation flag (2026-10-01, Item 4) —
+   *  staff-set only, here. True lets the customer confirm this repair with
+   *  no Stripe charge via POST /checkout/confirm-complimentary. Never
+   *  inferred from price — a request with $0 of selected services is NOT
+   *  automatically complimentary unless this is explicitly checked. */
+  complimentary?: boolean;
 };
 
 type Service = {
@@ -68,6 +76,14 @@ type ProposedService = {
   name: string;
   price_cents: number;
   tier: "essential" | "recommended";
+  /** Which bag (assessments.pairs[].id) this service applies to — added
+   *  2026-10-01 so the customer-facing Repair Details page can group
+   *  recommended/approved services directly under the relevant bag instead
+   *  of showing one flat list. Absent on proposals saved before this date,
+   *  or when the bag it was tagged to has no stable id (pre-2026-10-01
+   *  submission) — those render in a shared, ungrouped section rather than
+   *  being guessed into a specific bag. */
+  pair_id?: string;
 };
 
 type SelectionRow = {
@@ -75,6 +91,11 @@ type SelectionRow = {
   checked: boolean;
   tier: "essential" | "recommended";
   price_cents: number;
+  /** Which of this assessment's bags the service applies to, by pair id.
+   *  Defaults to every bag (today's behavior, unchanged) — staff only need
+   *  to touch this when a service is specific to one bag in a multi-bag
+   *  submission. Meaningless (and hidden) for single-bag assessments. */
+  pairIds: string[];
 };
 
 const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -97,7 +118,6 @@ const STATUS_TABS: { id: "pending" | "quote_ready" | "waitlisted" | "booked" | "
 
 const Admin = () => {
   usePageMeta({ title: "Admin — Cobbli", description: "Cobbli internal admin." });
-  const { isAdmin } = useRole();
   const [rows, setRows] = useState<AssessmentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [services, setServices] = useState<Service[]>([]);
@@ -119,6 +139,9 @@ const Admin = () => {
   const [editing, setEditing] = useState<AssessmentRow | null>(null);
   const [selection, setSelection] = useState<SelectionRow[]>([]);
   const [saving, setSaving] = useState(false);
+  // Deliberate complimentary-confirmation flag (2026-10-01, Item 4) — see
+  // the AssessmentRow.complimentary doc comment above.
+  const [complimentary, setComplimentary] = useState(false);
 
   const fetchRows = async (status: (typeof STATUS_TABS)[number]["id"]) => {
     setRows(null);
@@ -200,15 +223,29 @@ const Admin = () => {
   }, [rows, photosByRow]);
 
   const openEditor = (row: AssessmentRow) => {
-    const existing = new Map(row.proposed_services?.map((s) => [s.service_id, s]) ?? []);
+    setComplimentary(Boolean(row.complimentary));
+    const allPairIds = row.pairs.map((p) => p.id).filter((id): id is string => !!id);
+    // A service can now have multiple proposed_services entries — one per
+    // tagged bag (see saveProposal) — so group by service_id to recover a
+    // single row with every bag it applies to, rather than losing all but
+    // the last entry. Untagged entries (no pair_id — pre-2026-10-01
+    // proposals, or a bag with no stable id) count as "applies to every
+    // bag," matching how they're already treated everywhere else.
+    const bySid = new Map<string, ProposedService[]>();
+    for (const s of row.proposed_services ?? []) {
+      bySid.set(s.service_id, [...(bySid.get(s.service_id) ?? []), s]);
+    }
     setSelection(
       services.map((svc) => {
-        const e = existing.get(svc.id);
+        const entries = bySid.get(svc.id) ?? [];
+        const first = entries[0];
+        const taggedIds = entries.map((e) => e.pair_id).filter((id): id is string => !!id);
         return {
           service: svc,
-          checked: !!e,
-          tier: e?.tier ?? "essential",
-          price_cents: e?.price_cents ?? svc.base_price_cents,
+          checked: entries.length > 0,
+          tier: first?.tier ?? "essential",
+          price_cents: first?.price_cents ?? svc.base_price_cents,
+          pairIds: taggedIds.length > 0 ? taggedIds : allPairIds,
         };
       }),
     );
@@ -218,6 +255,7 @@ const Admin = () => {
   const closeEditor = () => {
     setEditing(null);
     setSelection([]);
+    setComplimentary(false);
   };
 
   const toggleService = (sid: string) =>
@@ -239,6 +277,19 @@ const Admin = () => {
     );
   };
 
+  // Toggle whether a service applies to a given bag (only surfaced in the UI
+  // for multi-bag assessments). A service always needs at least one bag
+  // while checked, so the last one can't be unchecked here directly.
+  const togglePair = (sid: string, pairId: string) =>
+    setSelection((rows) =>
+      rows.map((r) => {
+        if (r.service.id !== sid) return r;
+        const has = r.pairIds.includes(pairId);
+        if (has && r.pairIds.length === 1) return r;
+        return { ...r, pairIds: has ? r.pairIds.filter((id) => id !== pairId) : [...r.pairIds, pairId] };
+      }),
+    );
+
   const selectedCount = selection.filter((r) => r.checked).length;
 
   const saveProposal = async () => {
@@ -248,21 +299,33 @@ const Admin = () => {
       return;
     }
     setSaving(true);
+    // One ProposedService entry per (checked service × tagged bag), so each
+    // bag's recommended/approved services can be grouped correctly on the
+    // customer-facing Repair Details page (2026-10-01). Single-bag
+    // assessments (the common case) still emit exactly one entry per
+    // service, tagged to that bag — same shape as before, just with pair_id
+    // added. If the bag itself predates stable ids (submitted before
+    // 2026-10-01), pair_id is simply omitted for that entry.
     const proposed_services: ProposedService[] = selection
       .filter((r) => r.checked)
-      .map((r) => ({
-        service_id: r.service.id,
-        slug: r.service.slug,
-        name: r.service.name,
-        price_cents: r.price_cents,
-        tier: r.tier,
-      }));
+      .flatMap((r) => {
+        const targetIds = r.pairIds.length > 0 ? r.pairIds : [undefined];
+        return targetIds.map((pairId) => ({
+          service_id: r.service.id,
+          slug: r.service.slug,
+          name: r.service.name,
+          price_cents: r.price_cents,
+          tier: r.tier,
+          ...(pairId ? { pair_id: pairId } : {}),
+        }));
+      });
     try {
       await apiFetch(`/ops/assessments/${editing.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           proposed_services,
           status: "quote_ready",
+          complimentary,
         }),
       });
     } catch (e) {
@@ -359,28 +422,14 @@ const Admin = () => {
   // keeps its existing functional styling (staff tool, page-shell-only
   // scoping same as the rest of admin).
   return (
-    <main className="min-h-screen flex flex-col bg-white">
-      <Header />
-      <section className="flex-1 py-10">
-        <div className="container">
+    <AdminLayout>
           <h1
             className="text-3xl md:text-4xl uppercase mb-2"
             style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
           >
-            Admin
+            Proposals
           </h1>
           <p className="text-muted-foreground mb-6">Photo assessments</p>
-
-          {isAdmin && (
-            <div className="mb-6">
-              <Link
-                to="/admin/settings"
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                Settings (owner) →
-              </Link>
-            </div>
-          )}
 
           <div className="mb-6 inline-flex rounded-lg border border-border overflow-hidden">
             {STATUS_TABS.map((t) => (
@@ -454,8 +503,8 @@ const Admin = () => {
                                   <img
                                     key={i}
                                     src={urls[0]}
-                                    alt={itemCount > 1 ? `Item ${i + 1}` : "Item photo"}
-                                    title={itemCount > 1 ? `Item ${i + 1}` : undefined}
+                                    alt={`Bag ${i + 1}`}
+                                    title={`Bag ${i + 1}`}
                                     className="h-10 w-10 rounded-md object-cover border border-border"
                                   />
                                 ) : (
@@ -572,9 +621,6 @@ const Admin = () => {
               </table>
             </div>
           )}
-        </div>
-      </section>
-      <Footer />
 
       {/* Build / edit proposal */}
       <Dialog open={!!editing} onOpenChange={(open) => !open && closeEditor()}>
@@ -600,11 +646,9 @@ const Admin = () => {
                 const urls = photosByRow[editing.id]?.[i] ?? [];
                 return (
                   <div key={i} className="rounded-lg border border-border p-3">
-                    {editing.pairs.length > 1 && (
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                        Item {i + 1}
-                      </p>
-                    )}
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                      Bag {i + 1}
+                    </p>
                     {urls.length > 0 ? (
                       <div className="flex gap-2 flex-wrap">
                         {urls.map((src, j) => (
@@ -718,12 +762,57 @@ const Admin = () => {
                           onChange={(e) => setPrice(row.service.id, e.target.value)}
                         />
                       </div>
+                      {/* Only shown for multi-bag assessments — single-bag
+                          submissions have nothing to disambiguate, so this
+                          stays out of the way for the common case
+                          (2026-10-01). Bags without a stable id (pre-dating
+                          this feature) can't be individually targeted and
+                          are left out of the picker; the service still
+                          applies to them via the "no pair_id" fallback. */}
+                      {editing && editing.pairs.length > 1 && (
+                        <div className="sm:col-span-2">
+                          <p className="text-xs text-muted-foreground mb-1">Applies to</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {editing.pairs.map((p, i) =>
+                              p.id ? (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => togglePair(row.service.id, p.id!)}
+                                  className={`px-2.5 py-1 rounded-full text-xs border ${
+                                    row.pairIds.includes(p.id)
+                                      ? "bg-primary text-primary-foreground border-primary"
+                                      : "bg-white text-primary border-border"
+                                  }`}
+                                >
+                                  Bag {i + 1}
+                                </button>
+                              ) : null,
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               ))
             )}
           </div>
+
+          {/* Deliberate complimentary-confirmation flag (2026-10-01, Item 4)
+              — explicit staff opt-in only, never inferred from price. When
+              set, the customer sees "Confirm complimentary repair" instead
+              of "Continue to checkout" and the order is created with no
+              Stripe charge (POST /checkout/confirm-complimentary). */}
+          <label className="mt-4 flex items-start gap-2 rounded-lg border border-border p-3 text-sm">
+            <Checkbox checked={complimentary} onCheckedChange={(v) => setComplimentary(Boolean(v))} />
+            <span>
+              <span className="font-medium">Complimentary repair (no charge)</span>
+              <span className="block text-xs text-muted-foreground">
+                The customer confirms for free instead of paying — use for test/comp repairs only.
+              </span>
+            </span>
+          </label>
 
           <DialogFooter className="mt-4">
             <p className="text-xs text-muted-foreground mr-auto self-center">
@@ -738,7 +827,7 @@ const Admin = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </main>
+    </AdminLayout>
   );
 };
 
