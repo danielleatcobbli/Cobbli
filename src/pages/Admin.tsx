@@ -60,6 +60,9 @@ type Service = {
   slug: string;
   name: string;
   base_price_cents: number;
+  /** Coming-soon services can't be sold: checkout (backend/app/pricing.py)
+   *  rejects them, so they're shown greyed out and can't be picked. */
+  is_coming_soon?: boolean | null;
 };
 
 type ProposedService = {
@@ -124,13 +127,26 @@ const Admin = () => {
     setRows(null);
     setError(null);
     try {
-      const assessments = await apiFetchJson<Array<Omit<AssessmentRow, "profile">>>(
-        `/ops/assessments?status=${encodeURIComponent(status)}`,
+      // The ops endpoints respond with { data: [...] }; accept a bare array too.
+      const unwrap = <T,>(body: T[] | { data?: T[] | null }): T[] =>
+        Array.isArray(body) ? body : body?.data ?? [];
+
+      const assessments = unwrap(
+        await apiFetchJson<
+          | Array<Omit<AssessmentRow, "profile">>
+          | { data?: Array<Omit<AssessmentRow, "profile">> | null }
+        >(`/ops/assessments?status=${encodeURIComponent(status)}`),
       );
-      const ids = Array.from(new Set(assessments.map((a) => a.user_id)));
+      // Guest submissions have no user_id, so skip those when looking up profiles.
+      const ids = Array.from(
+        new Set(assessments.map((a) => a.user_id).filter((id): id is string => !!id)),
+      );
+      type ProfileRow = { user_id: string; first_name: string | null; last_name: string | null; phone: string | null };
       const profiles = ids.length
-        ? await apiFetchJson<Array<{ user_id: string; first_name: string | null; last_name: string | null; phone: string | null }>>(
-            `/ops/profiles?ids=${encodeURIComponent(ids.join(","))}`,
+        ? unwrap(
+            await apiFetchJson<ProfileRow[] | { data?: ProfileRow[] | null }>(
+              `/ops/profiles?ids=${encodeURIComponent(ids.join(","))}`,
+            ),
           )
         : [];
       const profileMap = new Map(profiles.map((p) => [p.user_id, p]));
@@ -141,6 +157,7 @@ const Admin = () => {
         })),
       );
     } catch (err) {
+      console.error("[admin/assessments] fetchRows failed", { status, err });
       setError(err instanceof Error ? err.message : "Could not load assessments.");
       setRows([]);
     }
@@ -154,7 +171,7 @@ const Admin = () => {
     (async () => {
       const { data } = await supabase
         .from("services")
-        .select("id, slug, name, base_price_cents")
+        .select("id, slug, name, base_price_cents, is_coming_soon")
         .eq("is_active", true)
         .order("popularity_rank", { ascending: true });
       setServices(data ?? []);
@@ -206,7 +223,9 @@ const Admin = () => {
         const e = existing.get(svc.id);
         return {
           service: svc,
-          checked: !!e,
+          // A coming-soon service can't be sold, so it's never pre-checked —
+          // re-saving an older proposal drops it instead of failing at payment.
+          checked: !!e && svc.is_coming_soon !== true,
           tier: e?.tier ?? "essential",
           price_cents: e?.price_cents ?? svc.base_price_cents,
         };
@@ -223,7 +242,9 @@ const Admin = () => {
   const toggleService = (sid: string) =>
     setSelection((rows) =>
       rows.map((r) =>
-        r.service.id === sid ? { ...r, checked: !r.checked } : r,
+        r.service.id === sid && r.service.is_coming_soon !== true
+          ? { ...r, checked: !r.checked }
+          : r,
       ),
     );
 
@@ -671,19 +692,26 @@ const Admin = () => {
                 <div
                   key={row.service.id}
                   className={`rounded-lg border p-3 ${
-                    row.checked ? "border-primary bg-secondary/30" : "border-border"
+                    row.service.is_coming_soon === true
+                      ? "border-border opacity-50"
+                      : row.checked
+                        ? "border-primary bg-secondary/30"
+                        : "border-border"
                   }`}
                 >
                   <div className="flex items-start gap-3">
                     <Checkbox
                       checked={row.checked}
                       onCheckedChange={() => toggleService(row.service.id)}
+                      disabled={row.service.is_coming_soon === true}
                       className="mt-1"
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-primary truncate">{row.service.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        Default {formatCents(row.service.base_price_cents)}
+                        {row.service.is_coming_soon === true
+                          ? "Coming soon — not available to book yet"
+                          : `Default ${formatCents(row.service.base_price_cents)}`}
                       </p>
                     </div>
                   </div>

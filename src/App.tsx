@@ -203,6 +203,14 @@ const App = () => (
                           }
                         />
                         <Route
+                          path="/admin/assessments"
+                          element={
+                            <RoleRoute allow={["admin", "staff"]}>
+                              <Admin />
+                            </RoleRoute>
+                          }
+                        />
+                        <Route
                           path="/admin/order/:id"
                           element={
                             <RoleRoute allow={["admin", "staff"]}>

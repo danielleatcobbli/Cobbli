@@ -194,7 +194,13 @@ const AssessmentProposal = () => {
     const acceptedServices: BagService[] = [
       ...essential,
       ...recommended.filter((r) => selectedRecommended.has(r.service_id)),
-    ].map((l) => ({ id: l.service_id, name: l.name, price: l.price_cents }));
+    ].map((l) => ({
+      // The bag and the backend pricing catalog key services by slug, not the
+      // DB uuid (service_id), which checkout rejects as an unknown service.
+      id: l.slug,
+      name: l.name,
+      price: l.price_cents,
+    }));
 
     // Label is just an ordinal fallback for contexts that need plain text
     // (e.g. a screen reader, or before the thumbnail has loaded) — the real

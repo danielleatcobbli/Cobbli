@@ -62,7 +62,25 @@ export async function apiFetchJson<T = unknown>(
     } catch {
       // leave body null
     }
-    throw new ApiError(res.status, body);
+    // FastAPI puts the human-readable reason in `detail`; surface it so the UI
+    // and console say *why* a request failed, not just its status code.
+    const detail =
+      body && typeof body === "object" && "detail" in body
+        ? (body as { detail: unknown }).detail
+        : null;
+    const reason =
+      typeof detail === "string" ? detail : detail ? JSON.stringify(detail) : null;
+    console.error("[api] request failed", {
+      method: init.method ?? "GET",
+      path,
+      status: res.status,
+      body,
+    });
+    throw new ApiError(
+      res.status,
+      body,
+      reason ? `${reason} (${res.status})` : undefined,
+    );
   }
   return (await res.json()) as T;
 }
