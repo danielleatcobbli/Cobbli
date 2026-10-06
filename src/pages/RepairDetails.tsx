@@ -1,3 +1,10 @@
+import RepairCheckout, { addressComplete, contactComplete, type CheckoutDetails } from "@/components/cobbli/repair/RepairCheckout";
+import { useServiceableZips } from "@/hooks/useServiceableZips";
+import RecommendationReview from "@/components/cobbli/repair/RecommendationReview";
+import RepairResponse from "@/components/cobbli/repair/RepairResponse";
+import { repairResponseTransport } from "@/lib/repairResponse";
+import { normalizeRecommendations, toggleRecommendation, initialRecommendationSelection, type Recommendation } from "@/lib/recommendations";
+import { PAYMENTS_ENABLED } from "@/lib/pilot";
 /**
  * RepairDetails
  *
@@ -28,7 +35,6 @@ import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -66,7 +72,11 @@ const PageShell = ({
   refLabel,
   meta,
   children,
+  title,
+  subtitle,
 }: {
+  title?: string;
+  subtitle?: string;
   refLabel: string;
   meta: { label: string; pill: string; next: string };
   children: React.ReactNode;
@@ -74,25 +84,16 @@ const PageShell = ({
   <main className="min-h-screen flex flex-col bg-white">
     <Header />
     <section className="flex-1 py-10 md:py-14">
-      <div className="container max-w-3xl">
-        {/* "Repair #…" is the primary heading here and on the My Repairs
-            list card — not a generic "Repair details" label — per Danielle's
-            2026-10-01 call to remove the legacy item-name/page-label
-            headings in favor of the one reference number used everywhere. */}
-        <p className="text-sm uppercase tracking-wide text-muted-foreground">Repair details</p>
-        <h1
-          className="text-2xl md:text-3xl uppercase"
-          style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
-        >
-          {refLabel}
-        </h1>
-
-        <div className="mt-4 flex items-center gap-3 flex-wrap">
-          <span className={cn("inline-block rounded-full px-3 py-1 text-sm font-semibold", meta.pill)}>
-            {meta.label}
-          </span>
-          {meta.next && <span className="text-sm text-foreground/80">{meta.next}</span>}
-        </div>
+      <div className={cn("container", title ? "max-w-6xl" : "max-w-3xl")}>
+        <Link to="/account/orders" className="mb-5 inline-block text-sm text-primary underline underline-offset-4">← My Repairs</Link>
+        {title ? <>
+          <div className="flex flex-wrap items-center gap-3 text-sm"><span>{refLabel}</span><span className="rounded-full bg-[#fff4d5] px-3 py-1 text-primary">{meta.label}</span></div>
+          <h1 className="mt-5 font-display text-3xl font-bold uppercase leading-tight text-primary sm:text-4xl lg:text-5xl">{title}</h1>
+          {subtitle && <p className="mt-3 text-base text-muted-foreground sm:text-lg">{subtitle}</p>}
+        </> : <>
+          <h1 className="font-display text-2xl font-bold uppercase text-primary md:text-3xl">{refLabel}</h1>
+          <div className="mt-4 flex flex-wrap items-center gap-3"><span className={cn("rounded-full px-3 py-1 text-sm font-semibold", meta.pill)}>{meta.label}</span>{meta.next && <span className="text-sm text-foreground/80">{meta.next}</span>}</div>
+        </>}
 
         {children}
       </div>
@@ -171,6 +172,12 @@ const BagThumbnail = ({ src, label, onClick }: { src: string | null; label: stri
 
 // ─── request (assessment) view ─────────────────────────────────────────────
 
+type ConfirmedRepair = {
+  order_number: string; status: string; pickup_date: string | null; pickup_time_label: string | null;
+  return_date: string | null; return_time_label: string | null;
+  order_items: { service_snapshot: { name?: string }; pair_snapshot: { id?: string } }[];
+};
+
 type ReqPair = {
   id?: string;
   photoPaths?: string[];
@@ -178,16 +185,16 @@ type ReqPair = {
   shoeType?: string | null;
 };
 
-type ReqProposedService = {
+type ReqProposedService = Recommendation & {
   service_id: string;
   slug: string;
   name: string;
   price_cents: number;
-  tier: "essential" | "recommended";
+  tier: "essential" | "recommended" | "optional";
   pair_id?: string;
 };
 
-const RepairDetailsRequest = ({ id }: { id: string }) => {
+export const RepairDetailsRequest = ({ id, token }: { id: string; token?: string }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addPair, clear, taggedAssessmentIds } = useBag();
@@ -214,9 +221,14 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
   };
   const { user: accountUser, addresses } = useAccount();
 
+  const coverageQuery = useServiceableZips();
+  const [requestContact, setRequestContact] = useState({email:"", zip:""});
+  const [showPickup, setShowPickup] = useState(false);
+  const responseTransport = useMemo(() => repairResponseTransport(id, token), [id, token]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pairs, setPairs] = useState<ReqPair[]>([]);
+  const [revision, setRevision] = useState("");
   const [proposedServices, setProposedServices] = useState<ReqProposedService[]>([]);
   const [status, setStatus] = useState<string>("");
   const [thumbsByPair, setThumbsByPair] = useState<string[][]>([]);
@@ -237,11 +249,14 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error: e } = await supabase
-        .from("assessments")
-        .select("id, pairs, status, proposed_services, complimentary")
-        .eq("id", id)
-        .maybeSingle();
+      setLoading(true);
+      setShowPickup(false);
+      setComplimentaryPickup(null);
+      setError(null);
+      const result = token
+        ? await apiFetchJson<{ id: string; pairs: ReqPair[]; status: string; proposed_services: ReqProposedService[]; complimentary: boolean; updated_at: string; photo_urls: Record<string,string>; confirmed_order?: ConfirmedRepair }>(`/public/proposal/${token}`).then(data => ({ data, error: null }))
+        : await supabase.from("assessments").select("*").eq("id", id).maybeSingle();
+      const { data, error: e } = result;
       if (cancelled) return;
       if (e || !data) {
         setError(e?.message || "Repair request not found");
@@ -249,34 +264,38 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
         return;
       }
       const ps = (data.pairs as unknown as ReqPair[]) ?? [];
-      const services = (data.proposed_services as unknown as ReqProposedService[]) ?? [];
+      const services = normalizeRecommendations((data.proposed_services as unknown as ReqProposedService[]) ?? []);
+      setRequestContact({email: String((data as {guest_email?: string}).guest_email || ""), zip: String((data as {guest_zip?: string}).guest_zip || "")});
       setPairs(ps);
       setStatus(data.status);
       setProposedServices(services);
+      setRevision(data.updated_at);
       setComplimentary(Boolean((data as { complimentary?: boolean }).complimentary));
-      // Restore a saved-this-visit selection if there is one (see
-      // repairSelections.ts); otherwise fall back to "every recommended
-      // service pre-selected", the original default.
-      const saved = readSelectedRecommended(id);
+      // Restore this visit’s choices, including an explicitly empty selection.
+      // New reviews preselect one option per problem; this is not approval.
+      const saved = readSelectedRecommended(`${id}:${data.updated_at}`);
       setSelectedRecommended(
-        saved ?? new Set(services.filter((s) => s.tier === "recommended").map((s) => s.service_id)),
+        initialRecommendationSelection(services, saved),
       );
+      if ("confirmed_order" in data && data.confirmed_order) setConfirmedOrder(data.confirmed_order);
       const all: string[][] = [];
       for (const p of ps) {
         const out: string[] = [];
         for (const path of (p.photoPaths ?? []).slice(0, 12)) {
-          const { data: s } = await supabase.storage.from("assessment-uploads").createSignedUrl(path, 3600);
-          if (s?.signedUrl) out.push(s.signedUrl);
+          if (token && "photo_urls" in data) {
+            if (data.photo_urls[path]) out.push(data.photo_urls[path]);
+          } else {
+            const { data: signed } = await supabase.storage.from("assessment-uploads").createSignedUrl(path, 3600);
+            if (signed?.signedUrl) out.push(signed.signedUrl);
+          }
         }
         all.push(out);
       }
       if (!cancelled) setThumbsByPair(all);
       setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+    })().catch(() => { if (!cancelled) { setError("We couldn't load your repair. Please refresh and try again."); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [id, token]);
 
   // Group services by bag id. Untagged entries (no pair_id — proposals saved
   // before 2026-10-01, or a bag that predates stable ids) apply generally
@@ -292,38 +311,24 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
   }, [proposedServices]);
   const untagged = useMemo(() => proposedServices.filter((s) => !s.pair_id), [proposedServices]);
 
-  const essentialAll = proposedServices.filter((s) => s.tier === "essential");
-  const recommendedAll = proposedServices.filter((s) => s.tier === "recommended");
-  const essentialSubtotal = essentialAll.reduce((a, l) => a + l.price_cents, 0);
-  const recommendedSubtotal = recommendedAll
-    .filter((l) => selectedRecommended.has(l.service_id))
-    .reduce((a, l) => a + l.price_cents, 0);
+  const selectedLines = proposedServices.filter(l => selectedRecommended.has(l.recommendation_id!));
+  const essentialAll = selectedLines.filter(l => l.tier === "essential");
+  const recommendedAll = selectedLines.filter(l => l.tier !== "essential");
+  const essentialSubtotal = essentialAll.reduce((total, l) => total + l.price_cents, 0);
+  const recommendedSubtotal = recommendedAll.reduce((total, l) => total + l.price_cents, 0);
   const estimatedTotal = essentialSubtotal + recommendedSubtotal + COURIER_FEE_CENTS;
 
   const isWaitlisted = status === "waitlisted";
-  const proposalReady = status === "quote_ready" || status === "booked" || isWaitlisted;
   const alreadyBooked = status === "booked";
-  const hasAnyServices = proposedServices.length > 0;
 
-  const toggleRecommended = (sid: string) =>
-    setSelectedRecommended((prev) => {
-      const next = new Set(prev);
-      if (next.has(sid)) next.delete(sid);
-      else next.add(sid);
-      writeSelectedRecommended(id, next);
-      return next;
-    });
+  const toggleRecommended = (sid: string) => setSelectedRecommended(prev => {
+    const next = toggleRecommendation(proposedServices, prev, sid);
+    writeSelectedRecommended(`${id}:${revision}`, next);
+    return next;
+  });
 
-  // Each bag only gets its OWN tagged (essential + accepted recommended)
-  // services here — not every service in the whole proposal — so two bags
-  // with different services stay correctly associated all the way through
-  // checkout (2026-10-01 fix; the flat "every bag gets every service" bug
-  // predates per-bag tagging, back when there was only ever one shared
-  // list). Untagged services (legacy proposals, or a bag with no stable id)
-  // are attached to the first bag only, rather than duplicated onto every
-  // bag — the common single-bag case is unaffected either way.
   const onAcceptAndCheckout = () => {
-    if (alreadyBooked || !proposalReady) return;
+    if (alreadyBooked || status !== "quote_ready") return;
     if (essentialAll.length + recommendedAll.length === 0) return;
     // For the MVP, one checkout corresponds to exactly one request (which
     // may contain multiple bags) — never a mix of two different requests'
@@ -345,7 +350,7 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
       const tagged = proposedServices.filter((s) => s.pair_id === bagId);
       const extra = isFirst ? proposedServices.filter((s) => !s.pair_id) : [];
       return [...tagged, ...extra]
-        .filter((s) => s.tier === "essential" || selectedRecommended.has(s.service_id))
+        .filter((s) => selectedRecommended.has(s.recommendation_id!))
         .map((l) => ({ id: l.service_id, name: l.name, price: l.price_cents }));
     };
     pairs.forEach((p, i) => {
@@ -369,12 +374,25 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
   // service selections (still only in local component state / the
   // request's own proposed_services) are completely untouched, so they can
   // just pick another time and try again.
-  const defaultAddress = addresses.find((a) => a.isDefault) ?? addresses[0];
+  const savedAddress = addresses.find((a) => a.isDefault) ?? addresses[0];
+  const [contactDraft, setContactDraft] = useState<Record<string,string>>({});
+  const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedRepair | null>(null);
+  const contact = { name: token ? "" : accountUser.name || "", email: requestContact.email || accountUser.email || user?.email || "", phone: token ? "" : accountUser.phone || "", ...contactDraft };
+  const defaultAddress = { street: "", street2: "", city: "New York", state: "NY", zip: requestContact.zip,
+    ...Object.fromEntries(Object.entries(contactDraft).filter(([key]) => ["street","street2","city","state","zip"].includes(key))) };
+  const checkoutValues = { ...contact, ...defaultAddress } as CheckoutDetails;
+  const coverage = coverageQuery.isServiceable(defaultAddress.zip);
+  const changeCheckoutField = (key: keyof CheckoutDetails, value: string) => {
+    setContactDraft(prev => ({...prev, [key]: value}));
+    if (["street","street2","city","state","zip"].includes(key)) setComplimentaryPickup(null);
+  };
+
+
   const onConfirmComplimentary = async () => {
-    if (alreadyBooked || !proposalReady || confirmingComplimentary) return;
+    if (alreadyBooked || status !== "quote_ready" || confirmingComplimentary || (pairs.length > 1 && untagged.length > 0)) return;
     if (essentialAll.length + recommendedAll.length === 0) return;
-    if (!defaultAddress) {
-      toast.error("Add a delivery address in your account before confirming.");
+    if (!contactComplete(checkoutValues) || !addressComplete(checkoutValues) || coverage !== true) {
+      toast.error("Please complete your contact details and pickup address.");
       return;
     }
     if (!complimentaryPickup) {
@@ -388,7 +406,7 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
         const tagged = proposedServices.filter((s) => s.pair_id === p.id);
         const extra = isFirst ? proposedServices.filter((s) => !s.pair_id) : [];
         return [...tagged, ...extra]
-          .filter((s) => s.tier === "essential" || selectedRecommended.has(s.service_id))
+          .filter((s) => selectedRecommended.has(s.recommendation_id!))
           .map((s) => ({
             pair_snapshot: p,
             service_snapshot: { id: s.service_id, name: s.name },
@@ -411,8 +429,12 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
           body: JSON.stringify({
             cartPayload: {
               assessment_id: id,
-              contact_email: accountUser.email || user?.email,
-              contact_phone: accountUser.phone,
+              proposal_token: token,
+              recommendation_revision: revision,
+              selected_recommendation_ids: [...selectedRecommended],
+              contact_name: contact.name,
+              contact_email: contact.email,
+              contact_phone: contact.phone,
               delivery_address: defaultAddress,
               pickup_window: {
                 start: complimentaryPickup.start_time,
@@ -424,7 +446,11 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
           }),
         },
       );
-      navigate(`/repair/order/${orderId}`);
+      if (token) {
+        setStatus("booked");
+        const updated = await apiFetchJson<{ confirmed_order: typeof confirmedOrder }>(`/public/proposal/${token}`);
+        setConfirmedOrder(updated.confirmed_order);
+      } else navigate(`/repair/order/${orderId}`);
     } catch (e) {
       const message =
         e instanceof ApiError && typeof (e.body as { detail?: string })?.detail === "string"
@@ -468,256 +494,86 @@ const RepairDetailsRequest = ({ id }: { id: string }) => {
     );
   }
 
+  if (alreadyBooked && token) {
+    return <PageShell refLabel={confirmedOrder ? `Repair #${confirmedOrder.order_number}` : "Repair confirmed"}
+      meta={confirmedOrder ? REPAIR_STATUS[confirmedOrder.status] ?? fallbackMeta(confirmedOrder.status) : fallbackMeta("booked")}>
+      <section className="mt-8 space-y-5">
+        <h2 className="text-xl">Approved repairs</h2>
+        {confirmedOrder ? pairs.map((bag, index) => {
+          const work = confirmedOrder.order_items.filter(item => item.pair_snapshot?.id === bag.id);
+          if (!work.length) return null;
+          return <div key={bag.id || index} className="rounded-xl border p-5 flex gap-4">
+            <BagThumbnail src={thumbsByPair[index]?.[0] || null} label={`Bag ${index + 1}`} />
+            <div><p className="font-semibold">Bag {index + 1}</p>{work.map((item, i) => <p key={i}>{item.service_snapshot?.name || "Repair"}</p>)}</div>
+          </div>;
+        }) : <p>Your repair has been confirmed. Contact us if you need its details.</p>}
+        <h2 className="text-xl">Pickup &amp; Return</h2>
+        <p>Pickup: {confirmedOrder?.pickup_date ? `${fmtDateKey(confirmedOrder.pickup_date)}, ${confirmedOrder.pickup_time_label || ""}` : "Contact us for pickup details."}</p>
+        <p>Return: {confirmedOrder?.return_date ? `${fmtDateKey(confirmedOrder.return_date)}, ${confirmedOrder.return_time_label || ""}` : "We'll contact you when your repair is ready to arrange its return."}</p>
+        <p className="text-sm">Need help? <a className="underline" href="mailto:support@cobbli.com">Contact us</a>.</p>
+      </section>
+    </PageShell>;
+  }
+
   // Same reference format as the My Repairs card (Account.tsx) — "Repair
   // #..." on both, not "Request #..." (2026-10-01 rename).
   const ref = `Repair #${id.slice(0, 8).toUpperCase()}`;
 
-  return (
-    <PageShell refLabel={ref} meta={meta}>
-      {/* Your bags */}
-      <section className="mt-8">
-        <h2 className="text-xl text-primary mb-3">Your bags</h2>
-        <div className="space-y-4">
-          {pairs.map((p, i) => {
-            const thumbs = thumbsByPair[i] ?? [];
-            const bagId = p.id;
-            const taggedServices = bagId ? byPairId.get(bagId) ?? [] : [];
-            const essential = taggedServices.filter((s) => s.tier === "essential");
-            const recommended = taggedServices.filter((s) => s.tier === "recommended");
-            const showReviewing = !hasAnyServices;
-            const showNoneForThisBag = hasAnyServices && bagId && taggedServices.length === 0 && untagged.length === 0;
-            return (
-              <div key={bagId ?? i} className="rounded-xl border border-border p-5">
-                <div className="flex items-start gap-4">
-                  <BagThumbnail
-                    src={thumbs[0] ?? null}
-                    label={`Bag ${i + 1}`}
-                    onClick={thumbs.length > 0 ? () => setLightboxPair(i) : undefined}
-                  />
-                  <div className="flex-1 min-w-0">
-                    {/* 2026-10-01: the customer-entered description (legacy
-                        item name, e.g. "Black loafers") is no longer shown
-                        here — bags are identified by photo + "Bag N" only.
-                        The data itself is untouched in storage. */}
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Bag {i + 1}</p>
-                  </div>
-                </div>
+  const hasUnassignedServices = (pairs.length > 1 && untagged.length > 0) || proposedServices.some(line => line.pair_id && !pairs.some(bag => bag.id === line.pair_id));
+  const reviewBags = pairs.map((bag, index) => ({
+    id: bag.id, label: `Bag ${index + 1}`, photo: thumbsByPair[index]?.[0],
+    lines: [...(bag.id ? byPairId.get(bag.id) || [] : []), ...(pairs.length === 1 ? untagged : [])],
+  }));
 
-                {(essential.length > 0 || recommended.length > 0) && (
-                  <div className="mt-4 space-y-3">
-                    {essential.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                          Recommended
-                        </p>
-                        <ul className="divide-y divide-border border border-border rounded-lg">
-                          {essential.map((s) => (
-                            <ServiceLine key={s.service_id} name={s.name} priceCents={s.price_cents} />
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {recommended.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                          Nice to have
-                        </p>
-                        <ul className="divide-y divide-border border border-border rounded-lg">
-                          {recommended.map((s) => {
-                            const checked = selectedRecommended.has(s.service_id);
-                            return (
-                              <li key={s.service_id} className="p-3 flex items-center justify-between gap-4">
-                                <label className="flex items-center gap-3 cursor-pointer flex-1 text-sm">
-                                  <Checkbox
-                                    checked={checked}
-                                    onCheckedChange={() => toggleRecommended(s.service_id)}
-                                    disabled={alreadyBooked}
-                                  />
-                                  <span className="text-primary">{s.name}</span>
-                                </label>
-                                <span className="font-medium text-sm">
-                                  {s.price_cents === 0 ? "Complimentary test repair" : formatPrice(s.price_cents)}
-                                </span>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {showReviewing && (
-                  <p className="mt-4 text-sm text-muted-foreground">We're reviewing this bag.</p>
-                )}
-                {showNoneForThisBag && (
-                  <p className="mt-4 text-sm text-muted-foreground">We're reviewing this bag.</p>
-                )}
+  if (status === "needs_more_info") return <PageShell refLabel={ref} meta={meta}
+    title="A closer look, please" subtitle="A little more detail will help us recommend the right fixes.">
+    <RepairResponse key={id} transport={responseTransport} bags={reviewBags} />
+  </PageShell>;
 
-                <PhotoLightbox
-                  open={lightboxPair === i}
-                  onOpenChange={(open) => setLightboxPair(open ? i : null)}
-                  photos={thumbs}
-                  label={`Bag ${i + 1}`}
-                />
-              </div>
-            );
-          })}
-        </div>
+  if (showPickup && complimentary && status === "quote_ready") return <PageShell refLabel={ref} meta={meta}
+    title="Confirm your repair" subtitle="Add your pickup details, choose a time, and you’re all set.">
+    <RepairCheckout values={checkoutValues} onChange={changeCheckoutField} coverage={coverage}
+      coverageError={coverageQuery.isError} onRetryCoverage={() => { void coverageQuery.refetch(); }}
+      bags={reviewBags} selected={selectedRecommended} pickup={complimentaryPickup}
+      scheduler={<PickupScheduler selected={complimentaryPickup} onSelect={setComplimentaryPickup} />}
+      busy={confirmingComplimentary} onConfirm={onConfirmComplimentary} onEdit={() => setShowPickup(false)}
+      savedAddress={!token && savedAddress ? `${savedAddress.street}, ${savedAddress.zip}` : undefined}
+      onUseSavedAddress={() => { if (savedAddress) { setContactDraft(prev => ({...prev, street:savedAddress.street, street2:savedAddress.street2 || "", city:savedAddress.city, state:savedAddress.state, zip:savedAddress.zip})); setComplimentaryPickup(null); } }} />
+  </PageShell>;
 
-        {/* Services not tagged to a specific bag — legacy proposals, or a
-            service that genuinely applies across bags. */}
-        {untagged.length > 0 && (
-          <div className="mt-4 rounded-xl border border-border p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-              Also recommended
-            </p>
-            <ul className="divide-y divide-border border border-border rounded-lg">
-              {untagged.map((s) => (
-                <ServiceLine key={s.service_id} name={s.name} priceCents={s.price_cents} />
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
+  if (status === "quote_ready" || isWaitlisted) return <PageShell refLabel={ref} meta={meta}
+    title="Review your recommendations"
+    subtitle="We’ve selected our suggested repairs. Uncheck anything you’d like to skip.">
+    <RecommendationReview bags={reviewBags} selected={selectedRecommended} onToggle={toggleRecommended}
+      complimentary={complimentary} disabled={confirmingComplimentary || isWaitlisted}
+      canContinue={status === "quote_ready" && selectedLines.length > 0 && pairs.length > 0 && !hasUnassignedServices && (complimentary || PAYMENTS_ENABLED)}
+      onContinue={() => {
+        if (status !== "quote_ready" || !selectedLines.length || hasUnassignedServices) return;
+        writeSelectedRecommended(`${id}:${revision}`, selectedRecommended);
+        if (complimentary) { setShowPickup(true); window.scrollTo({ top: 0, behavior: "smooth" }); }
+        else if (PAYMENTS_ENABLED) onAcceptAndCheckout();
+      }}
+      onEdit={() => setShowPickup(false)} onPhoto={setLightboxPair}
+      notice={isWaitlisted ? "Your request is on hold for capacity. We’ll contact you about next steps."
+        : hasUnassignedServices ? "Some recommendations need a bag assigned. Please contact us before confirming."
+        : !complimentary && !PAYMENTS_ENABLED ? "Online confirmation isn’t available for this request yet. Please email us for help." : undefined}
+      />
+    {pairs.map((bag, index) => <PhotoLightbox key={bag.id || index} open={lightboxPair === index}
+      onOpenChange={open => setLightboxPair(open ? index : null)} photos={thumbsByPair[index] || []} label={`Bag ${index + 1}`} />)}
+  </PageShell>;
 
-      {/* Pickup & Return */}
-      <section className="rounded-lg border border-border bg-card p-6 shadow-soft mt-8">
-        <h2 className="text-lg font-semibold mb-4">Pickup &amp; Return</h2>
-        {isClosedRequest(status) ? (
-          <p className="text-sm text-muted-foreground">
-            This request is closed, so there's nothing to pick up or return.
-          </p>
-        ) : (
-          <>
-            <div className="mb-4">
-              <p className="text-sm font-medium mb-1">Pickup</p>
-              <p className="text-sm text-foreground/80">
-                {isWaitlisted
-                  ? "Pickup scheduling will be available once we can accept your repair."
-                  : "Choose your pickup when you confirm your repair, subject to availability."}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm font-medium mb-1">Return</p>
-              <p className="text-sm text-foreground/80">
-                Return scheduling will be available here when your repair is ready.
-              </p>
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* Pricing */}
-      {!isClosedRequest(status) && (
-        <section className="mt-8 rounded-xl border border-border p-5">
-          <h2 className="text-xl text-primary">Pricing</h2>
-          {!hasAnyServices ? (
-            <p className="mt-3 text-sm text-muted-foreground">Price pending assessment.</p>
-          ) : (
-            <>
-              <dl className="mt-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Recommended repairs</dt>
-                  {/* Only the real staff-set flag ever renders "Complimentary"
-                      — a $0 essential subtotal on its own means the price
-                      just hasn't been set, not that it's free (2026-10-01
-                      fix: this previously inferred "complimentary" from
-                      essentialSubtotal === 0, exactly the conflation
-                      Danielle's spec called out). */}
-                  <dd>
-                    {complimentary
-                      ? "Complimentary"
-                      : essentialSubtotal === 0
-                        ? "Price pending assessment"
-                        : formatPrice(essentialSubtotal)}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Nice-to-have add-ons</dt>
-                  <dd>{complimentary ? "Complimentary" : formatPrice(recommendedSubtotal)}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Pickup &amp; return fee</dt>
-                  <dd>{complimentary || COURIER_FEE_CENTS === 0 ? "Free" : formatPrice(COURIER_FEE_CENTS)}</dd>
-                </div>
-                {/* "Estimated" — nothing is charged yet and this can still
-                    change before checkout, so this is never labeled "Total"
-                    (2026-10-01 pricing-labeling rule). */}
-                <div className="border-t border-border pt-3 flex justify-between font-semibold text-base">
-                  <dt>Estimated total</dt>
-                  <dd>{complimentary ? "$0.00" : formatPrice(estimatedTotal)}</dd>
-                </div>
-              </dl>
-              <p className="mt-3 text-xs text-muted-foreground">
-                {complimentary
-                  ? "This repair is complimentary — nothing will be charged."
-                  : "Nothing is charged yet — you'll pay at checkout, only once your repair is confirmed."}
-              </p>
-            </>
-          )}
-        </section>
-      )}
-
-      {proposalReady && !isClosedRequest(status) && (
-        <div className="mt-8 flex flex-wrap gap-3">
-          {isWaitlisted ? (
-            // "Join the waitlist" used to be a button (onJoinWaitlist) that
-            // only flipped local component state — nothing was ever saved,
-            // so staff had no record of who'd actually "joined," and the
-            // button implied an action that didn't exist (2026-10-02,
-            // Danielle's call: remove/disable it until it truly persists —
-            // see the written capacity report for the smallest real fix).
-            // This is now a plain status message: the request already is
-            // waitlisted (staff set that), selections are already saved in
-            // proposed_services regardless of any click, and there's no
-            // further action for the customer to take here.
-            <p className="text-sm text-foreground/80">
-              {/* "the moment a spot opens" (automated, real-time) was never
-                  true — capacity isn't tracked anywhere yet, waitlisted is a
-                  staff-set status with no trigger behind it, so there's no
-                  process to promise that specific timing (2026-10-01 fix). */}
-              Your selections are saved — we'll reach out as soon as we can take on your repair.
-            </p>
-          ) : complimentary ? (
-            <div className="w-full space-y-4">
-              {!alreadyBooked && (
-                <div>
-                  <h3 className="text-base font-medium mb-2">Choose a pickup time</h3>
-                  <PickupScheduler selected={complimentaryPickup} onSelect={setComplimentaryPickup} />
-                </div>
-              )}
-              <Button
-                type="button"
-                size="lg"
-                onClick={onConfirmComplimentary}
-                disabled={
-                  alreadyBooked ||
-                  confirmingComplimentary ||
-                  !complimentaryPickup ||
-                  essentialAll.length + recommendedAll.length === 0
-                }
-              >
-                {alreadyBooked
-                  ? "Already booked"
-                  : confirmingComplimentary
-                    ? "Confirming…"
-                    : "Confirm complimentary repair"}
-              </Button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              size="lg"
-              onClick={onAcceptAndCheckout}
-              disabled={alreadyBooked || essentialAll.length + recommendedAll.length === 0}
-            >
-              {alreadyBooked ? "Already booked" : "Continue to checkout"}
-            </Button>
-          )}
-        </div>
-      )}
-    </PageShell>
-  );
+  return <PageShell refLabel={ref} meta={meta}>
+    <section className="mt-8 space-y-4">
+      <h2 className="font-display text-2xl text-primary">Your bags</h2>
+      {pairs.map((bag, index) => <div key={bag.id || index} className="flex items-center gap-4 rounded-xl border p-5">
+        <BagThumbnail src={thumbsByPair[index]?.[0] || null} label={`Bag ${index + 1}`}
+          onClick={thumbsByPair[index]?.length ? () => setLightboxPair(index) : undefined} />
+        <span>Bag {index + 1}</span>
+        <PhotoLightbox open={lightboxPair === index} onOpenChange={open => setLightboxPair(open ? index : null)} photos={thumbsByPair[index] || []} label={`Bag ${index + 1}`} />
+      </div>)}
+      <p className="text-sm text-muted-foreground">{isClosedRequest(status) ? "This request is closed." : alreadyBooked ? "Your repair is confirmed. You can find its details in My Repairs." : "We’re reviewing your request. Your recommendations will appear here when they’re ready."}</p>
+    </section>
+  </PageShell>;
 };
 
 // ─── order (confirmed repair) view ─────────────────────────────────────────
@@ -845,51 +701,16 @@ const RepairDetailsOrder = ({ id }: { id: string }) => {
     try {
       const existingUri =
         rescheduleSlot === "pickup" ? order.pickup_calendly_event_uri : order.return_calendly_event_uri;
-      let cancelWarning: string | null = null;
-      if (existingUri) {
-        const { data: cancelData, error: cancelError } = await supabase.functions.invoke("cal-cancel", {
-          body: { event_uri: existingUri },
-        });
-        if (cancelError) {
-          cancelWarning = "The previous booking couldn't be cancelled automatically — please cancel it in Calendly directly.";
-        } else if (cancelData?.skipped) {
-          cancelWarning = cancelData.reason ?? "The previous booking couldn't be cancelled automatically — please cancel it in Calendly directly.";
-        }
-      }
-      const a = order.delivery_address;
-      const addrParts = a ? [a.street, a.street2, `${a.city}, ${a.state} ${a.zip}`].filter(Boolean) : [];
-      const { data: bookData, error: bookError } = await supabase.functions.invoke("calendly-book", {
-        body: {
-          start_time: newWindow.start_time,
-          name: accountUser?.name || user.email,
-          email: order.contact_email || user.email,
-          phone: order.contact_phone || "",
-          address: addrParts.join(", "),
-          notes: `${rescheduleSlot === "pickup" ? "Pickup" : "Return"} scheduling — Order #${order.order_number}`,
-        },
+      if (existingUri) throw new Error("This appointment is already scheduled. Please contact us to make changes.");
+      const updateFields = await apiFetchJson<Partial<NonNullable<typeof order>>>(`/checkout/schedule/${order.id}`, {
+        method: "POST",
+        body: JSON.stringify({ kind: rescheduleSlot, start: newWindow.start_time, end: newWindow.end_time }),
       });
-      if (bookError) throw new Error(bookError.message);
-      if (bookData?.error) throw new Error(bookData.error);
-
-      const newDate = toNyDateKey(newWindow.start_time);
-      const newLabel = formatNyTimeRange(newWindow.start_time, newWindow.end_time);
-      const newEventUri: string | null = bookData?.event_uri ?? null;
-      const updateFields: Record<string, string | null> =
-        rescheduleSlot === "pickup"
-          ? { pickup_date: newDate, pickup_time_label: newLabel, pickup_calendly_event_uri: newEventUri }
-          : { return_date: newDate, return_time_label: newLabel, return_calendly_event_uri: newEventUri };
-      const { error: updateError } = await supabase.from("orders").update(updateFields).eq("id", order.id).eq("user_id", user.id);
-      if (updateError) throw new Error(updateError.message);
 
       setOrder((prev) => (prev ? { ...prev, ...updateFields } : prev));
       setRescheduleSlot(null);
       setNewWindow(null);
-      if (cancelWarning) toast.warning(cancelWarning);
-      if (bookData?.fallback) {
-        toast.info("Your new time is saved. Complete the Calendly booking via the link in your email.");
-      } else {
-        toast.success(`${rescheduleSlot === "pickup" ? "Pickup" : "Return"} scheduled!`);
-      }
+      toast.success(`${rescheduleSlot === "pickup" ? "Pickup" : "Return"} scheduled!`);
     } catch (e: unknown) {
       toast.error((e instanceof Error ? e.message : null) ?? "Could not schedule. Please try again.");
     } finally {

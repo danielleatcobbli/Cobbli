@@ -18,7 +18,7 @@ router = APIRouter(prefix="/ops/assessments", tags=["ops", "assessments"])
 # PATCH requests from Admin.tsx (e.g. saveProposal setting status:
 # "proposal_sent") were being rejected outright by this allowlist. Aligned
 # to what the frontend actually uses.
-_ALLOWED_STATUSES = {"pending", "proposal_sent", "quote_ready", "waitlisted", "booked", "service_unavailable"}
+_ALLOWED_STATUSES = {"pending", "proposal_sent", "quote_ready", "waitlisted", "service_unavailable", "needs_more_info", "declined"}
 
 # Added proposed_services, description, guest_email, requested_conditions
 # 2026-09-02 — Admin.tsx's saveProposal already sends proposed_services and
@@ -52,7 +52,7 @@ def _raise_if_error(resp: Any) -> None:
 
 @router.get("/")
 async def list_assessments(user: StaffUser, status_filter: str | None = None) -> Any:
-    """List assessments. Optional ?status= filter. RLS-scoped to staff/admin."""
+    """List assessments. Optional ?status_filter= filter. RLS-scoped to staff/admin."""
     sb = get_supabase_for_user(user.access_token)
     query = sb.table("assessments").select(_SELECT)
     if status_filter is not None:
@@ -97,11 +97,23 @@ async def update_assessment(
     if not updates:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No fields to update")
 
+    if body.status == "quote_ready":
+        # Publishing must identify every bag and every selectable line.
+        bags = body.pairs or []
+        lines = body.proposed_services or []
+        bag_ids = [bag.get("id") for bag in bags]
+        line_ids = [line.get("recommendation_id") for line in lines]
+        if not bags or not lines or not all(bag_ids) or len(set(bag_ids)) != len(bag_ids):
+            raise HTTPException(400, "Assign each bag a unique ID before publishing recommendations.")
+        if not all(line_ids) or len(set(line_ids)) != len(line_ids) or any(line.get("pair_id") not in bag_ids or not line.get("name") for line in lines):
+            raise HTTPException(400, "Assign every recommendation to a bag before publishing.")
+
     sb = get_supabase_for_user(user.access_token)
     resp = (
         sb.table("assessments")
         .update(updates)
         .eq("id", assessment_id)
+        .neq("status", "booked")
         .execute()
     )
     _raise_if_error(resp)

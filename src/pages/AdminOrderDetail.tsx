@@ -1,3 +1,4 @@
+import { operationsDate } from "@/lib/operationsDate";
 /**
  * AdminOrderDetail
  *
@@ -18,6 +19,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, Circle, Clock, FileText, MapPin, MessageSquare, Phone, User, XCircle } from "lucide-react";
 import {
   fetchOrderDetail,
+  addOrderNote,
   uploadPairPhoto,
   removePairPhoto,
   updateServiceDone,
@@ -34,6 +36,10 @@ import { printPairTags } from "./printPairTags";
 // ─────────────────────────────────────────────────────────────────────────────
 
 type OrderStatus =
+  | "placed"
+  | "pending_payment"
+  | "canceled"
+  | "needs-review"
   | "proposal-awaiting-our-response"
   | "proposal-awaiting-customer-response"
   | "pickup-scheduled"
@@ -84,7 +90,7 @@ type Comment = {
  * there at intake, or claiming a service wasn't actually done. Long-term,
  * the plan is for the condition assessment to eventually go away once the
  * AI model is trained, but this photo requirement stays permanently. */
-export type RequiredPhotoAngle = "sole" | "topDown" | "leftSide" | "rightSide" | "back" | "inside";
+export type RequiredPhotoAngle = "overall" | "detail" | "sole" | "topDown" | "leftSide" | "rightSide" | "back" | "inside";
 
 /** An actual captured photo — a real file, previewable in the browser via an
  * object URL (client-side only; nothing uploads to a server yet, consistent
@@ -112,6 +118,7 @@ type PhotoGroup = {
    * subject to the six-angle requirement, since that's a staff-taken
    * standard we can't ask a customer to follow at drop-off. */
   customerSubmitted: number;
+  customerUrls?: string[];
   before: PhotoSet;
   after: PhotoSet;
 };
@@ -232,6 +239,8 @@ export type OrderDetail = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
+  "canceled": { label: "Canceled", bg: "#f3f4f6", fg: "#374151" },
+  "needs-review": { label: "Needs review", bg: "#fef3c7", fg: "#92400e" },
   "placed":                              { label: "Order placed",                          bg: "#dbeafe", fg: "#1e40af" },
   "pending_payment":                     { label: "Pending payment",                       bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-our-response":      { label: "Proposal — awaiting our response",     bg: "#fef3c7", fg: "#92400e" },
@@ -283,12 +292,8 @@ const ACTION_OWNER: Partial<Record<OrderStatus, "workshop" | "dispatch">> = {
  * "Damage close-ups" (see PhotoSet) is open-ended and uncapped — Danielle's
  * call, for anything localized the six standard angles don't capture well. */
 export const REQUIRED_PHOTO_ANGLES: { key: RequiredPhotoAngle; label: string }[] = [
-  { key: "sole",      label: "Sole (bottom, straight-on)" },
-  { key: "topDown",   label: "Top-down" },
-  { key: "leftSide",  label: "Left side" },
-  { key: "rightSide", label: "Right side" },
-  { key: "back",      label: "Back of shoe" },
-  { key: "inside",    label: "Inside of shoe" },
+  { key: "overall", label: "Overall bag" },
+  { key: "detail", label: "Damage or completed repair detail" },
 ];
 
 function emptyPhotoSet(): PhotoSet {
@@ -357,126 +362,13 @@ function allAnglesPlaceholder(): Partial<Record<RequiredPhotoAngle, CapturedPhot
  *    training and doesn't correspond to a real line item.
  */
 const CONDITION_COMPONENTS: ConditionComponentDef[] = [
-  {
-    key: "sole", label: "sole", multi: false, exclusiveValues: ["good"],
-    options: [
-      { value: "good", label: "Good" },
-      { value: "worn-through", label: "Worn through (hole present)", service: "Resole" },
-      { value: "separated", label: "Separated or detached from upper", service: "Resole" },
-    ],
-  },
-  {
-    key: "heel", label: "heel", multi: false, exclusiveValues: ["good"],
-    options: [
-      { value: "good", label: "Good" },
-      { value: "loose", label: "Loose (not yet detached)", service: "Heel reattachment" },
-      { value: "separated", label: "Separated (detached but present)", service: "Heel replacement" },
-      { value: "missing", label: "Missing entirely", service: "Heel replacement" },
-      { value: "cracked", label: "Cracked or broken through the body", service: "Heel replacement" },
-    ],
-  },
-  {
-    key: "heel-tip", label: "heel tip", multi: false, exclusiveValues: ["not-applicable", "good"],
-    options: [
-      { value: "not-applicable", label: "Not applicable" },
-      { value: "good", label: "Good" },
-      { value: "worn-down", label: "Worn down", service: "Heel tip repair" },
-      { value: "missing", label: "Missing", service: "Heel tip repair" },
-    ],
-  },
-  {
-    key: "insole", label: "insole", multi: false, exclusiveValues: ["good"],
-    options: [
-      { value: "good", label: "Good" },
-      { value: "worn-down", label: "Worn down", service: "Insole replacement" },
-      { value: "separating", label: "Separating", service: "Insole replacement" },
-    ],
-  },
-  {
-    key: "inner-lining", label: "inner lining", multi: false, exclusiveValues: ["good"],
-    options: [
-      { value: "good", label: "Good" },
-      { value: "scratches-holes", label: "Contains scratches or holes", service: "Lining repair" },
-    ],
-  },
-  {
-    key: "stitching", label: "stitching", multi: false, exclusiveValues: ["good"],
-    options: [
-      { value: "good", label: "Good" },
-      { value: "seam-separated", label: "Seam separated (opened, thread intact)", service: "Stitching" },
-      { value: "thread-broken", label: "Thread broken or frayed", service: "Stitching" },
-    ],
-  },
-  {
-    key: "surface", label: "surface", multi: true, exclusiveValues: ["good"],
-    options: [
-      { value: "good", label: "Good" },
-      { value: "dull", label: "Dull, no damage", service: "Shoe shine" },
-      { value: "scuffs", label: "Scuffs present", service: "Scuff and scratch repair" },
-      // Scuffs and Scratches stay separate checkboxes here on purpose — this
-      // is per-condition training data, not service routing, so capturing
-      // both independently is more useful than merging them the way the
-      // customer checklist does. Service annotation updated 2026-08-12 to
-      // match the merged "Scuff and scratch repair" service both now map to
-      // (Danielle's call — reverses the 2026-07-31 split).
-      { value: "scratches", label: "Scratches present", service: "Scuff and scratch repair" },
-      { value: "stains", label: "Stains present", service: "Color correction" },
-    ],
-  },
-  {
-    key: "color", label: "color", multi: true, exclusiveValues: ["good"],
-    options: [
-      { value: "good", label: "Good" },
-      { value: "faded", label: "Faded or streaky", service: "Color correction" },
-      { value: "discolored", label: "Discolored", service: "Color correction" },
-    ],
-  },
-  {
-    key: "material", label: "material", multi: true, exclusiveValues: ["good"],
-    options: [
-      { value: "good", label: "Good" },
-      { value: "dry-cracking", label: "Dry or cracking", service: "Leather or suede conditioning" },
-      { value: "dull-dirty", label: "Dull or dirty (needs conditioning)", service: "Leather or suede conditioning" },
-    ],
-  },
-  {
-    key: "strap", label: "strap", multi: false, exclusiveValues: ["not-applicable", "good"],
-    options: [
-      { value: "not-applicable", label: "Not applicable" },
-      { value: "good", label: "Good" },
-      { value: "separating", label: "Separating from shoe", service: "Stitching" },
-      { value: "torn-damaged", label: "Torn or otherwise damaged", service: "Strap replacement" },
-    ],
-  },
-  {
-    key: "hardware", label: "hardware", multi: false, exclusiveValues: ["not-applicable", "good"],
-    options: [
-      { value: "not-applicable", label: "Not applicable" },
-      { value: "good", label: "Good" },
-      { value: "loose", label: "Loose or detached", service: "Stitching" },
-      { value: "broken", label: "Broken or damaged", service: "Hardware replacement" },
-      { value: "missing", label: "Missing", service: "Hardware replacement" },
-    ],
-  },
-  {
-    key: "buckle", label: "buckle", multi: false, exclusiveValues: ["not-applicable", "good"],
-    options: [
-      { value: "not-applicable", label: "Not applicable" },
-      { value: "good", label: "Good" },
-      { value: "loose", label: "Loose or detached", service: "Stitching" },
-      { value: "broken", label: "Broken or damaged", service: "Buckle replacement" },
-      { value: "missing", label: "Missing", service: "Buckle replacement" },
-    ],
-  },
-  {
-    key: "zipper", label: "zipper", multi: true, exclusiveValues: ["not-applicable", "good"],
-    options: [
-      { value: "not-applicable", label: "Not applicable" },
-      { value: "good", label: "Good" },
-      { value: "track-damaged", label: "Track or teeth detached/damaged", service: "Zipper repair" },
-      { value: "slider-broken", label: "Slider broken or missing", service: "Zipper slider repair" },
-    ],
-  },
+  { key: "bag-condition", label: "bag at intake", multi: true,
+    exclusiveValues: ["not-assessed"], options: [
+      { value: "matches-request", label: "Matches the customer's photos and agreed scope" },
+      { value: "additional-damage", label: "Additional damage found — document in notes" },
+      { value: "needs-review", label: "Repair plan needs expert review before work starts" },
+      { value: "not-assessed", label: "Not yet assessed" },
+    ] },
 ];
 
 /** Every component must have at least one selected answer — Danielle's call:
@@ -486,7 +378,7 @@ const CONDITION_COMPONENTS: ConditionComponentDef[] = [
  * a temporary, current-phase policy — see the requirements doc note on this
  * form being deliberately more thorough than its long-term shape. */
 function allConditionsAnswered(answers: Record<string, string[]>): boolean {
-  return CONDITION_COMPONENTS.every(c => (answers[c.key]?.length ?? 0) > 0);
+  return (answers["bag-condition"]?.length ?? 0) > 0 && !answers["bag-condition"]?.includes("not-assessed");
 }
 
 const ACTION_OWNER_LABEL: Record<"workshop" | "dispatch", string> = {
@@ -509,678 +401,6 @@ const ACTION_OWNER_COLOR: Record<"workshop" | "dispatch", string> = {
 // live and worth having realistic examples next to.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TODAY = "2026-07-08";
-
-export const ORDER_DETAILS: Record<string, OrderDetail> = {
-  // Demo order for Danielle's per-pair-of-shoes preview request. Two pairs in
-  // one order — one further along (intake done, services checked, outtake in
-  // progress) and one just starting — to show how pairs progress independently
-  // within the same order. Diverges from the dashboard's dummy status for
-  // ORD-2026-001 (a proposal there) specifically so intake/outtake has
-  // something real to show; same customer/address for continuity.
-  "1": {
-    id: "1",
-    orderNumber: "ORD-2026-001",
-    status: "in-repair",
-    datePlaced: "2026-06-29",
-    isRework: false,
-    actionRequiredBy: "2026-07-05", // 3 days overdue
-    workshopAssignee: "DO",
-    dispatchAssignee: "OB",
-    customer: {
-      name: "Sarah Chen",
-      phone: "(212) 555-0101",
-      email: "sarah.chen@email.com",
-    },
-    address: "123 Park Ave, New York, NY 10017",
-    pickupSlot: { date: "2026-07-03", timeLabel: "10:00 – 11:30 AM" },
-    pairs: [
-      {
-        id: "1-p1",
-        shoeType: "Oxford / Dress shoe",
-        shoeBrand: "Cole Haan",
-        shoeColorMaterial: "Cognac leather",
-        customerNotes: "Please match the color as close as possible to the original — these are for a wedding next month.",
-        // Intake complete → all 6 required "before" angles filled. Completion
-        // in-progress → outtake photos partly captured so far (2 of 6).
-        photos: {
-          customerSubmitted: 2,
-          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-          after:  { angles: { sole: placeholderPhoto("Sole"), topDown: placeholderPhoto("Top-down") }, damageCloseUps: [] },
-        },
-        services: [
-          { id: "1-p1-s1", name: "Resole",                    priceCents: 8500, tag: "original", done: true },
-          { id: "1-p1-s2", name: "Cleaning & conditioning",    priceCents: 6500, tag: "original", done: true },
-        ],
-        intakeStatus: "complete",
-        completionStatus: "in-progress",
-      },
-      {
-        id: "1-p2",
-        shoeType: "Ankle boot",
-        shoeBrand: "Frye",
-        shoeColorMaterial: "Black leather",
-        // No customerNotes for this pair — shown as "No notes provided" rather than hidden.
-        // Intake not started → no required photos taken yet.
-        photos: {
-          customerSubmitted: 1,
-          before: emptyPhotoSet(),
-          after: emptyPhotoSet(),
-        },
-        services: [
-          { id: "1-p2-s1", name: "Heel replacement", priceCents: 5500, tag: "original", done: false },
-        ],
-        intakeStatus: "not-started",
-        completionStatus: "not-started",
-      },
-    ],
-    comments: [
-      {
-        initials: "DO",
-        author: "Danielle Olsen",
-        isoTimestamp: "2026-07-03T10:45:00",
-        text: "Picked up both pairs from concierge. Dress shoe intake done — starting resole. Boot still needs intake.",
-      },
-      {
-        initials: "OB",
-        author: "Olivier B.",
-        isoTimestamp: "2026-07-05T14:10:00",
-        text: "Dress shoe resole + conditioning both done — starting outtake photos. Will get to the boot's intake tomorrow.",
-      },
-    ],
-  },
-  "2": {
-    id: "2",
-    orderNumber: "ORD-2026-002",
-    status: "in-repair",
-    datePlaced: "2026-06-25",
-    isRework: false,
-    actionRequiredBy: "2026-07-08",
-    workshopAssignee: "DO",
-    dispatchAssignee: "OB",
-    customer: {
-      name: "Marcus Webb",
-      phone: "(646) 555-0202",
-      email: "marcus.webb@email.com",
-    },
-    address: "456 Lexington Ave, New York, NY 10017",
-    pickupSlot: { date: "2026-07-07", timeLabel: "9:00 – 10:30 AM" },
-    pairs: [
-      {
-        id: "2-p1",
-        shoeType: "Oxford / Dress shoe",
-        shoeBrand: "Allen Edmonds",
-        shoeColorMaterial: "Black leather",
-        // Intake complete → all 6 required "before" angles filled. Completion
-        // not started → no "after" photos yet.
-        photos: {
-          customerSubmitted: 3,
-          before: { angles: allAnglesPlaceholder(), damageCloseUps: [placeholderPhoto("Damage close-up")] },
-          after: emptyPhotoSet(),
-        },
-        services: [
-          { id: "2-p1-s1", name: "Resole",                        priceCents: 8500, tag: "original", done: true },
-          { id: "2-p1-s2", name: "Leather or suede conditioning",  priceCents: 6500, tag: "original", done: false },
-          { id: "2-p1-s3", name: "High-heel tip replacement",      priceCents: 3500, tag: "rework",   done: false },
-        ],
-        intakeStatus: "complete",
-        completionStatus: "not-started",
-      },
-    ],
-    comments: [
-      {
-        initials: "DO",
-        author: "Danielle Olsen",
-        isoTimestamp: "2026-07-07T09:32:00",
-        text: "Picked up from building concierge. Left boot has more wear on the outer heel than the customer's photos suggested — flagged for extra attention during resole.",
-      },
-      {
-        initials: "OB",
-        author: "Olivier B.",
-        isoTimestamp: "2026-07-07T11:15:00",
-        text: "Checked in at the workshop. Starting resole today. Will update once soles are removed so we can confirm any sub-sole damage.",
-      },
-      {
-        initials: "DO",
-        author: "Danielle Olsen",
-        isoTimestamp: "2026-07-08T08:44:00",
-        text: "Reminder: completion due today. How's progress?",
-      },
-    ],
-  },
-  "5": {
-    id: "5",
-    orderNumber: "ORD-2026-005",
-    status: "rework-request-pending",
-    datePlaced: "2026-06-15",
-    isRework: true,
-    actionRequiredBy: "2026-07-06",
-    workshopAssignee: "DO",
-    dispatchAssignee: "OB",
-    customer: {
-      name: "Nina Patel",
-      phone: "(347) 555-0505",
-      email: "nina.patel@email.com",
-    },
-    address: "330 E 57th St, New York, NY 10022",
-    pickupSlot: { date: "2026-06-21", timeLabel: "11:00 AM – 12:30 PM" },
-    returnSlot: { date: "2026-06-30", timeLabel: "2:00 – 3:30 PM" },
-    pairs: [
-      {
-        id: "5-p1",
-        shoeType: "Ankle boot",
-        shoeBrand: "Isabel Marant",
-        shoeColorMaterial: "Tan suede",
-        // Both intake and completion are complete → all 6 required angles
-        // filled for both before and after.
-        photos: {
-          customerSubmitted: 2,
-          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-        },
-        services: [
-          { id: "5-p1-s1", name: "Seam repair", priceCents: 5000, tag: "original", done: true },
-          { id: "5-p1-s2", name: "Shoe shine",   priceCents: 2000, tag: "original", done: true },
-        ],
-        intakeStatus: "complete",
-        completionStatus: "complete",
-      },
-    ],
-    comments: [
-      {
-        initials: "OB",
-        author: "Olivier B.",
-        isoTimestamp: "2026-06-30T14:22:00",
-        text: "Returned to customer. Seam repair and shine done.",
-      },
-      {
-        initials: "DO",
-        author: "Danielle Olsen",
-        isoTimestamp: "2026-07-05T09:10:00",
-        text: "Rework request received — customer says stitching separated after first wear. Photos attached in request. Need to review and respond.",
-      },
-    ],
-    notes: "Customer says stitching separated after first wear",
-  },
-  "9": {
-    id: "9",
-    orderNumber: "ORD-2026-009",
-    status: "rework-request-approved",
-    datePlaced: "2026-06-20",
-    isRework: true,
-    actionRequiredBy: "2026-07-08",
-    workshopAssignee: "OB",
-    dispatchAssignee: "DO",
-    customer: {
-      name: "Grace Kim",
-      phone: "(212) 555-0909",
-      email: "grace.kim@email.com",
-    },
-    address: "77 Franklin St, New York, NY 10013",
-    // No current pickup/return — the rework pickup hasn't been scheduled yet
-    // (order is "awaiting pickup scheduling"). The *original* pickup/return
-    // from before the rework are retained below, not cleared.
-    logisticsHistory: [
-      { label: "Initial pickup", date: "2026-06-20", timeLabel: "1:00 – 2:30 PM" },
-      { label: "Initial return", date: "2026-06-27", timeLabel: "3:00 – 4:30 PM" },
-    ],
-    pairs: [
-      {
-        id: "9-p1",
-        shoeType: "Chelsea boot",
-        shoeBrand: "Common Projects",
-        shoeColorMaterial: "Black leather",
-        // Both intake and completion are complete → all 6 required angles
-        // filled for both before and after.
-        photos: {
-          customerSubmitted: 2,
-          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-        },
-        services: [
-          { id: "9-p1-s1", name: "Seam repair", priceCents: 5500, tag: "original", done: true },
-          { id: "9-p1-s2", name: "Heel repair",  priceCents: 4500, tag: "rework",   done: true },
-        ],
-        intakeStatus: "complete",
-        completionStatus: "complete",
-      },
-    ],
-    comments: [
-      {
-        initials: "OB",
-        author: "Olivier B.",
-        isoTimestamp: "2026-06-27T15:40:00",
-        text: "Returned to customer. Seam repair done and looking clean.",
-      },
-      {
-        initials: "DO",
-        author: "Danielle Olsen",
-        isoTimestamp: "2026-07-06T10:05:00",
-        text: "Rework approved — left heel re-stitch, no charge. Waiting on customer to schedule pickup.",
-      },
-    ],
-    notes: "Approved re-stitch on left heel — awaiting pickup scheduling",
-  },
-  "10": {
-    id: "10",
-    orderNumber: "ORD-2026-010",
-    status: "at-the-workshop",
-    datePlaced: "2026-07-07",
-    isRework: false,
-    actionRequiredBy: "2026-07-11",
-    workshopAssignee: "DO",
-    dispatchAssignee: "OB",
-    customer: {
-      name: "Omar Faruk",
-      phone: "(212) 555-1010",
-      email: "omar.faruk@email.com",
-    },
-    address: "10 Hanover Sq, New York, NY 10005",
-    pickupSlot: { date: "2026-07-08", timeLabel: "10:00 – 11:30 AM" },
-    pairs: [
-      {
-        id: "10-p1",
-        shoeType: "Loafer",
-        shoeBrand: "Gucci",
-        shoeColorMaterial: "Tan leather / horsebit hardware",
-        // Intake not started → no required photos taken yet.
-        photos: {
-          customerSubmitted: 4,
-          before: emptyPhotoSet(),
-          after: emptyPhotoSet(),
-        },
-        services: [
-          { id: "10-p1-s1", name: "Hardware repair",      priceCents: 4500, tag: "original", done: false },
-          { id: "10-p1-s2", name: "Leather conditioning",  priceCents: 6500, tag: "original", done: false },
-        ],
-        intakeStatus: "not-started",
-        completionStatus: "not-started",
-      },
-    ],
-    comments: [],
-  },
-  // Orders 3, 4, 6, 7, 8, 11–14 below: these exist in AdminDashboard's dummy
-  // ORDERS list (so they show up in real dashboard tables/tabs, including
-  // Dispatch's pickup/return schedule tabs) but previously had no matching
-  // entry here — clicking into any of them fell through to buildFallback(),
-  // which returns pairs: []. That's what caused the Dispatch "Repair
-  // summary" sidebar to say "No shoe pairs recorded yet" for an order with a
-  // pickup already scheduled — Danielle's bug report: a real order should
-  // never have zero pairs, regardless of status. Filled in with lightweight
-  // but real pair/service data (matching each order's dashboard context) so
-  // Dispatch always has enough to answer a basic "what am I picking up /
-  // what's being done to it" question, without needing full Workshop-level
-  // detail (photos, condition assessment) on orders that aren't this
-  // session's main demo (ORD-2026-001).
-  "3": {
-    id: "3",
-    orderNumber: "ORD-2026-003",
-    status: "pickup-scheduled",
-    datePlaced: "2026-07-06",
-    isRework: false,
-    actionRequiredBy: null,
-    workshopAssignee: "DO",
-    dispatchAssignee: "OB",
-    customer: {
-      name: "Priya Nair",
-      phone: "(917) 555-0303",
-      email: "priya.nair@email.com",
-    },
-    address: "45 W 72nd St, New York, NY 10023",
-    lastContactedAt: "2026-07-06",
-    pickupSlot: { date: "2026-07-08", timeLabel: "10:00 – 11:30 AM" },
-    pairs: [
-      {
-        id: "3-p1",
-        shoeType: "Sneakers",
-        shoeBrand: "Common Projects",
-        shoeColorMaterial: "White leather",
-        customerNotes: "Please be gentle with the suede panel on the side.",
-        // Pickup hasn't happened yet — nothing captured on either side.
-        photos: {
-          customerSubmitted: 2,
-          before: emptyPhotoSet(),
-          after: emptyPhotoSet(),
-        },
-        services: [
-          { id: "3-p1-s1", name: "Scuff, stain, & color restoration", priceCents: 8000, tag: "original", done: false },
-          { id: "3-p1-s2", name: "Cleaning & conditioning",           priceCents: 6500, tag: "original", done: false },
-        ],
-        intakeStatus: "not-started",
-        completionStatus: "not-started",
-      },
-    ],
-    comments: [],
-    notes: "Ring buzzer 3B — concierge can accept",
-  },
-  "4": {
-    id: "4",
-    orderNumber: "ORD-2026-004",
-    status: "ready-for-return",
-    datePlaced: "2026-07-02",
-    isRework: false,
-    actionRequiredBy: "2026-07-08",
-    workshopAssignee: "OB",
-    dispatchAssignee: "DO",
-    customer: {
-      name: "James O'Sullivan",
-      phone: "(212) 555-0404",
-      email: "james.osullivan@email.com",
-    },
-    address: "89 Bleecker St, New York, NY 10012",
-    lastContactedAt: "2026-07-06",
-    pickupSlot: { date: "2026-07-03", timeLabel: "9:00 – 10:30 AM" },
-    pairs: [
-      {
-        id: "4-p1",
-        shoeType: "Chukka boots",
-        shoeBrand: "Red Wing",
-        shoeColorMaterial: "Brown leather",
-        // Repair fully done, awaiting return scheduling → intake and
-        // outtake both complete, all required photos on file.
-        photos: {
-          customerSubmitted: 2,
-          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-        },
-        services: [
-          { id: "4-p1-s1", name: "Resole",           priceCents: 8500, tag: "original", done: true },
-          { id: "4-p1-s2", name: "Heel replacement", priceCents: 5500, tag: "original", done: true },
-        ],
-        intakeStatus: "complete",
-        completionStatus: "complete",
-      },
-    ],
-    comments: [],
-  },
-  "6": {
-    id: "6",
-    orderNumber: "ORD-2026-006",
-    status: "rework-request-denied",
-    datePlaced: "2026-06-10",
-    isRework: true,
-    actionRequiredBy: null,
-    workshopAssignee: "DO",
-    dispatchAssignee: "OB",
-    customer: {
-      name: "Luca Romano",
-      phone: "(718) 555-0606",
-      email: "luca.romano@email.com",
-    },
-    address: "55 Water St, Brooklyn, NY 11201",
-    pickupSlot: { date: "2026-06-10", timeLabel: "1:00 – 2:30 PM" },
-    returnSlot: { date: "2026-06-17", timeLabel: "3:00 – 4:30 PM" },
-    pairs: [
-      {
-        id: "6-p1",
-        shoeType: "Loafers",
-        shoeBrand: "Ferragamo",
-        shoeColorMaterial: "Black leather",
-        photos: {
-          customerSubmitted: 1,
-          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-        },
-        services: [
-          { id: "6-p1-s1", name: "Cleaning & conditioning", priceCents: 6500, tag: "original", done: true },
-        ],
-        intakeStatus: "complete",
-        completionStatus: "complete",
-      },
-    ],
-    comments: [],
-    notes: "Dispute escalated to owner — see Slack thread",
-  },
-  "7": {
-    id: "7",
-    orderNumber: "ORD-2026-007",
-    status: "return-scheduled",
-    datePlaced: "2026-06-18",
-    isRework: false,
-    actionRequiredBy: null,
-    workshopAssignee: "OB",
-    dispatchAssignee: "DO",
-    customer: {
-      name: "Ava Thompson",
-      phone: "(212) 555-0707",
-      email: "ava.thompson@email.com",
-    },
-    address: "1 Central Park W, New York, NY 10023",
-    lastContactedAt: "2026-07-05",
-    pickupSlot: { date: "2026-06-19", timeLabel: "11:00 AM – 12:30 PM" },
-    returnSlot: { date: "2026-07-08", timeLabel: "2:00 – 3:30 PM" },
-    pairs: [
-      {
-        id: "7-p1",
-        shoeType: "Pumps",
-        shoeBrand: "Jimmy Choo",
-        shoeColorMaterial: "Nude patent leather",
-        photos: {
-          customerSubmitted: 1,
-          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-        },
-        services: [
-          { id: "7-p1-s1", name: "High heel tip repair", priceCents: 3500, tag: "original", done: true },
-        ],
-        intakeStatus: "complete",
-        completionStatus: "complete",
-      },
-    ],
-    comments: [],
-    notes: "Leave with doorman if customer unavailable",
-  },
-  "8": {
-    id: "8",
-    orderNumber: "ORD-2026-008",
-    status: "completed",
-    datePlaced: "2026-06-01",
-    isRework: false,
-    actionRequiredBy: null,
-    workshopAssignee: "DO",
-    dispatchAssignee: "OB",
-    customer: {
-      name: "Derek Huang",
-      phone: "(917) 555-0808",
-      email: "derek.huang@email.com",
-    },
-    address: "200 Varick St, New York, NY 10014",
-    pickupSlot: { date: "2026-06-02", timeLabel: "10:00 – 11:30 AM" },
-    returnSlot: { date: "2026-06-10", timeLabel: "1:00 – 2:30 PM" },
-    pairs: [
-      {
-        id: "8-p1",
-        shoeType: "Derby shoes",
-        shoeBrand: "Allen Edmonds",
-        shoeColorMaterial: "Oxblood leather",
-        photos: {
-          customerSubmitted: 2,
-          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-        },
-        services: [
-          { id: "8-p1-s1", name: "Resole", priceCents: 8500, tag: "original", done: true },
-        ],
-        intakeStatus: "complete",
-        completionStatus: "complete",
-      },
-    ],
-    comments: [],
-  },
-  // 11 and 12 are Proposals (awaiting customer response) — no logistics yet,
-  // and the services below are *proposed*, not yet approved or performed, so
-  // nothing is checked off and intake/outtake haven't started. These will
-  // move to the (not-yet-built) Proposal details page once that's built —
-  // for now they at least stop showing up empty if clicked into.
-  "11": {
-    id: "11",
-    orderNumber: "ORD-2026-011",
-    status: "proposal-awaiting-customer-response",
-    datePlaced: "2026-07-04",
-    isRework: false,
-    actionRequiredBy: null,
-    workshopAssignee: "DO",
-    dispatchAssignee: "OB",
-    customer: {
-      name: "Bianca Rossi",
-      phone: "(347) 555-1111",
-      email: "bianca.rossi@email.com",
-    },
-    address: "14 Wall St, New York, NY 10005",
-    pairs: [
-      {
-        id: "11-p1",
-        shoeType: "Sandals",
-        shoeBrand: "Birkenstock",
-        shoeColorMaterial: "Tan suede",
-        photos: {
-          customerSubmitted: 2,
-          before: emptyPhotoSet(),
-          after: emptyPhotoSet(),
-        },
-        services: [
-          { id: "11-p1-s1", name: "Strap repair", priceCents: 4500, tag: "original", done: false },
-        ],
-        intakeStatus: "not-started",
-        completionStatus: "not-started",
-      },
-    ],
-    comments: [],
-  },
-  "12": {
-    id: "12",
-    orderNumber: "ORD-2026-012",
-    status: "proposal-awaiting-customer-response",
-    datePlaced: "2026-07-03",
-    isRework: false,
-    actionRequiredBy: null,
-    workshopAssignee: "OB",
-    dispatchAssignee: "DO",
-    customer: {
-      name: "Tomás Vega",
-      phone: "(646) 555-1212",
-      email: "tomas.vega@email.com",
-    },
-    address: "500 W 23rd St, New York, NY 10011",
-    pairs: [
-      {
-        id: "12-p1",
-        shoeType: "Sneakers",
-        shoeBrand: "Golden Goose",
-        shoeColorMaterial: "White / silver leather",
-        photos: {
-          customerSubmitted: 3,
-          before: emptyPhotoSet(),
-          after: emptyPhotoSet(),
-        },
-        services: [
-          { id: "12-p1-s1", name: "Scuff, stain, & color restoration", priceCents: 8000, tag: "original", done: false },
-        ],
-        intakeStatus: "not-started",
-        completionStatus: "not-started",
-      },
-    ],
-    comments: [],
-  },
-  "13": {
-    id: "13",
-    orderNumber: "ORD-2026-013",
-    status: "pickup-scheduled",
-    datePlaced: "2026-07-08",
-    isRework: false,
-    actionRequiredBy: null,
-    workshopAssignee: "DO",
-    dispatchAssignee: "DO",
-    customer: {
-      name: "Wendy Alvarez",
-      phone: "(212) 555-1313",
-      email: "wendy.alvarez@email.com",
-    },
-    address: "350 5th Ave, New York, NY 10118",
-    lastContactedAt: "2026-07-08",
-    pickupSlot: { date: "2026-07-09", timeLabel: "9:00 – 10:30 AM" },
-    pairs: [
-      {
-        id: "13-p1",
-        shoeType: "Oxfords",
-        shoeBrand: "To Boot New York",
-        shoeColorMaterial: "Burgundy leather",
-        // Pickup is tomorrow — nothing captured yet.
-        photos: {
-          customerSubmitted: 2,
-          before: emptyPhotoSet(),
-          after: emptyPhotoSet(),
-        },
-        services: [
-          { id: "13-p1-s1", name: "Resole",              priceCents: 8500, tag: "original", done: false },
-          { id: "13-p1-s2", name: "High heel tip repair", priceCents: 3500, tag: "original", done: false },
-        ],
-        intakeStatus: "not-started",
-        completionStatus: "not-started",
-      },
-    ],
-    comments: [],
-    notes: "Front desk will hold shoes at reception",
-  },
-  "14": {
-    id: "14",
-    orderNumber: "ORD-2026-014",
-    status: "return-scheduled",
-    datePlaced: "2026-06-28",
-    isRework: false,
-    actionRequiredBy: null,
-    workshopAssignee: "OB",
-    dispatchAssignee: "OB",
-    customer: {
-      name: "Felix Ono",
-      phone: "(646) 555-1414",
-      email: "felix.ono@email.com",
-    },
-    address: "20 W 34th St, New York, NY 10001",
-    lastContactedAt: "2026-07-07",
-    pickupSlot: { date: "2026-06-29", timeLabel: "10:00 – 11:30 AM" },
-    returnSlot: { date: "2026-07-11", timeLabel: "1:00 – 2:30 PM" },
-    pairs: [
-      {
-        id: "14-p1",
-        shoeType: "Derby shoes",
-        shoeBrand: "Allen Edmonds",
-        shoeColorMaterial: "Black leather",
-        photos: {
-          customerSubmitted: 1,
-          before: { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-          after:  { angles: allAnglesPlaceholder(), damageCloseUps: [] },
-        },
-        services: [
-          { id: "14-p1-s1", name: "Cleaning & conditioning", priceCents: 6500, tag: "original", done: true },
-          { id: "14-p1-s2", name: "Waterproofing",           priceCents: 3000, tag: "original", done: true },
-        ],
-        intakeStatus: "complete",
-        completionStatus: "complete",
-      },
-    ],
-    comments: [],
-    notes: "Building requires photo ID at security desk",
-  },
-};
-
-/** Fallback for orders not in the detail map — shows generic content */
-function buildFallback(id: string): OrderDetail {
-  return {
-    id,
-    orderNumber: `ORD-2026-${id.padStart(3, "0")}`,
-    status: "pickup-scheduled",
-    datePlaced: "2026-07-01",
-    isRework: false,
-    actionRequiredBy: null,
-    workshopAssignee: "DO",
-    dispatchAssignee: "OB",
-    customer: { name: "Customer Name", phone: "(212) 555-0000", email: "customer@email.com" },
-    address: "New York, NY",
-    pairs: [],
-    comments: [],
-  };
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -1203,13 +423,13 @@ function fmtPrice(cents: number) {
 function dueTiming(dateStr: string | null): "overdue" | "today" | "upcoming" | null {
   if (!dateStr) return null;
   const d = dateStr.slice(0, 10);
-  if (d < TODAY) return "overdue";
-  if (d === TODAY) return "today";
+  if (d < operationsDate()) return "overdue";
+  if (d === operationsDate()) return "today";
   return "upcoming";
 }
 
 function daysOverdue(dateStr: string) {
-  return Math.round((new Date(TODAY).getTime() - new Date(dateStr + "T00:00:00").getTime()) / 86_400_000);
+  return Math.round((new Date(operationsDate()).getTime() - new Date(dateStr.slice(0, 10) + "T00:00:00Z").getTime()) / 86_400_000);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2344,8 +1564,8 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
     : null;
 
   const title = total > 1
-    ? `Pair ${index + 1}${pair.shoeType ? ` — ${pair.shoeType}` : ""}`
-    : (pair.shoeType || "Shoe & services");
+    ? `Bag ${index + 1}${pair.shoeType ? ` — ${pair.shoeType}` : ""}`
+    : (pair.shoeType || "Bag & services");
 
   const beforeFilled = REQUIRED_PHOTO_ANGLES.filter(a => beforePhotos.angles[a.key]).length;
   const beforeComplete = beforeFilled === REQUIRED_PHOTO_ANGLES.length;
@@ -2369,7 +1589,7 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
           </button>
         )}
       >
-        <KVRow label="Shoe type">{pair.shoeType || "—"}</KVRow>
+        <KVRow label="Item type">{pair.shoeType || "—"}</KVRow>
         <KVRow label="Brand">{pair.shoeBrand || "—"}</KVRow>
         <KVRow label="Color / material">{pair.shoeColorMaterial || "—"}</KVRow>
         <KVRow label="Notes">
@@ -2398,7 +1618,7 @@ function PairCard({ pair, index, total, orderId, orderNumber }: { pair: ShoePair
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
             <div style={{ minWidth: 140 }}>
               <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>Customer-submitted (optional) · {pair.photos.customerSubmitted}</p>
-              <PhotoGrid count={pair.photos.customerSubmitted} label="Customer-submitted" />
+              <div className="flex flex-wrap gap-2">{(pair.photos.customerUrls || []).map(url => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="Customer's bag" className="h-20 w-20 rounded object-cover" /></a>)}</div>
             </div>
             <div style={{ minWidth: 180 }}>
               <p style={{ margin: "0 0 4px", fontSize: 11, color: "#9ca3af" }}>
@@ -2625,18 +1845,25 @@ function CommentsCard({ order }: { order: OrderDetail }) {
   const [draft, setDraft] = useState("");
   const [comments, setComments] = useState<Comment[]>(order.comments);
 
-  const addComment = () => {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const addComment = async () => {
     const text = draft.trim();
-    if (!text) return;
-    setComments(prev => [
-      ...prev,
-      { initials: "DO", author: "Danielle Olsen", isoTimestamp: new Date().toISOString(), text },
-    ]);
-    setDraft("");
+    if (!text || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const saved = await addOrderNote(order.id, text);
+      setComments(prev => [...prev, saved]);
+      setDraft("");
+    } catch {
+      setSaveError("Couldn't save your note. Your draft is still here; please try again.");
+    } finally { setSaving(false); }
   };
 
   return (
     <Card title="Internal comments" icon={<MessageSquare size={14} />}>
+      {saveError && <p role="alert">{saveError}</p>}
       {comments.length === 0 && (
         <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 16 }}>No comments yet — be the first to leave a note.</p>
       )}
@@ -2671,10 +1898,10 @@ function CommentsCard({ order }: { order: OrderDetail }) {
         <button
           type="button"
           onClick={addComment}
-          disabled={!draft.trim()}
+          disabled={saving || !draft.trim()}
           style={{ padding: "8px 14px", backgroundColor: "#3d1700", color: "#fff", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: draft.trim() ? "pointer" : "not-allowed", opacity: draft.trim() ? 1 : 0.45, flexShrink: 0 }}
         >
-          Add comment
+          {saving ? "Saving…" : "Add comment"}
         </button>
       </div>
     </Card>
@@ -2799,10 +2026,10 @@ function WorkshopSummaryCard({ order }: { order: OrderDetail }) {
           >
             {order.pairs.length > 1 && (
               <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Pair {i + 1}
+                Bag {i + 1}
               </p>
             )}
-            <KVRow label="Shoe">{pair.shoeType}{pair.shoeBrand ? ` · ${pair.shoeBrand}` : ""}</KVRow>
+            <KVRow label="Bag">{pair.shoeType}{pair.shoeBrand ? ` · ${pair.shoeBrand}` : ""}</KVRow>
             <KVRow label="Services">
               {totalServices ? `${doneServices}/${totalServices} done` : "None recorded"}
             </KVRow>
@@ -3237,9 +2464,10 @@ export default function AdminOrderDetail() {
   useEffect(() => {
     let cancelled = false;
     setOrderLoading(true);
+    setOrder(null);
     setOrderError(null);
     fetchOrderDetail(id)
-      .then(result => { if (!cancelled) setOrder(result ?? buildFallback(id)); })
+      .then(result => { if (!cancelled) setOrder(result); })
       .catch(err => { if (!cancelled) setOrderError(err instanceof Error ? err.message : String(err)); })
       .finally(() => { if (!cancelled) setOrderLoading(false); });
     return () => { cancelled = true; };
@@ -3249,7 +2477,7 @@ export default function AdminOrderDetail() {
    * the new status immediately without a full page reload. */
   const refetchOrder = () => {
     fetchOrderDetail(id)
-      .then(result => { if (result) setOrder(result); })
+      .then(result => { setOrder(result); })
       .catch(err => toast({ title: "Couldn't refresh order", description: err instanceof Error ? err.message : String(err), variant: "destructive" }));
   };
 
@@ -3265,7 +2493,7 @@ export default function AdminOrderDetail() {
     }
     return (
       <div style={{ minHeight: "100vh", backgroundColor: "#f9f7f4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Public Sans', 'Albert Sans', sans-serif", color: "#9ca3af", fontSize: 14 }}>
-        Loading order…
+        {orderLoading ? "Loading order…" : "Order not found. Return to the dashboard to select a repair."}
       </div>
     );
   }

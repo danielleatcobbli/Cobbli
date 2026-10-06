@@ -13,12 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { apiFetch, apiFetchJson } from "@/integrations/api/client";
+import { apiFetchJson } from "@/integrations/api/client";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { toast } from "@/hooks/use-toast";
 import { Copy, Link2 } from "lucide-react";
 
 type AssessmentRow = {
+  proposal_token?: string;
   id: string;
   user_id: string;
   pairs: Array<{
@@ -71,6 +72,10 @@ type Service = {
 };
 
 type ProposedService = {
+  recommendation_id?: string;
+  choice_group?: string;
+  rationale?: string;
+  limitations?: string;
   service_id: string;
   slug: string;
   name: string;
@@ -87,6 +92,9 @@ type ProposedService = {
 };
 
 type SelectionRow = {
+  choice_group: string;
+  rationale: string;
+  limitations: string;
   service: Service;
   checked: boolean;
   tier: "essential" | "recommended";
@@ -108,8 +116,10 @@ const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
 // to match what's now actually written. "waitlisted" is new — lets staff
 // preview the waitlist experience without the full status-machine rework
 // (task #124).
-const STATUS_TABS: { id: "pending" | "quote_ready" | "waitlisted" | "booked" | "service_unavailable"; label: string }[] = [
+const STATUS_TABS: { id: "pending" | "quote_ready" | "waitlisted" | "booked" | "service_unavailable" | "needs_more_info" | "declined"; label: string }[] = [
   { id: "pending", label: "Pending" },
+  { id: "needs_more_info", label: "More information needed" },
+  { id: "declined", label: "Closed" },
   { id: "quote_ready", label: "Quote ready" },
   { id: "waitlisted", label: "Waitlisted" },
   { id: "booked", label: "Booked" },
@@ -147,16 +157,16 @@ const Admin = () => {
     setRows(null);
     setError(null);
     try {
-      const assessments = await apiFetchJson<Array<Omit<AssessmentRow, "profile">>>(
-        `/ops/assessments?status=${encodeURIComponent(status)}`,
+      const { data: assessments } = await apiFetchJson<{ data: Array<Omit<AssessmentRow, "profile">> }>(
+        `/ops/assessments/?status_filter=${encodeURIComponent(status)}`,
       );
-      const ids = Array.from(new Set(assessments.map((a) => a.user_id)));
-      const profiles = ids.length
-        ? await apiFetchJson<Array<{ user_id: string; first_name: string | null; last_name: string | null; phone: string | null }>>(
+      const ids = Array.from(new Set(assessments.map((a) => a.user_id).filter(Boolean)));
+      const profilesResponse = ids.length
+        ? await apiFetchJson<{ data: Array<{ user_id: string; first_name: string | null; last_name: string | null; phone: string | null }> }>(
             `/ops/profiles?ids=${encodeURIComponent(ids.join(","))}`,
           )
-        : [];
-      const profileMap = new Map(profiles.map((p) => [p.user_id, p]));
+        : { data: [] };
+      const profileMap = new Map(profilesResponse.data.map((p) => [p.user_id, p]));
       setRows(
         assessments.map((a) => ({
           ...a,
@@ -222,7 +232,8 @@ const Admin = () => {
     };
   }, [rows, photosByRow]);
 
-  const openEditor = (row: AssessmentRow) => {
+  const openEditor = (source: AssessmentRow) => {
+    const row = { ...source, pairs: source.pairs.map(p => ({ ...p, id: p.id || crypto.randomUUID() })) };
     setComplimentary(Boolean(row.complimentary));
     const allPairIds = row.pairs.map((p) => p.id).filter((id): id is string => !!id);
     // A service can now have multiple proposed_services entries — one per
@@ -236,12 +247,17 @@ const Admin = () => {
       bySid.set(s.service_id, [...(bySid.get(s.service_id) ?? []), s]);
     }
     setSelection(
-      services.map((svc) => {
+      [...services, ...(row.proposed_services ?? []).filter((line, index, all) =>
+        !services.some(s => s.id === line.service_id) && all.findIndex(other => other.service_id === line.service_id) === index
+      ).map(line => ({ id: line.service_id, name: line.name, slug: line.slug, base_price_cents: line.price_cents }))].map((svc) => {
         const entries = bySid.get(svc.id) ?? [];
         const first = entries[0];
         const taggedIds = entries.map((e) => e.pair_id).filter((id): id is string => !!id);
         return {
           service: svc,
+          choice_group: first?.choice_group ?? "",
+          rationale: first?.rationale ?? "",
+          limitations: first?.limitations ?? "",
           checked: entries.length > 0,
           tier: first?.tier ?? "essential",
           price_cents: first?.price_cents ?? svc.base_price_cents,
@@ -311,6 +327,10 @@ const Admin = () => {
       .flatMap((r) => {
         const targetIds = r.pairIds.length > 0 ? r.pairIds : [undefined];
         return targetIds.map((pairId) => ({
+          recommendation_id: `${pairId || "legacy"}:${r.service.id}`,
+          choice_group: r.choice_group.trim() || undefined,
+          rationale: r.rationale.trim() || undefined,
+          limitations: r.limitations.trim() || undefined,
           service_id: r.service.id,
           slug: r.service.slug,
           name: r.service.name,
@@ -320,10 +340,11 @@ const Admin = () => {
         }));
       });
     try {
-      await apiFetch(`/ops/assessments/${editing.id}`, {
+      await apiFetchJson(`/ops/assessments/${editing.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           proposed_services,
+          pairs: editing.pairs,
           status: "quote_ready",
           complimentary,
         }),
@@ -340,9 +361,9 @@ const Admin = () => {
     setSaving(false);
     toast({
       title: "Quote ready",
-      description: "Shareable link copied to clipboard.",
+      description: "Recommendations saved. You can copy the customer link below.",
     });
-    const url = `${window.location.origin}/proposal/${editing.id}`;
+    const url = editing.proposal_token ? `${window.location.origin}/proposal/t/${editing.proposal_token}` : `${window.location.origin}/repair/request/${editing.id}`;
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -353,7 +374,8 @@ const Admin = () => {
   };
 
   const copyLink = async (id: string) => {
-    const url = `${window.location.origin}/proposal/${id}`;
+    const row = rows?.find(r => r.id === id);
+    const url = row?.proposal_token ? `${window.location.origin}/proposal/t/${row.proposal_token}` : `${window.location.origin}/repair/request/${id}`;
     try {
       await navigator.clipboard.writeText(url);
       toast({ title: "Link copied", description: url });
@@ -365,7 +387,7 @@ const Admin = () => {
   const markUnavailable = async (row: AssessmentRow) => {
     if (!confirm("Mark this assessment as Service unavailable? The customer will be notified by email and the order will be closed.")) return;
     try {
-      await apiFetch(`/ops/assessments/${row.id}`, {
+      await apiFetchJson(`/ops/assessments/${row.id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: "service_unavailable" }),
       });
@@ -401,7 +423,7 @@ const Admin = () => {
   // pending the copy rework (see cobbli_mvp_order_flow.pptx).
   const markWaitlisted = async (row: AssessmentRow) => {
     try {
-      await apiFetch(`/ops/assessments/${row.id}`, {
+      await apiFetchJson(`/ops/assessments/${row.id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: "waitlisted" }),
       });
@@ -707,6 +729,13 @@ const Admin = () => {
             </div>
           )}
 
+          <Button type="button" variant="outline" onClick={() => {
+            const name = window.prompt("Name of the bag repair to recommend");
+            if (!name?.trim()) return;
+            const id = `custom-${crypto.randomUUID()}`;
+            setSelection(prev => [...prev, { service: { id, slug: id, name: name.trim(), base_price_cents: 0 }, checked: true, tier: "recommended", price_cents: 0, pairIds: editing?.pairs.map(p => p.id).filter(Boolean) ?? [], choice_group: "", rationale: "", limitations: "" }]);
+          }}>Add a custom bag repair</Button>
+          <p className="text-xs text-muted-foreground">Every repair is optional for the customer. Give alternatives the same issue name; the customer can select only one for that bag.</p>
           <div className="space-y-2 mt-2">
             {selection.length === 0 ? (
               <p className="text-sm text-muted-foreground">No active services available.</p>
@@ -762,6 +791,9 @@ const Admin = () => {
                           onChange={(e) => setPrice(row.service.id, e.target.value)}
                         />
                       </div>
+                      {([ ["choice_group", "Issue / alternatives group (optional)"], ["rationale", "What this option does"], ["limitations", "Limitations / tradeoffs"] ] as const).map(([field,label]) => <label key={field} className="text-xs sm:col-span-2">{label}
+                        <Input value={row[field]} onChange={e => setSelection(prev => prev.map(r => r.service.id === row.service.id ? { ...r, [field]: e.target.value } : r))} />
+                      </label>)}
                       {/* Only shown for multi-bag assessments — single-bag
                           submissions have nothing to disambiguate, so this
                           stays out of the way for the common case

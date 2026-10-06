@@ -3,6 +3,8 @@
 // GA_MEASUREMENT_ID is not configured (gtag won't be on window).
 
 export type AnalyticsEvent =
+  | "severity_question_answered"
+  | "starter_repair_recommendation"
   | "start_repair"
   | "pair_confirmed"
   | "service_added"

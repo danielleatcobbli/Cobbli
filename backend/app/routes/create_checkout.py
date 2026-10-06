@@ -14,8 +14,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from app.auth import OptionalUser
-from app.pricing import CartQuote, quote_cart, quote_cart_complimentary
-from app.routes.stripe_webhook import _is_unique_violation, _now_iso
+from app.repair_approval import authorize_assessment, approved_payload
+from app.pricing import CartQuote, quote_cart
 from app.settings import get_settings
 from app.stripe_customers import resolve_or_create_customer
 from app.supabase_client import get_supabase_admin
@@ -114,7 +114,7 @@ def _validate_cart_assessment_ownership(payload: dict[str, Any], user: Any) -> N
     sb = get_supabase_admin()
     resp = (
         sb.table("assessments")
-        .select("id, user_id, status")
+        .select("id, user_id, status, proposal_token")
         .eq("id", assessment_id)
         .maybe_single()
         .execute()
@@ -122,29 +122,9 @@ def _validate_cart_assessment_ownership(payload: dict[str, Any], user: Any) -> N
     row = getattr(resp, "data", None)
     if getattr(resp, "error", None) or not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
-    owner_id = row.get("user_id")
-    if user is not None:
-        # Signed-in: the request must be theirs. A guest-submitted request
-        # (owner_id is None) can't be claimed by a signed-in user via this
-        # path either — linking a guest's past submission to an account
-        # isn't built yet (see the guest-submission section of this fix).
-        if owner_id != user.id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
-    else:
-        # Guest: the request must ALSO be guest-owned (no user_id) — without
-        # this check, a guest could pass any signed-in customer's
-        # assessment_id (e.g. copied from a shared URL) and have an order
-        # created that looks linked to that customer's private request.
-        if owner_id is not None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
-    if row.get("status") == "booked":
-        # Already converted by an earlier, successful checkout — creating a
-        # second Stripe session for the same approval risks a second charge
-        # for the same repair if both sessions were ever completed. The
-        # DB-level backstop (orders_assessment_id_unique, 2026-10-01
-        # migration) catches this even under a race between two requests;
-        # this is just the earlier, friendlier rejection.
-        raise HTTPException(status.HTTP_409_CONFLICT, "This request has already been confirmed")
+    authorize_assessment(row, user, payload.get("proposal_token"))
+    if row.get("status") != "quote_ready":
+        raise HTTPException(409, "This request is not currently available for confirmation.")
 
 
 class ComplimentaryConfirmRequest(BaseModel):
@@ -163,199 +143,99 @@ def confirm_complimentary(
     body: ComplimentaryConfirmRequest,
     user: OptionalUser,
 ) -> ComplimentaryConfirmResponse:
-    """Deliberate complimentary-confirmation path (2026-10-01, Item 4 of
-    Danielle's spec). This is the ONLY way an order can be created with a
-    $0 charge — it requires assessments.complimentary = true, a flag only
-    staff can set (ops_assessments.py), never inferred from an unpriced
-    request. Everything else about linking/dedup mirrors the paid cart path
-    (same ownership check, same orders_assessment_id_unique DB guard, same
-    "already booked" rejection) so a comp confirmation can't double-book or
-    double-create any more than a paid one can.
-    """
+    """Approve server-validated selections and create linked repair records atomically."""
     payload = body.cartPayload or {}
-    _validate_cart(payload)
     assessment_id = payload.get("assessment_id")
     if not assessment_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing assessment_id")
-
+        raise HTTPException(400, "Missing assessment_id")
     sb = get_supabase_admin()
-    resp = (
-        sb.table("assessments")
-        .select("id, user_id, status, complimentary")
-        .eq("id", assessment_id)
-        .maybe_single()
-        .execute()
-    )
+    resp = sb.table("assessments").select("id,user_id,status,complimentary,proposal_token,pairs,proposed_services,updated_at").eq("id", assessment_id).maybe_single().execute()
     row = getattr(resp, "data", None)
     if getattr(resp, "error", None) or not row:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
-
-    owner_id = row.get("user_id")
-    if user is not None:
-        if owner_id != user.id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
-    else:
-        if owner_id is not None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
-
-    if not row.get("complimentary"):
-        # The hard rule: an unpriced request is never treated as
-        # complimentary just because its total happens to be $0 or
-        # unset — only this explicit staff-set flag authorizes a free
-        # order.
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "This request has not been marked complimentary"
-        )
+        raise HTTPException(404, "Request not found")
+    authorize_assessment(row, user, payload.get("proposal_token"))
     if row.get("status") == "booked":
-        raise HTTPException(status.HTTP_409_CONFLICT, "This request has already been confirmed")
-
-    # Pickup-before-confirmation (2026-10-02, Danielle's call): a
-    # complimentary repair follows the same "select services, then choose an
-    # available pickup, then confirm" order as a paid one — never "confirmed"
-    # with pickup still unresolved. No staff-agreed-alternative-handoff
-    # concept exists anywhere in the schema yet, so for now a pickup_window
-    # is always required here; that's a known, deliberate scope limit, not
-    # an oversight — see the written report for how to extend it if needed.
+        existing = sb.table("orders").select("id,payment_status").eq("assessment_id", assessment_id).maybe_single().execute()
+        data = getattr(existing, "data", None)
+        if data and data.get("payment_status") == "complimentary":
+            return ComplimentaryConfirmResponse(orderId=data["id"])
+        raise HTTPException(409, "This request has already been confirmed")
+    if row.get("status") != "quote_ready":
+        raise HTTPException(409, "This request is not currently available for confirmation.")
+    if not row.get("complimentary"):
+        raise HTTPException(403, "This request has not been marked complimentary")
+    if payload.get("recommendation_revision") != row.get("updated_at"):
+        raise HTTPException(409, "Recommendations changed. Please reload and review them again.")
+    canonical_payload = approved_payload(row, payload)
+    _validate_cart(canonical_payload)
+    address = canonical_payload["delivery_address"]
+    if not all(isinstance(address.get(k), str) and address[k].strip() for k in ("street", "city", "state", "zip")):
+        raise HTTPException(400, "Complete your pickup address.")
+    zip_code = address["zip"].strip()
+    if len(zip_code) != 5 or not zip_code.isascii() or not zip_code.isdigit():
+        raise HTTPException(400, "Enter a valid five-digit ZIP code.")
+    try:
+        coverage = sb.table("service_areas").select("zip").eq("zip", zip_code).eq("is_active", True).execute()
+        if getattr(coverage, "error", None):
+            raise RuntimeError("Coverage lookup failed")
+    except Exception:
+        raise HTTPException(503, "We could not check pickup coverage. Please try again.")
+    if not getattr(coverage, "data", None):
+        raise HTTPException(400, "We do not offer pickup in this ZIP code yet.")
     pickup_window = payload.get("pickup_window")
-    if (
-        not isinstance(pickup_window, dict)
-        or not isinstance(pickup_window.get("start"), str)
-        or not isinstance(pickup_window.get("end"), str)
-    ):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing pickup_window")
-
-    cart_quote = quote_cart_complimentary(payload)
-    canonical_payload = cart_quote.payload
-
-    user_id = user.id if user is not None else None
-    now_iso = _now_iso()
-
-    # Book the real calendar slot FIRST, synchronously, and only proceed to
-    # create the order if it succeeds. If the slot is no longer available
-    # (or cal-book otherwise fails), nothing is created and nothing on the
-    # request is touched — the customer's selections (essential/recommended
-    # services) are untouched in assessments.proposed_services, so they can
-    # just try a different slot.
-    contact_name = (
-        canonical_payload.get("contact_name")
-        or (canonical_payload.get("contact_email") or "").split("@")[0]
-        or "Customer"
-    )
-    event_uri = _book_pickup(
-        pickup_window,
-        contact_name,
-        canonical_payload.get("contact_email", ""),
-        canonical_payload.get("contact_phone", ""),
-    )
+    try:
+        start = datetime.fromisoformat(pickup_window["start"].replace("Z", "+00:00"))
+        end = datetime.fromisoformat(pickup_window["end"].replace("Z", "+00:00"))
+        if start.tzinfo is None or end.tzinfo is None or end <= start or start <= datetime.now(start.tzinfo):
+            raise ValueError()
+    except (TypeError, KeyError, ValueError, AttributeError):
+        raise HTTPException(400, "Choose an available future pickup time.")
+    pickup_window = {**pickup_window, "address": ", ".join(address[k].strip() for k in ("street", "street2", "city", "state", "zip") if address.get(k))}
+    event_uri = _book_pickup(pickup_window, payload.get("contact_name") or "Customer", payload["contact_email"], payload["contact_phone"])
     if not event_uri:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "That pickup slot is no longer available. Please choose another time.",
-        )
-    pickup_date = _to_ny_date_key(pickup_window["start"])
-    pickup_time_label = _format_ny_time_range(pickup_window["start"], pickup_window["end"])
-
-    insert_res = (
-        sb.table("orders")
-        .insert(
-            {
-                "user_id": user_id,
-                "status": "pending_payment",
-                "delivery_method": "door-to-door",
-                "delivery_address": canonical_payload.get("delivery_address"),
-                "contact_email": canonical_payload.get("contact_email"),
-                "contact_phone": canonical_payload.get("contact_phone"),
-                "payment_method_snapshot": None,
-                "repairs_subtotal_cents": 0,
-                "courier_fee_cents": 0,
-                "tax_cents": 0,
-                "total_cents": 0,
-                "payment_status": "complimentary",
-                "paid_at": now_iso,
-                "stripe_session_id": None,
-                "stripe_payment_intent_id": None,
-                "assessment_id": assessment_id,
-                "pickup_date": pickup_date,
-                "pickup_time_label": pickup_time_label,
-                "pickup_calendly_event_uri": event_uri,
-            }
-        )
-        .select("id")
-        .single()
-        .execute()
-    )
-    if _is_unique_violation(insert_res):
-        # A duplicate confirm click/retry for the same assessment — the
-        # order already exists (orders_assessment_id_unique), almost
-        # certainly from this very booking already having been recorded on
-        # an earlier attempt. Cancel the just-created Cal.com booking so a
-        # double-click can't leave two real calendar holds for one request —
-        # best-effort; a failure here is logged, not raised, since the
-        # customer-facing outcome (one order, found below) is already
-        # correct either way.
+        raise HTTPException(409, "That pickup could not be booked. Please choose another time.")
+    try:
+        result = sb.rpc("confirm_complimentary_repair", {
+            "p_assessment_id": assessment_id, "p_expected_updated_at": row["updated_at"],
+            "p_payload": canonical_payload, "p_event_uri": event_uri,
+            "p_pickup_date": _to_ny_date_key(pickup_window["start"]),
+            "p_pickup_label": _format_ny_time_range(pickup_window["start"], pickup_window["end"]),
+        }).execute()
+        data = getattr(result, "data", None)
+        if getattr(result, "error", None) or not isinstance(data, dict) or not data.get("order_id"):
+            raise RuntimeError("Confirmation transaction failed")
+    except Exception:
+        # A timeout may occur after commit. Reconcile before canceling a real booking.
         try:
-            httpx.post(
-                f"{get_settings().supabase_url}/functions/v1/cal-cancel",
-                headers={
-                    "Authorization": f"Bearer {get_settings().supabase_service_role_key}",
-                    "Content-Type": "application/json",
-                },
-                json={"event_uri": event_uri},
-                timeout=10.0,
-            )
+            check = sb.table("orders").select("id,pickup_calendly_event_uri,payment_status,status").eq("assessment_id", assessment_id).maybe_single().execute()
+            if getattr(check, "error", None):
+                raise RuntimeError("Reconciliation failed")
+            existing = getattr(check, "data", None)
         except Exception:
-            logger.exception(
-                "failed to cancel orphaned cal.com booking %s after duplicate order insert",
-                event_uri,
-            )
-        existing = (
-            sb.table("orders")
-            .select("id")
-            .eq("assessment_id", assessment_id)
-            .maybe_single()
-            .execute()
-        )
-        existing_row = getattr(existing, "data", None)
-        if not existing_row:
-            raise HTTPException(status.HTTP_409_CONFLICT, "This request has already been confirmed")
-        return ComplimentaryConfirmResponse(orderId=existing_row["id"])
+            logger.exception("Confirmation needs reconciliation: assessment=%s booking=%s", assessment_id, event_uri)
+            raise HTTPException(503, "We couldn't verify confirmation. Please contact us before booking again.")
+        if existing and existing.get("payment_status") == "complimentary" and existing.get("status") != "pending_payment":
+            if existing.get("pickup_calendly_event_uri") != event_uri:
+                _cancel_pickup(event_uri)
+            return ComplimentaryConfirmResponse(orderId=existing["id"])
+        _cancel_pickup(event_uri)
+        raise HTTPException(409, "Confirmation wasn't completed. Please reload to review recommendations and availability.")
+    if data.get("event_uri") != event_uri:
+        _cancel_pickup(event_uri)
+    return ComplimentaryConfirmResponse(orderId=data["order_id"])
 
-    order_row = getattr(insert_res, "data", None)
-    if getattr(insert_res, "error", None) or not order_row:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Failed to create order")
-    order_id = order_row["id"]
 
-    items = canonical_payload.get("items") or []
-    item_rows = [
-        {
-            "order_id": order_id,
-            "pair_snapshot": it.get("pair_snapshot"),
-            "service_snapshot": it.get("service_snapshot"),
-            "price_cents": 0,
-        }
-        for it in items
-    ]
-    if item_rows:
-        items_res = sb.table("order_items").insert(item_rows).execute()
-        if getattr(items_res, "error", None):
-            logger.error("failed to insert complimentary order_items: %s", items_res.error)
-
-    status_res = sb.table("orders").update({"status": "placed"}).eq("id", order_id).execute()
-    if getattr(status_res, "error", None):
-        logger.error("failed to flip complimentary order to placed: %s", status_res.error)
-
-    booked_res = (
-        sb.table("assessments").update({"status": "booked"}).eq("id", assessment_id).execute()
-    )
-    if getattr(booked_res, "error", None):
-        logger.error(
-            "failed to mark assessment %s booked after complimentary order %s: %s",
-            assessment_id,
-            order_id,
-            booked_res.error,
-        )
-
-    return ComplimentaryConfirmResponse(orderId=order_id)
+def _cancel_pickup(event_uri: str) -> None:
+    try:
+        settings = get_settings()
+        response = httpx.post(f"{settings.supabase_url}/functions/v1/cal-cancel",
+            headers={"Authorization": f"Bearer {settings.supabase_service_role_key}"},
+            json={"event_uri": event_uri}, timeout=10.0)
+        response.raise_for_status()
+        if response.json().get("error"):
+            raise RuntimeError("Calendar cancellation rejected")
+    except Exception:
+        logger.exception("Manual booking reconciliation required for %s", event_uri)
 
 
 NY_TZ = ZoneInfo("America/New_York")
@@ -411,7 +291,11 @@ def _book_pickup(
     if resp.status_code >= 400:
         logger.error("cal-book failed (%s): %s", resp.status_code, resp.text)
         return None
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError:
+        logger.error("Calendar returned an invalid response; reconcile booking before retry")
+        return None
     if data.get("error"):
         logger.error("cal-book returned an error: %s", data["error"])
         return None
@@ -554,6 +438,8 @@ def create_checkout(
     background_tasks: BackgroundTasks,
     user: OptionalUser,
 ) -> CheckoutResponse:
+    if not get_settings().payments_enabled:
+        raise HTTPException(403, "Online payments are currently unavailable. Please review your repair recommendations.")
     route_started = perf_counter()
     stripe.api_key = get_settings().stripe_secret_key
 
@@ -789,3 +675,71 @@ def create_checkout(
         taxCents=cart_quote.tax_cents if cart_quote else None,
         totalCents=cart_quote.total_cents if cart_quote else None,
     )
+
+
+class InitialScheduleRequest(BaseModel):
+    kind: str
+    start: str
+    end: str
+
+
+@router.post('/schedule/{order_id}')
+def schedule_initial_appointment(order_id: str, body: InitialScheduleRequest, user: OptionalUser) -> dict[str, Any]:
+    """Book an initial appointment for the owner; never permit customer rescheduling.
+
+    Use the server-owned client only after ownership verification. A conditional
+    update prevents concurrent requests replacing an appointment. Reconcile
+    ambiguous writes before canceling a calendar booking.
+    """
+    if user is None:
+        raise HTTPException(401, 'Sign in required')
+    if body.kind not in ('pickup', 'return'):
+        raise HTTPException(400, 'Invalid appointment type')
+    sb = get_supabase_admin()
+    response = sb.table('orders').select('id,user_id,status,contact_email,contact_phone,delivery_address,pickup_calendly_event_uri,return_calendly_event_uri').eq('id', order_id).maybe_single().execute()
+    order = getattr(response, 'data', None)
+    if getattr(response, 'error', None):
+        raise HTTPException(503, 'Could not verify this repair. Please try again.')
+    if not order or order.get('user_id') != user.id:
+        raise HTTPException(404, 'Repair not found')
+    allowed = ('placed', 'confirmed') if body.kind == 'pickup' else ('ready-for-return',)
+    if order.get('status') not in allowed:
+        raise HTTPException(409, 'Scheduling is not available at this stage.')
+    event_field = f'{body.kind}_calendly_event_uri'
+    if order.get(event_field):
+        raise HTTPException(409, 'This appointment is already scheduled. Please contact us to make changes.')
+    try:
+        start = datetime.fromisoformat(body.start.replace('Z', '+00:00'))
+        end = datetime.fromisoformat(body.end.replace('Z', '+00:00'))
+        if not start.tzinfo or not end.tzinfo or start <= datetime.now(start.tzinfo) or end <= start:
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise HTTPException(400, 'Choose an available future time.')
+    address = order.get('delivery_address') or {}
+    if not isinstance(address, dict) or not all(address.get(k) for k in ('street', 'city', 'state', 'zip')):
+        raise HTTPException(409, 'Please contact us to complete your delivery address.')
+    if not order.get('contact_email') or not order.get('contact_phone'):
+        raise HTTPException(409, 'Please contact us to complete your contact details.')
+    window = {'start': body.start, 'end': body.end, 'address': ', '.join(str(address[k]) for k in ('street','street2','city','state','zip') if address.get(k))}
+    event_uri = _book_pickup(window, f"Cobbli {body.kind}", order['contact_email'], order['contact_phone'])
+    if not event_uri:
+        raise HTTPException(409, 'That time could not be booked. Please choose another time.')
+    fields = {event_field: event_uri, f'{body.kind}_date': _to_ny_date_key(body.start), f'{body.kind}_time_label': _format_ny_time_range(body.start, body.end)}
+    try:
+        result = sb.table('orders').update(fields).eq('id', order_id).eq('user_id', user.id).eq('status', order['status']).is_(event_field, 'null').execute()
+        if getattr(result, 'error', None) or not getattr(result, 'data', None):
+            raise RuntimeError('Appointment was not saved')
+    except Exception:
+        try:
+            check = sb.table('orders').select(','.join(fields)).eq('id', order_id).maybe_single().execute()
+            if getattr(check, 'error', None) or not getattr(check, 'data', None):
+                raise RuntimeError('Cannot reconcile appointment')
+            saved = check.data
+        except Exception:
+            logger.exception('Appointment needs reconciliation: order=%s booking=%s', order_id, event_uri)
+            raise HTTPException(503, 'We could not verify your appointment. Please contact us before booking again.')
+        if saved.get(event_field) == event_uri:
+            return saved
+        _cancel_pickup(event_uri)
+        raise HTTPException(409, 'Your repair changed or an appointment was already booked. Please reload.')
+    return fields

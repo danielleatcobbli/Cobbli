@@ -545,7 +545,7 @@ const StartRepair = () => {
   // then the category icon when neither the service nor the condition has a
   // photo yet.
   const serviceBySlug = useMemo(() => {
-    const map = new Map<string, { imageUrl?: string; afterImageUrl?: string }>();
+    const map = new Map<string, { imageUrl?: string; afterImageUrl?: string; cardPriceLabel?: string }>();
     (services ?? []).forEach((s) => map.set(s.slug, s));
     return map;
   }, [services]);

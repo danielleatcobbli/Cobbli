@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.auth import AuthUser, require_user
+from app.auth import AuthUser, optional_user, require_user
 from app.pricing import CartQuote
 
 
@@ -20,9 +20,26 @@ def auth_user():
 
 @pytest.fixture
 def authed_client(client, auth_user):
+    # Bug fix (2026-10-02, Danielle's call to prioritize this): every route
+    # in create_checkout.py takes `user: OptionalUser`, which resolves via
+    # `optional_user()` — a plain function that calls `require_user()`
+    # directly rather than through a nested `Depends()`. FastAPI's
+    # dependency_overrides only intercepts calls made through the Depends()
+    # graph, so overriding `require_user` alone (the only thing this fixture
+    # used to do) never reached any route here. Every "signed-in" test using
+    # this fixture was actually exercising the signed-OUT/guest branch of
+    # each endpoint the whole time — confirmed by inspection (optional_user's
+    # source literally calls require_user(request, authorization) as a plain
+    # function call, so no override attaches to that call) and empirically
+    # (metadata assertions like `md["userId"] == "user-123"` were failing
+    # with `KeyError: 'userId'`, because the guest path writes `guestEmail`
+    # instead). Overriding both dependencies here makes this fixture correct
+    # for both OptionalUser and CurrentUser-typed routes.
     client.app.dependency_overrides[require_user] = lambda: auth_user
+    client.app.dependency_overrides[optional_user] = lambda: auth_user
     yield client
     client.app.dependency_overrides.pop(require_user, None)
+    client.app.dependency_overrides.pop(optional_user, None)
 
 
 @pytest.fixture(autouse=True)

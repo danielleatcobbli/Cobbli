@@ -16,7 +16,11 @@ def _extract_signed_url(result: Any) -> str | None:
     has returned this either as a dict or an object across versions, so both
     shapes are handled rather than assumed."""
     if isinstance(result, dict):
-        if result.get("error") or not result.get("data"):
+        if result.get("error"):
+            return None
+        if result.get("signedURL") or result.get("signedUrl") or result.get("signed_url"):
+            return result.get("signedURL") or result.get("signedUrl") or result.get("signed_url")
+        if not result.get("data"):
             return None
         data = result["data"]
         if isinstance(data, dict):
@@ -66,7 +70,7 @@ def get_public_proposal(token: str) -> dict[str, Any]:
     sb = get_supabase_admin()
     resp = (
         sb.table("assessments")
-        .select("id, pairs, status, proposed_services")
+        .select("id, user_id, pairs, status, proposed_services, complimentary, updated_at, guest_email, guest_zip")
         .eq("proposal_token", token)
         .maybe_single()
         .execute()
@@ -83,6 +87,11 @@ def get_public_proposal(token: str) -> dict[str, Any]:
         for path in (pair.get("photoPaths") or [])[:4]:
             if not isinstance(path, str) or path in photo_urls:
                 continue
+            # Paths originate in customer-editable JSON. Never sign an arbitrary
+            # private object using the privileged client, even with a valid token.
+            owner = row.get("user_id")
+            if not owner or not path.startswith(f"{owner}/") or ".." in path.split("/"):
+                continue
             try:
                 result = sb.storage.from_("assessment-uploads").create_signed_url(path, 3600)
             except Exception:
@@ -92,8 +101,19 @@ def get_public_proposal(token: str) -> dict[str, Any]:
             if signed:
                 photo_urls[path] = signed
 
+    confirmed_order = None
+    if row.get("status") == "booked":
+        confirmed = sb.table("orders").select("order_number,status,pickup_date,pickup_time_label,return_date,return_time_label,order_items(service_snapshot,pair_snapshot)").eq("assessment_id", row["id"]).maybe_single().execute()
+        if getattr(confirmed, "error", None):
+            raise HTTPException(503, "Could not load confirmation")
+        confirmed_order = getattr(confirmed, "data", None)
     return {
         "id": row["id"],
+        "guest_email": row.get("guest_email"),
+        "guest_zip": row.get("guest_zip"),
+        "complimentary": bool(row.get("complimentary")),
+        "updated_at": row.get("updated_at"),
+        "confirmed_order": confirmed_order,
         "pairs": pairs,
         "status": row.get("status"),
         "proposed_services": row.get("proposed_services") or [],

@@ -57,6 +57,15 @@ serve(async (req) => {
     return new Response(null, { headers: CORS });
   }
 
+  // Calendar mutations go through the backend, which verifies repair ownership
+  // and eligibility. A public project key must never authorize a booking.
+  const serverKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serverKey || req.headers.get("authorization") !== `Bearer ${serverKey}`) {
+    return new Response(JSON.stringify({ error: "Server authorization required" }), {
+      status: 403, headers: { ...CORS, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const pat = Deno.env.get("CALENDLY_PAT");
     if (!pat) {

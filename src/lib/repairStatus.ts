@@ -29,15 +29,15 @@ export const REQUEST_STATUS: Record<string, StatusMeta> = {
     action: "View details",
   },
   needs_more_info: {
-    label: "Request received",
+    label: "More information needed",
     pill: "bg-amber-100 text-amber-900",
-    next: "We need a couple more photos from you to continue.",
-    action: "Add photos",
+    next: "We have a question about your bag. Send us a reply or photos.",
+    action: "Respond to request",
   },
   quote_ready: {
     label: "Recommendations ready",
     pill: "bg-blue-100 text-blue-800",
-    next: "Review your recommendations and pick one to continue.",
+    next: "Review your recommendations and choose the work you want.",
     action: "Review recommendations",
   },
   waitlisted: {
@@ -53,7 +53,7 @@ export const REQUEST_STATUS: Record<string, StatusMeta> = {
   declined: {
     label: "Closed",
     pill: "bg-gray-200 text-gray-700",
-    next: "You let us know this repair isn't needed. Changed your mind? Just reach out.",
+    next: "This request is closed. Contact us if you'd like to discuss next steps.",
     action: "View details",
   },
   service_unavailable: {
@@ -74,7 +74,7 @@ export const REPAIR_STATUS: Record<string, StatusMeta> = {
   // ("We've got your bag..." was wrong here). "Your repair is confirmed."
   // is accurate regardless of whether pickup has been scheduled yet.
   placed: { label: "Repair confirmed", pill: "bg-blue-100 text-blue-800", next: "Your repair is confirmed.", action: "View details" },
-  pending_payment: { label: "Repair confirmed", pill: "bg-blue-100 text-blue-800", next: "Finishing up your confirmation.", action: "View details" },
+  pending_payment: { label: "Confirmation pending", pill: "bg-blue-100 text-blue-800", next: "Finishing up your confirmation.", action: "View details" },
   "pickup-scheduled": { label: "Repair confirmed", pill: "bg-blue-100 text-blue-800", next: "Your repair is confirmed. Pickup is scheduled — we'll see you soon.", action: "View details" },
   "picked-up": { label: "In repair", pill: "bg-amber-100 text-amber-900", next: "Your bag is on its way to our workshop.", action: "View details" },
   "at-the-workshop": { label: "In repair", pill: "bg-amber-100 text-amber-900", next: "Your bag is at our workshop.", action: "View details" },

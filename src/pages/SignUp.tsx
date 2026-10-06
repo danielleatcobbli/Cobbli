@@ -198,7 +198,7 @@ const SignUp = () => {
       }
       trackEvent("account_created", { method: "email" });
       // If email confirmation is required (no session returned), show confirmation prompt
-      if (!data.session) {
+      if (!("session" in data) || !data.session) {
         setConfirmEmailSent(true);
         return;
       }

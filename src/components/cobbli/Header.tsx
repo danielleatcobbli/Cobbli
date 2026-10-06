@@ -227,20 +227,12 @@ const Header = ({ transparent = false, theme = "amber" }: Props) => {
               <HeaderIcon src={accountIcon} color={iconColor} />
             </Link>
           )}
-          <Link to="/bag" aria-label={`Shopping bag, ${itemCount} item${itemCount === 1 ? "" : "s"}`} className="relative p-2 rounded-md hover:bg-primary-glow transition-colors">
-            <HeaderIcon src={bagIcon} color={iconColor} />
-            {/* White pill + brown number/border instead of a solid brown
-                circle (2026-08-27, Danielle's call — didn't like the solid
-                brown fill). White reads distinctly against both the cream
-                and amber bar (and the border keeps it from disappearing
-                into cream specifically), and brown-on-white is about as
-                high-contrast as this palette gets. */}
-            <span
-              className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
-              style={{ backgroundColor: "#ffffff", color: "#3d1700", border: "1.5px solid #3d1700" }}
-            >
-              {itemCount}
-            </span>
+          <Link
+            to="/account/orders"
+            className="rounded-md px-3 py-2 text-sm font-semibold text-[#3d1700] whitespace-nowrap transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-current"
+            style={{ backgroundColor: location.pathname === "/" ? "#fdb600" : "#fff5cc" }}
+          >
+            My Repairs
           </Link>
           <button
             className="md:hidden p-2 rounded-md hover:bg-primary-glow"

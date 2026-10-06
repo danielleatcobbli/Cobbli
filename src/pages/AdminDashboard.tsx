@@ -1,3 +1,4 @@
+import { operationsDate } from "@/lib/operationsDate";
 /**
  * AdminDashboard
  *
@@ -33,6 +34,8 @@ import BeforeAfterSlider from "@/components/cobbli/BeforeAfterSlider";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type OrderStatus =
+  | "canceled"
+  | "needs-review"
   // Standard checkout / proposal-approval path
   | "placed"
   | "pending_payment"
@@ -103,6 +106,8 @@ const PERSPECTIVE_LABEL: Record<Perspective, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
+  "canceled": { label: "Canceled", bg: "#f3f4f6", fg: "#374151" },
+  "needs-review": { label: "Needs review", bg: "#fef3c7", fg: "#92400e" },
   "placed":                              { label: "Order placed",                          bg: "#dbeafe", fg: "#1e40af" },
   "pending_payment":                     { label: "Pending payment",                       bg: "#fef3c7", fg: "#92400e" },
   "proposal-awaiting-our-response":      { label: "Proposal — awaiting our response",     bg: "#fef3c7", fg: "#92400e" },
@@ -142,8 +147,6 @@ const REWORK_OPEN_STATUSES: OrderStatus[] = ["rework-request-pending", "rework-r
 // Dummy data  (hardcoded — replace with live fetch)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TODAY = "2026-07-08";
-const TOMORROW = "2026-07-09";
 const CURRENT_USER = "DO";
 
 // No longer used to render the page (see fetchOrders() in adminData.ts,
@@ -364,14 +367,14 @@ const ORDERS: Order[] = [
 function dueTiming(dateStr: string | null): "overdue" | "today" | "upcoming" | null {
   if (!dateStr) return null;
   const d = dateStr.slice(0, 10);
-  if (d < TODAY) return "overdue";
-  if (d === TODAY) return "today";
+  if (d < operationsDate()) return "overdue";
+  if (d === operationsDate()) return "today";
   return "upcoming";
 }
 
 function daysOverdue(dateStr: string): number {
   const diff =
-    new Date(TODAY).getTime() - new Date(dateStr + "T00:00:00").getTime();
+    new Date(operationsDate()).getTime() - new Date(dateStr.slice(0, 10) + "T00:00:00Z").getTime();
   return Math.round(diff / 86_400_000);
 }
 
@@ -1316,7 +1319,7 @@ function AllScheduledTable({ orders, onRowClick }: { orders: Order[]; onRowClick
               </td>
               <td style={TD}><TypePill type={type} /></td>
               <td style={{ ...TD, color: "#6b7280", fontSize: 12 }}>
-                {slot.date === TODAY ? "Today" : slot.date === TOMORROW ? "Tomorrow" : fmtDate(slot.date)}
+                {slot.date === operationsDate() ? "Today" : slot.date === operationsDate(1) ? "Tomorrow" : fmtDate(slot.date)}
               </td>
               <td style={{ ...TD, color: "#374151", fontWeight: 500, fontSize: 12 }}>{slot.timeLabel}</td>
               <td style={TD}>
@@ -1437,11 +1440,11 @@ function DispatchView({ orders, perspective, refetch }: { orders: Order[]; persp
       )}
 
       {tab === "today-schedule" && (
-        <ScheduleTable orders={orders} date={TODAY} emptyMessage="No pickups or returns scheduled for today." onRowClick={goToOrder} />
+        <ScheduleTable orders={orders} date={operationsDate()} emptyMessage="No pickups or returns scheduled for today." onRowClick={goToOrder} />
       )}
 
       {tab === "tomorrow-schedule" && (
-        <ScheduleTable orders={orders} date={TOMORROW} emptyMessage="No pickups or returns scheduled for tomorrow." onRowClick={goToOrder} />
+        <ScheduleTable orders={orders} date={operationsDate(1)} emptyMessage="No pickups or returns scheduled for tomorrow." onRowClick={goToOrder} />
       )}
 
       {tab === "all-scheduled" && <AllScheduledTable orders={orders} onRowClick={goToOrder} />}
@@ -1991,7 +1994,7 @@ export default function AdminDashboard() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <PreviewAsSwitcher value={perspective} onChange={setPerspective} />
+          <span className="text-sm">Staff operations</span>
           {/* Avatar */}
           <div style={{ width: 34, height: 34, borderRadius: "50%", backgroundColor: "#fdb600", color: "#3d1700", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, letterSpacing: "0.5px", flexShrink: 0 }}>
             {CURRENT_USER}

@@ -1,3 +1,4 @@
+import { FILTER_BAR_CATEGORIES } from "@/components/cobbli/CategoryFilterBar";
 import { useMemo, useState } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, Navigate, useNavigate } from "react-router-dom";
@@ -138,13 +139,13 @@ const SelectServices = () => {
   );
 
   const visible = useMemo(() => {
-    const list = eligible.filter((s) => categoryMatches(s.categories, activeCategory));
+    const list = eligible.filter((s) => categoryMatches(s.categories, FILTER_BAR_CATEGORIES.find(c => c === activeCategory) ?? "All services"));
     return [...list].sort((a, b) => a.rank - b.rank);
   }, [eligible, activeCategory]);
 
   const comingSoon = useMemo(() => {
     const list = allServices.filter((s) => s.isComingSoon);
-    const byCat = list.filter((s) => categoryMatches(s.categories, activeCategory));
+    const byCat = list.filter((s) => categoryMatches(s.categories, FILTER_BAR_CATEGORIES.find(c => c === activeCategory) ?? "All services"));
     return [...byCat].sort((a, b) => a.rank - b.rank);
   }, [allServices, activeCategory]);
 

@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { PAYMENTS_ENABLED } from "@/lib/pilot";
+import { useEffect, useState, lazy, Suspense, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -47,6 +48,8 @@ import { AssessmentProvider } from "./context/AssessmentContext";
 import { AccountProvider } from "./context/AccountContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
+
+const CustomerRepairPreview = import.meta.env.DEV ? lazy(() => import("./pages/CustomerRepairPreview")) : null;
 
 const queryClient = new QueryClient();
 
@@ -146,7 +149,7 @@ const App = () => (
                         <Route path="/signup" element={<SignUp />} />
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/link-expired" element={<LinkExpired />} />
-                        <Route path="/start-repair" element={<StartRepair />} />
+                        <Route path="/start-repair" element={PAYMENTS_ENABLED ? <StartRepair /> : <Navigate to="/start-repair/assessment" replace />} />
                         <Route path="/start-repair/assessment" element={<AssessmentUpload />} />
                         {/* /start-repair/assessment/deposit retired 2026-09-24
                             (Danielle's call: no deposit structure) — was
@@ -179,17 +182,17 @@ const App = () => (
                           path="/proposal/t/:token"
                           element={<AssessmentProposal />}
                         />
-                        <Route path="/start-repair/services" element={<SelectServices />} />
-                        <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
-                        <Route path="/services" element={<Services />} />
+                        <Route path="/start-repair/services" element={PAYMENTS_ENABLED ? <SelectServices /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/start-repair/services/:slug" element={PAYMENTS_ENABLED ? <ServiceDetail mode="flow" /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/services" element={PAYMENTS_ENABLED ? <Services /> : <Navigate to="/start-repair/assessment" replace />} />
                         <Route path="/services/zipper-reattachment" element={<Navigate to="/services#zipper" replace />} />
                         <Route path="/start-repair/services/zipper-reattachment" element={<Navigate to="/start-repair/services" replace />} />
-                        <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
-                        <Route path="/packages/:slug" element={<PackageDetail />} />
-                        <Route path="/bag" element={<Bag />} />
+                        <Route path="/services/:slug" element={PAYMENTS_ENABLED ? <ServiceDetail mode="standalone" /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/packages/:slug" element={PAYMENTS_ENABLED ? <PackageDetail /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/bag" element={PAYMENTS_ENABLED ? <Bag /> : <Navigate to="/account/orders" replace />} />
                         {/* Guest checkout is in scope (2026-09-24, Danielle's
                             call) — no longer gated behind sign-in. */}
-                        <Route path="/checkout" element={<Checkout />} />
+                        <Route path="/checkout" element={PAYMENTS_ENABLED ? <Checkout /> : <Navigate to="/account/orders" replace />} />
                         <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
                         {/* Unified "Repair details" page (2026-10-01) — what
                             My Repairs (Account.tsx) links to for both a
@@ -277,6 +280,7 @@ const App = () => (
                             </ProtectedRoute>
                           }
                         />
+                        {CustomerRepairPreview && <Route path="/__preview/customer-repair" element={<Suspense fallback={<p>Loading preview…</p>}><CustomerRepairPreview /></Suspense>} /> }
                         <Route path="*" element={<NotFound />} />
                       </Routes>
                       </PreviewGate>
