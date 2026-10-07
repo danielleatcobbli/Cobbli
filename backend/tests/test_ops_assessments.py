@@ -16,6 +16,7 @@ def _select_mock(rows):
     chain = MagicMock()
     chain.select.return_value = chain
     chain.eq.return_value = chain
+    chain.neq.return_value = chain
     chain.order.return_value = chain
     chain.maybe_single.return_value = chain
     chain.update.return_value = chain
@@ -64,12 +65,12 @@ def test_get_one_not_found(client, monkeypatch):
 
 def test_patch_happy_path(client, monkeypatch):
     client.app.dependency_overrides[require_staff] = _staff_user
-    updated = [{"id": "a1", "status": "in_review"}]
+    updated = [{"id": "a1", "status": "needs_more_info"}]
     sb, chain = _select_mock(updated)
     monkeypatch.setattr(
         "app.routes.ops_assessments.get_supabase_for_user", lambda _t: sb
     )
-    res = client.patch("/ops/assessments/a1", json={"status": "in_review"})
+    res = client.patch("/ops/assessments/a1", json={"status": "needs_more_info"})
     assert res.status_code == 200, res.text
     assert res.json() == {"data": updated[0]}
     client.app.dependency_overrides.pop(require_staff, None)
@@ -87,3 +88,13 @@ def test_patch_no_fields(client, monkeypatch):
     res = client.patch("/ops/assessments/a1", json={})
     assert res.status_code == 400
     client.app.dependency_overrides.pop(require_staff, None)
+
+
+def test_staff_cannot_manually_mark_request_booked(client):
+    client.app.dependency_overrides[require_staff] = _staff_user
+    assert client.patch("/ops/assessments/a1", json={"status":"booked"}).status_code == 400
+
+
+def test_publish_requires_bag_assignments(client):
+    client.app.dependency_overrides[require_staff] = _staff_user
+    assert client.patch("/ops/assessments/a1", json={"status":"quote_ready", "proposed_services":[{"name":"Stitch"}]}).status_code == 400

@@ -19,22 +19,18 @@ import { trackEvent } from "@/lib/analytics";
 const Services = () => {
   return (
     <section id="services" className="relative overflow-hidden" style={{ backgroundColor: "#fff5cc" }}>
-      {/* Spread out + enlarged (2026-09-24, Danielle's call — the section
-          felt thin/undersized next to Hero and How It Works). More vertical
-          padding, a wider heading that stays on one line at md+ instead of
-          wrapping to two, and more breathing room between the heading/body/
-          CTA. */}
-      <div className="container py-28 md:py-40 text-center">
-        <div className="max-w-3xl mx-auto">
+      <div className="container pt-16 pb-24 md:pt-20 md:pb-28 text-center">
+        <div className="max-w-4xl mx-auto">
           <h2
-            className="text-3xl md:text-5xl uppercase md:whitespace-nowrap"
+            className="text-[clamp(1.75rem,8vw,3rem)] sm:text-5xl md:text-6xl lg:text-7xl uppercase leading-[1.05]"
             style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#fdb600" }}
           >
-            Good things are worth keeping
+            <span className="block">Good things are</span>
+            <span className="block">worth keeping</span>
           </h2>
           <p
-            className="mt-8 text-base md:text-lg leading-relaxed"
-            style={{ color: "#fdb600", fontFamily: "'Instrument Sans', sans-serif", opacity: 0.9 }}
+            className="mx-auto mt-6 max-w-2xl text-base md:text-lg leading-relaxed"
+            style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}
           >
             We're here to make taking care of the things you love as easy as owning them. With expert repair
             brought right to your door, Cobbli makes it simple to keep your favorite pieces looking good and in
@@ -51,7 +47,7 @@ const Services = () => {
           <Link
             to="/start-repair/assessment"
             onClick={() => trackEvent("start_repair", { source: "services_statement" })}
-            className="inline-block mt-10 rounded-full border-2 px-8 py-3 text-sm font-medium uppercase tracking-wide text-[#fdb600] transition-colors hover:bg-[#fdb600] hover:text-[#fff5cc]"
+            className="inline-block mt-7 rounded-full border-2 px-8 py-3 text-sm font-medium uppercase tracking-wide text-[#fdb600] transition-colors hover:bg-[#fdb600] hover:text-[#fff5cc]"
             style={{ borderColor: "#fdb600", fontFamily: "'Instrument Sans', sans-serif" }}
           >
             Start a repair

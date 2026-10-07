@@ -2,7 +2,7 @@ import Header from "@/components/cobbli/Header";
 import Hero from "@/components/cobbli/Hero";
 import Services from "@/components/cobbli/Services";
 import HowItWorks from "@/components/cobbli/HowItWorks";
-import Reviews from "@/components/cobbli/Reviews";
+
 import GetToKnowUs from "@/components/cobbli/GetToKnowUs";
 
 import Footer from "@/components/cobbli/Footer";
@@ -14,9 +14,9 @@ const Index = () => {
   const location = useLocation();
 
   usePageMeta({
-    title: "Cobbli — Expert shoe repair, delivered to your doorstep",
+    title: "Cobbli — Bag repair, delivered to your doorstep",
     description:
-      "Cobbli picks up, repairs and returns your favorite shoes across NYC. Master cobblers, free courier on orders over $100, easy online booking.",
+      "Send us photos of your bag. Review our repair recommendations and choose an available pickup.",
     canonicalPath: "/",
   });
 
@@ -47,7 +47,7 @@ const Index = () => {
       "@type": "LocalBusiness",
       name: "Cobbli",
       description:
-        "Door-to-door shoe repair in NYC. Cobbli picks up, repairs and returns your favorite shoes.",
+        "Bag repair in NYC. Cobbli reviews your photos, recommends repairs, and coordinates pickup and return.",
       url: window.location.origin,
       email: "support@cobbli.com",
       areaServed: { "@type": "City", name: "New York" },
@@ -83,7 +83,7 @@ const Index = () => {
           2026-08-26 (Danielle's call, matches her homepage mockup) —
           TrustSignals.tsx is untouched, just no longer rendered on the
           homepage. Revert by swapping the import/JSX back if needed. */}
-      <Reviews />
+
       <GetToKnowUs />
 
       <Footer />

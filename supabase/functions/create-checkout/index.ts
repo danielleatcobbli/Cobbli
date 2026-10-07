@@ -244,6 +244,11 @@ Deno.serve(async (req) => {
     return new Response("Method not allowed", { status: 405, headers: corsHeaders });
   }
 
+  if (Deno.env.get("PAYMENTS_ENABLED") !== "true") {
+    return new Response(JSON.stringify({ error: "Online payments are currently unavailable." }), {
+      status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "");
     if (!token) {

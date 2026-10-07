@@ -5,15 +5,14 @@ import { useRole, type Role } from "@/hooks/useRole";
 import { cn } from "@/lib/utils";
 
 // Nav entries with the roles allowed to see them. UI layer of enforcement:
-// staff never see reports/settings/user-management; the links simply don't
-// render. (Middleware-equivalent guards + RLS enforce the rest.)
+// staff never see reports/settings; the links simply don't render.
+// (Middleware-equivalent guards + RLS enforce the rest.)
 const NAV: { to: string; label: string; allow: Role[] }[] = [
-  { to: "/admin/assessments", label: "Submissions", allow: ["staff", "admin"] },
-  { to: "/admin/orders", label: "Orders", allow: ["staff", "admin"] },
+  { to: "/admin", label: "Orders", allow: ["staff", "admin"] },
+  { to: "/admin/assessments", label: "Requests", allow: ["staff", "admin"] },
   { to: "/admin/reworks", label: "Reworks", allow: ["staff", "admin"] },
   { to: "/admin/reports", label: "Reports", allow: ["admin"] },
   { to: "/admin/settings", label: "Settings", allow: ["admin"] },
-  { to: "/admin", label: "User management", allow: ["admin"] },
 ];
 
 const AdminLayout = ({ children }: { children: React.ReactNode }) => {

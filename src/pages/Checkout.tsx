@@ -197,7 +197,7 @@ const Checkout = () => {
 
     const finalize = async () => {
       // Poll for up to ~60s. Keep the user on the Finalizing screen the
-      // whole time rather than bouncing them to an empty My Orders list.
+      // whole time rather than bouncing them to an empty My Repairs list.
       let dbOrderId: string | null = null;
       let dbTotalCents: number | null = null;
       for (let i = 0; i < 60 && !cancelled; i++) {
@@ -219,7 +219,7 @@ const Checkout = () => {
         toast({
           title: "Still finalizing your order",
           description:
-            "Your payment was received. Your order will appear in My Orders shortly — refresh in a moment if you don't see it.",
+            "Your payment was received. Your repair will appear in My Repairs shortly — refresh in a moment if you don't see it.",
         });
         navigate("/account/orders", { replace: true });
         return;

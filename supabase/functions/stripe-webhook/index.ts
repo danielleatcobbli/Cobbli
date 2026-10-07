@@ -149,6 +149,48 @@ function reassembleCart(meta: Record<string, string>): CartPayload | null {
   }
 }
 
+// Request-to-order continuity fix (2026-10-02, Danielle's call — narrow fix
+// to the implementation actually live in Stripe's webhook config, see the
+// 2026-10-01/02 investigation). assessments.status was never flipped to
+// "booked" anywhere in this function, even though Admin.tsx, Account.tsx's
+// My Repairs exclusion, and the proposal/repair-details pages' `alreadyBooked`
+// all read it. Marks the assessment booked only once the order (and, if a
+// pickup window was selected, its booking) is confirmed to exist — never on
+// a bare webhook delivery, and never if the order creation itself failed.
+// Idempotent: safe to call on every delivery, including retries where the
+// order already exists.
+async function repairAssessmentBookedStatus(assessmentId: string): Promise<void> {
+  const { data: assessment, error: fetchErr } = await supabase
+    .from("assessments")
+    .select("id,status")
+    .eq("id", assessmentId)
+    .maybeSingle();
+  if (fetchErr) {
+    throw new Error(`failed to read assessment ${assessmentId} for booked-status repair: ${fetchErr.message}`);
+  }
+  if (!assessment) {
+    // Nothing to repair — an assessment_id that doesn't resolve to a row is
+    // not this function's problem to raise louder than a log line.
+    console.error(`assessment ${assessmentId} not found while repairing booked status`);
+    return;
+  }
+  if (assessment.status === "booked") {
+    return; // already correct — common case on a retried/duplicate delivery
+  }
+  const { error: updateErr } = await supabase
+    .from("assessments")
+    .update({ status: "booked" })
+    .eq("id", assessmentId);
+  if (updateErr) {
+    // Thrown deliberately (not just logged): a failure here must make this
+    // webhook delivery count as failed so Stripe retries it, and the next
+    // delivery — even if it also short-circuits on the order already
+    // existing — now also re-attempts this repair before returning (see the
+    // early-return branch below).
+    throw new Error(`failed to mark assessment ${assessmentId} booked: ${updateErr.message}`);
+  }
+}
+
 async function createOrderFromCart(
   meta: Record<string, string>,
   sessionId: string | null,
@@ -171,6 +213,16 @@ async function createOrderFromCart(
     throw new Error("cart webhook missing Stripe payment identifiers");
   }
 
+  // Parsed up front (moved ahead of the existing-order lookup, 2026-10-02) so
+  // assessment_id is available to the early-return branch below — a retried
+  // delivery for an order that already reached "placed" must still repair
+  // assessments.status if an earlier delivery got the order created but
+  // failed before marking the assessment booked.
+  const payload = reassembleCart(meta);
+  if (!payload) {
+    throw new Error("cart webhook missing/invalid payload metadata");
+  }
+
   // A retry can arrive after the order insert succeeded but a later item/status
   // write failed. Resume pending orders instead of treating every existing row
   // as fully processed.
@@ -184,12 +236,16 @@ async function createOrderFromCart(
   }
   if (existing?.status === "placed") {
     console.log("placed order already exists for", lookupCol, lookupVal);
+    // Order creation already succeeded on an earlier delivery — but that
+    // delivery may have crashed (or been killed) between flipping the order
+    // to "placed" and marking the assessment booked. Checking this on every
+    // short-circuited retry, not just the first successful run, is exactly
+    // what closes that gap (2026-10-02, Danielle's explicit call: "an early
+    // duplicate event/order return must not skip that repair").
+    if (payload.assessment_id) {
+      await repairAssessmentBookedStatus(payload.assessment_id);
+    }
     return;
-  }
-
-  const payload = reassembleCart(meta);
-  if (!payload) {
-    throw new Error("cart webhook missing/invalid payload metadata");
   }
   if (
     !Number.isInteger(payload.total_cents)
@@ -273,6 +329,13 @@ async function createOrderFromCart(
         );
       }
       if (racedOrder.status === "placed") {
+        // Same repair-before-returning rule as the top-level early return
+        // above — a concurrent delivery winning this insert race is just
+        // another path to "the order already exists," and must not skip
+        // the booked-status repair either.
+        if (payload.assessment_id) {
+          await repairAssessmentBookedStatus(payload.assessment_id);
+        }
         return;
       }
       orderRow = racedOrder;
@@ -319,6 +382,18 @@ async function createOrderFromCart(
     throw new Error(
       `failed to flip order to placed: ${statusErr?.message ?? "no matching row"}`,
     );
+  }
+
+  // Only reached once the order itself is confirmed "placed" and its items
+  // are in (or were already present on a resumed retry) — never on bare
+  // receipt of the webhook event, and never if order/item creation above
+  // threw first. A failed pickup booking does NOT block this: bookPickup()
+  // already tolerates that failure for the order itself (existing,
+  // preserved behavior — payment has already succeeded, so a scheduling
+  // hiccup must not block the order from existing), and the request is
+  // still genuinely converted to an order either way.
+  if (payload.assessment_id) {
+    await repairAssessmentBookedStatus(payload.assessment_id);
   }
 }
 

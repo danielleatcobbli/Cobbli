@@ -1,0 +1,16 @@
+-- Bug fix (2026-10-01): a later security-hardening migration
+-- (20260512142239_ab81b9c8...) revoked EXECUTE on reset_failed_attempts(uuid)
+-- from `authenticated` along with a batch of other internal/trigger
+-- functions, without realizing ResetPassword.tsx calls this RPC directly as
+-- the signed-in user to clear their own account lockout after setting a new
+-- password (see src/pages/ResetPassword.tsx's handleResetSubmit). Since that
+-- revoke, the call has been failing with a permission-denied error that the
+-- frontend doesn't surface (the Supabase client's error isn't checked), so
+-- resetting a locked account's password silently never clears the lockout
+-- row in user_security -- the user resets successfully, but
+-- is_account_locked() still returns true on their next sign-in attempt,
+-- bouncing them straight back to the locked screen.
+--
+-- Confirmed live on 2026-10-01: has_function_privilege('authenticated',
+-- 'public.reset_failed_attempts(uuid)', 'EXECUTE') returned false.
+GRANT EXECUTE ON FUNCTION public.reset_failed_attempts(uuid) TO authenticated;

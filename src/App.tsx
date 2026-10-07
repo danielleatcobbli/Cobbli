@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { PAYMENTS_ENABLED } from "@/lib/pilot";
+import { useEffect, useState, lazy, Suspense, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -21,11 +22,11 @@ import PairFlowDialog from "./components/cobbli/PairFlowDialog";
 import AssessmentUpload from "./pages/AssessmentUpload";
 import AssessmentConfirmation from "./pages/AssessmentConfirmation";
 import AssessmentProposal from "./pages/AssessmentProposal";
+import RepairDetails from "./pages/RepairDetails";
 import Admin from "./pages/Admin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminOrderDetail from "./pages/AdminOrderDetail";
 import OwnerSettings from "./pages/OwnerSettings";
-import AdminOrders from "./pages/admin/AdminOrders";
 import AdminReworks from "./pages/admin/AdminReworks";
 import AdminReports from "./pages/admin/AdminReports";
 import Blog from "./pages/Blog";
@@ -47,6 +48,8 @@ import { AssessmentProvider } from "./context/AssessmentContext";
 import { AccountProvider } from "./context/AccountContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
+
+const CustomerRepairPreview = import.meta.env.DEV ? lazy(() => import("./pages/CustomerRepairPreview")) : null;
 
 const queryClient = new QueryClient();
 
@@ -146,7 +149,7 @@ const App = () => (
                         <Route path="/signup" element={<SignUp />} />
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/link-expired" element={<LinkExpired />} />
-                        <Route path="/start-repair" element={<StartRepair />} />
+                        <Route path="/start-repair" element={PAYMENTS_ENABLED ? <StartRepair /> : <Navigate to="/start-repair/assessment" replace />} />
                         <Route path="/start-repair/assessment" element={<AssessmentUpload />} />
                         {/* /start-repair/assessment/deposit retired 2026-09-24
                             (Danielle's call: no deposit structure) — was
@@ -179,18 +182,33 @@ const App = () => (
                           path="/proposal/t/:token"
                           element={<AssessmentProposal />}
                         />
-                        <Route path="/start-repair/services" element={<SelectServices />} />
-                        <Route path="/start-repair/services/:slug" element={<ServiceDetail mode="flow" />} />
-                        <Route path="/services" element={<Services />} />
+                        <Route path="/start-repair/services" element={PAYMENTS_ENABLED ? <SelectServices /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/start-repair/services/:slug" element={PAYMENTS_ENABLED ? <ServiceDetail mode="flow" /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/services" element={PAYMENTS_ENABLED ? <Services /> : <Navigate to="/start-repair/assessment" replace />} />
                         <Route path="/services/zipper-reattachment" element={<Navigate to="/services#zipper" replace />} />
                         <Route path="/start-repair/services/zipper-reattachment" element={<Navigate to="/start-repair/services" replace />} />
-                        <Route path="/services/:slug" element={<ServiceDetail mode="standalone" />} />
-                        <Route path="/packages/:slug" element={<PackageDetail />} />
-                        <Route path="/bag" element={<Bag />} />
+                        <Route path="/services/:slug" element={PAYMENTS_ENABLED ? <ServiceDetail mode="standalone" /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/packages/:slug" element={PAYMENTS_ENABLED ? <PackageDetail /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/bag" element={PAYMENTS_ENABLED ? <Bag /> : <Navigate to="/account/orders" replace />} />
                         {/* Guest checkout is in scope (2026-09-24, Danielle's
                             call) — no longer gated behind sign-in. */}
-                        <Route path="/checkout" element={<Checkout />} />
+                        <Route path="/checkout" element={PAYMENTS_ENABLED ? <Checkout /> : <Navigate to="/account/orders" replace />} />
                         <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
+                        {/* Unified "Repair details" page (2026-10-01) — what
+                            My Repairs (Account.tsx) links to for both a
+                            still-pending request and a confirmed repair.
+                            Protected since it's only ever reached from a
+                            signed-in customer's own account list; the
+                            separate public /proposal/t/:token route is
+                            untouched for guest/email links. */}
+                        <Route
+                          path="/repair/:kind/:id"
+                          element={
+                            <ProtectedRoute>
+                              <RepairDetails />
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route path="/faqs" element={<Faqs />} />
                         <Route path="/blog" element={<Blog />} />
                         <Route path="/blog/:slug" element={<BlogPost />} />
@@ -218,11 +236,23 @@ const App = () => (
                             </RoleRoute>
                           }
                         />
+                        {/* /admin/orders was a never-finished placeholder
+                            (2026-10-01 finding) — the real operations
+                            dashboard already lives at /admin. Redirect any
+                            old bookmarks/links rather than leaving a dead
+                            page up. */}
+                        <Route path="/admin/orders" element={<Navigate to="/admin" replace />} />
+                        {/* Pre-purchase proposal-building queue (previously
+                            orphaned at no route at all, 2026-10-01 fix) —
+                            staff reviews a customer's submitted photos here
+                            and builds their priced proposal before checkout.
+                            Separate stage of the pipeline from the post-
+                            purchase operations dashboard at /admin. */}
                         <Route
-                          path="/admin/orders"
+                          path="/admin/proposals"
                           element={
                             <RoleRoute allow={["admin", "staff"]}>
-                              <AdminOrders />
+                              <Admin />
                             </RoleRoute>
                           }
                         />
@@ -258,6 +288,7 @@ const App = () => (
                             </ProtectedRoute>
                           }
                         />
+                        {CustomerRepairPreview && <Route path="/__preview/customer-repair" element={<Suspense fallback={<p>Loading preview…</p>}><CustomerRepairPreview /></Suspense>} /> }
                         <Route path="*" element={<NotFound />} />
                       </Routes>
                       </PreviewGate>

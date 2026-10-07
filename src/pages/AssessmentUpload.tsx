@@ -42,6 +42,30 @@ const isImage = (f: File) => {
   return IMAGE_TYPES.includes(f.type) || ["jpg", "jpeg", "png", "heic", "heif"].includes(ext);
 };
 
+/** A failed upload used to only surface as a generic "Could not submit" at
+ *  the very end (2026-10-01 fix) — the customer had no idea which photo
+ *  failed or why until they clicked Submit, possibly minutes later. Now each
+ *  failure gets its own toast the moment it happens, with specific causes
+ *  called out rather than a raw Postgres/Auth error string. */
+const friendlyUploadError = (e: unknown): string => {
+  const raw = e instanceof Error ? e.message : String(e ?? "");
+  // Guests now get a real (anonymous) auth identity before uploading — see
+  // resolveUploadIdentity below — so this should be rare. It fires if
+  // anonymous sign-ins aren't enabled for this Supabase project (Auth ->
+  // Providers -> Anonymous Sign-ins), which is a one-time dashboard setting
+  // this whole guest-upload fix depends on, not something fixable in code.
+  if (/anonymous/i.test(raw)) {
+    return "We couldn't start a guest session. Try signing in, or refresh and try again.";
+  }
+  if (/row-level security|permission denied/i.test(raw)) {
+    return "We couldn't save this photo. Try signing in, or refresh and try again.";
+  }
+  if (/network|fetch/i.test(raw)) {
+    return "Check your connection and try again.";
+  }
+  return "Please try again.";
+};
+
 const genKey = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -57,18 +81,34 @@ const ItemUploadCard = ({
   item,
   index,
   total,
+  showError,
   onFilesChange,
   onDescriptionChange,
   onRemove,
+  onFileUploadFailed,
   startUpload,
+  cardRef,
 }: {
   item: Item;
   index: number;
   total: number;
+  /** True once the customer has attempted to submit and this bag still has
+   *  zero photos — drives the red border/error text below (2026-10-01,
+   *  "Please complete all required fields" rework). Never shown before a
+   *  submit attempt. */
+  showError: boolean;
   onFilesChange: (files: Picked[]) => void;
   onDescriptionChange: (description: string) => void;
   onRemove: () => void;
+  /** Called when a specific file's upload rejects — removes just that file
+   *  via a functional state update keyed off the file reference (not the
+   *  `files` snapshot closed over at pick time), so it can't clobber other
+   *  photos added to this same bag while the failed upload was in flight. */
+  onFileUploadFailed: (file: File) => void;
   startUpload: (file: File) => Promise<string>;
+  /** Lets the parent scroll/focus this bag's card when it's the first
+   *  incomplete section after a failed submit attempt. */
+  cardRef: (el: HTMLDivElement | null) => void;
 }) => {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +130,12 @@ const ItemUploadCard = ({
       }
       const uploadPromise = startUpload(f).catch((e) => {
         console.warn("upload failed", e);
+        toast({
+          title: "Couldn't upload photo",
+          description: `${f.name}: ${friendlyUploadError(e)}`,
+          variant: "destructive",
+        });
+        onFileUploadFailed(f);
         throw e;
       });
       const picked: Picked = { file: f, preview: URL.createObjectURL(f), uploadPromise };
@@ -130,25 +176,34 @@ const ItemUploadCard = ({
   };
 
   return (
-    <div className="mt-6 rounded-xl border border-border p-4 md:p-5">
-      {/* Eyebrow only shown once there's more than one item — a single
-          submission doesn't need "Item 1" disambiguation (2026-09-24,
-          Danielle's call: don't make customers name things, so this is just
-          an ordinal, not an identity). */}
-      {total > 1 && (
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#3d1700" }}>
-            Item {index + 1}
-          </p>
+    <div
+      ref={cardRef}
+      tabIndex={-1}
+      className={`mt-6 rounded-xl border p-4 md:p-5 outline-none ${
+        showError ? "border-destructive" : "border-border"
+      }`}
+    >
+      {/* 2026-10-01: reverted to the original instructional heading per
+          Danielle's explicit call — supersedes the earlier "Bag N photos *"
+          per-card label. */}
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <p
+          id={`bag-photos-heading-${item.key}`}
+          className="text-sm font-medium"
+          style={{ color: "#3d1700" }}
+        >
+          Upload photos of your bag(s) from all sides. Make sure to capture any areas of damage or wear.
+        </p>
+        {total > 1 && (
           <button
             type="button"
             onClick={onRemove}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors shrink-0"
           >
-            <Trash2 size={13} /> Remove
+            <Trash2 size={13} /> Remove bag
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <input
         ref={inputRef}
@@ -171,6 +226,7 @@ const ItemUploadCard = ({
         <>
           <button
             type="button"
+            aria-labelledby={`bag-photos-heading-${item.key}`}
             onClick={() => inputRef.current?.click()}
             onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); }}
@@ -190,15 +246,7 @@ const ItemUploadCard = ({
             }`}
           >
             <Plus className="mx-auto mb-2" />
-            <p className="font-medium text-primary">
-              {dragOver ? (
-                "Drop files to upload"
-              ) : (
-                <>
-                  Upload photos <span className="text-destructive">*</span>
-                </>
-              )}
-            </p>
+            <p className="font-medium text-primary">{dragOver ? "Drop files to upload" : "Upload photos"}</p>
             <p className="text-xs text-muted-foreground mt-1">
               JPG, PNG, HEIC · up to {MAX_FILES} files · 50MB max each
             </p>
@@ -225,6 +273,11 @@ const ItemUploadCard = ({
           <p className="mt-2 text-xs text-muted-foreground md:hidden">
             JPG, PNG, HEIC · up to {MAX_FILES} files · 50MB max each
           </p>
+          {showError && (
+            <p className="mt-2 text-xs text-destructive" role="alert">
+              Add at least one photo of this bag.
+            </p>
+          )}
         </>
       ) : (
         <>
@@ -303,7 +356,7 @@ const ItemUploadCard = ({
           className="text-sm font-medium"
           style={{ color: "#3d1700" }}
         >
-          What's going on with this bag?
+          What's going on with this bag? <span className="font-normal text-muted-foreground">(optional)</span>
         </Label>
         <Textarea
           id={`item-description-${item.key}`}
@@ -337,7 +390,14 @@ const AssessmentUpload = () => {
   const [zip, setZip] = useState("");
   const [email, setEmail] = useState(user?.email ?? "");
   const [busy, setBusy] = useState(false);
-  const sessionTsRef = useRef<string>("");
+  // Only becomes true after a submit attempt — drives whether the general
+  // "Please complete all required fields" message and the per-field error
+  // states show at all (2026-10-01). Never true on first load, so nothing is
+  // flagged as invalid before the customer has interacted with the form.
+  const [attempted, setAttempted] = useState(false);
+  const itemCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const zipRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
 
   usePageMeta({
     title: "Start a repair — Cobbli",
@@ -353,14 +413,48 @@ const AssessmentUpload = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Every photo's storage path is keyed by a real auth.uid() — the signed-in
+  // user's, or (2026-10-01 guest-upload fix) a freshly-issued Supabase
+  // anonymous-auth identity for a guest. This is the entire fix: the
+  // existing storage policies ("Users upload/read/delete own assessment
+  // files") already scope strictly by `auth.uid() = (storage.foldername
+  // (name))[1]` — they were correct all along. The bug was that guests had
+  // no identity to satisfy them at all; they uploaded under a literal
+  // folder named "guest", which can never equal anyone's auth.uid(), so
+  // every guest upload was silently rejected by Postgres before it reached
+  // application code. No bucket policy changes, no shared "guest/" folder
+  // anyone could enumerate — each guest gets their own private, isolated
+  // folder, exactly like a real account, with zero ability to list, read,
+  // overwrite or delete anyone else's photos.
+  //
+  // This identity is intentionally NOT treated as "signed in" anywhere a
+  // customer would see it as such (Header.tsx checks `!user.is_anonymous`
+  // before showing the account icon) — it exists purely so storage RLS has
+  // something real to check. If this guest later creates a real account
+  // with the same email (SignUp.tsx), Supabase upgrades this exact identity
+  // in place via `updateUser` rather than minting a new one, so this
+  // request's photos and row become that account's automatically — nothing
+  // to migrate, and nothing is granted by knowing the email alone, since
+  // upgrading requires completing that email's own signup/password flow
+  // from this same browser session.
+  const anonUidRef = useRef<string | null>(null);
+  const resolveUploadIdentity = async (): Promise<string> => {
+    if (user) return user.id;
+    if (anonUidRef.current) return anonUidRef.current;
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error || !data.user) {
+      throw error ?? new Error("Could not start a session for this upload.");
+    }
+    anonUidRef.current = data.user.id;
+    return data.user.id;
+  };
+
   // Shared upload orchestration — every item's ItemUploadCard calls this
   // rather than reimplementing folder/session-naming itself, so all photos
-  // in one submission land under the same guest/user folder + timestamp.
-  const startUpload = (file: File): Promise<string> => {
-    if (!sessionTsRef.current) sessionTsRef.current = Date.now().toString();
-    const ts = sessionTsRef.current;
+  // in one submission land under the same user folder.
+  const startUpload = async (file: File): Promise<string> => {
+    const folder = await resolveUploadIdentity();
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-    const folder = user ? user.id : `guest/${ts}`;
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     return supabase.storage
       .from("assessment-uploads")
@@ -373,6 +467,15 @@ const AssessmentUpload = () => {
 
   const updateItemFiles = (key: string, files: Picked[]) =>
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, files } : it)));
+  const handleFileUploadFailed = (key: string, file: File) =>
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.key !== key) return it;
+        const failed = it.files.find((p) => p.file === file);
+        if (failed) URL.revokeObjectURL(failed.preview);
+        return { ...it, files: it.files.filter((p) => p.file !== file) };
+      }),
+    );
   const updateItemDescription = (key: string, description: string) =>
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, description } : it)));
   const addItem = () => {
@@ -419,13 +522,37 @@ const AssessmentUpload = () => {
    *  name" field anywhere here — downstream (AssessmentProposal.tsx,
    *  Admin.tsx, the Bag/Checkout flow) each item is identified visually by
    *  its own first uploaded photo instead of a customer-authored name. */
+  // The button itself stays enabled whenever we're not mid-submission, so
+  // clicking it while the form is incomplete is what actually triggers
+  // validation feedback (2026-10-01) — a disabled button can't do that, since
+  // a disabled button never fires onClick in the first place.
   const onSubmit = async () => {
-    if (!canSubmit || busy) return;
+    if (busy) return;
+    if (!canSubmit) {
+      setAttempted(true);
+      const firstEmptyItem = items.find((it) => it.files.length === 0);
+      const target = firstEmptyItem
+        ? itemCardRefs.current[firstEmptyItem.key]
+        : !zipValid
+          ? zipRef.current
+          : !emailValid
+            ? emailRef.current
+            : null;
+      target?.focus();
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     setBusy(true);
 
     try {
+      // Stable per-bag id (2026-10-01, repair-details rework) — carried
+      // through proposed_services[].pair_id (Admin.tsx), the bag/order
+      // snapshot (BagContext.tsx/Checkout.tsx), and the customer-facing
+      // Repair Details page, so a bag's photos/options/services are always
+      // associated by this id rather than by array position or photo URL.
       const pairs = await Promise.all(
         items.map(async (it) => ({
+          id: genKey(),
           photoPaths: await Promise.all(it.files.map((f) => f.uploadPromise)),
           videoPaths: [] as string[],
           description: it.description.trim() || null,
@@ -443,7 +570,13 @@ const AssessmentUpload = () => {
         guest_zip: zip.trim(),
         requested_conditions: requestedConditions,
       };
-      if (user) insertRow.user_id = user.id;
+      // Prefer the live `user` from context, but fall back to the anon uid
+      // resolved during upload — React's auth listener may not have caught
+      // up to the new session yet by the time this runs, and every photo
+      // was already written under that exact uid, so the assessment row
+      // must match it or its own photos would be unreadable to it later.
+      const ownerId = user?.id ?? anonUidRef.current;
+      if (ownerId) insertRow.user_id = ownerId;
 
       const { data, error } = await supabase
         .from("assessments")
@@ -480,19 +613,10 @@ const AssessmentUpload = () => {
             We'll review this information and recommend the right repairs.
           </p>
 
-          {/* Turned into an actual section heading (2026-09-24, Danielle's
-              call) — sized to match the other field labels on this page
-              (Label component's text-sm font-medium), not a big display
-              heading. Explicit Instrument Sans font-family added — without
-              it this <h2> inherits a serif font from the page's base
-              heading styles, rendering visibly different from the
-              sans-serif Label text it's supposed to match. */}
-          <h2
-            className="mt-8 text-sm font-medium leading-none"
-            style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}
-          >
-            Upload photos of your bag(s) from all sides. Make sure to capture any areas of damage or wear.
-          </h2>
+          {/* 2026-10-01: the per-bag instructional heading (restored inside
+              each ItemUploadCard below) replaces this page-level one —
+              Danielle's call, avoids saying the same thing twice. */}
+          <p className="mt-8 text-xs text-muted-foreground">* Required.</p>
 
           {items.map((item, i) => (
             <ItemUploadCard
@@ -500,10 +624,13 @@ const AssessmentUpload = () => {
               item={item}
               index={i}
               total={items.length}
+              showError={attempted && item.files.length === 0}
               onFilesChange={(files) => updateItemFiles(item.key, files)}
               onDescriptionChange={(description) => updateItemDescription(item.key, description)}
               onRemove={() => removeItem(item.key)}
+              onFileUploadFailed={(file) => handleFileUploadFailed(item.key, file)}
               startUpload={startUpload}
+              cardRef={(el) => { itemCardRefs.current[item.key] = el; }}
             />
           ))}
 
@@ -514,7 +641,7 @@ const AssessmentUpload = () => {
               className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4"
               style={{ color: "#fdb600" }}
             >
-              <Plus size={15} /> Add another item
+              <Plus size={15} /> Add another bag
             </button>
           )}
 
@@ -540,32 +667,55 @@ const AssessmentUpload = () => {
                 Zip code <span className="text-destructive">*</span>
               </Label>
               <Input
+                ref={zipRef}
                 id="assessment-zip"
                 inputMode="numeric"
                 maxLength={5}
                 value={zip}
                 onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                aria-invalid={zipInvalid}
+                aria-required="true"
+                aria-invalid={zipInvalid || (attempted && !zipValid)}
               />
               {zipInvalid && (
-                <p className="text-xs text-destructive">
+                <p className="text-xs text-destructive" role="alert">
                   We don't currently deliver to {zip}.{" "}
                   <Link to="/faqs" className="underline">See our service areas and request a new service area</Link>.
+                </p>
+              )}
+              {attempted && !zip && (
+                <p className="text-xs text-destructive" role="alert">
+                  Enter your zip code.
                 </p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="proposal-email">
-                Where should we send your proposal? <span className="text-destructive">*</span>
-              </Label>
+              <div>
+                <Label htmlFor="assessment-email">
+                  Email address <span className="text-destructive">*</span>
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">We'll send your repair options here.</p>
+              </div>
               <Input
-                id="proposal-email"
+                ref={emailRef}
+                id="assessment-email"
                 type="email"
                 placeholder="you@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                aria-required="true"
+                aria-invalid={attempted && !emailValid}
               />
+              {attempted && email.length > 0 && !emailValid && (
+                <p className="text-xs text-destructive" role="alert">
+                  Enter a valid email address.
+                </p>
+              )}
+              {attempted && email.length === 0 && (
+                <p className="text-xs text-destructive" role="alert">
+                  Enter your email address.
+                </p>
+              )}
             </div>
           </div>
 
@@ -574,16 +724,14 @@ const AssessmentUpload = () => {
               type="button"
               size="lg"
               onClick={onSubmit}
-              disabled={!canSubmit}
-              className={!canSubmit ? "opacity-50 cursor-not-allowed" : ""}
+              disabled={busy}
+              className={busy ? "opacity-50 cursor-not-allowed" : ""}
             >
-              {busy ? "Submitting…" : "Submit for review"}
+              {busy ? "Submitting…" : "Submit request"}
             </Button>
-            {!itemsValid && items.some((it) => it.files.length === 0) && (
-              <p className="mt-2 text-xs text-destructive">
-                {items.length > 1
-                  ? "Upload at least one photo of each bag to submit or remove any bags you don't want to include."
-                  : "Add at least one photo before submitting."}
+            {attempted && !canSubmit && !busy && (
+              <p className="mt-2 text-sm text-destructive" role="alert">
+                Please complete all required fields.
               </p>
             )}
             {/* Notice-only, unchecked, at submission time (2026-09-24,

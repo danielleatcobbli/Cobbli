@@ -62,9 +62,9 @@ const Hero = () => {
               className="text-5xl md:text-7xl leading-[0.95] text-balance"
               style={{ fontFamily: "'Fraunces', serif", color: "#fdb600" }}
             >
-              <span style={{ fontWeight: 700 }}>Expert bag repair</span>
+              <span style={{ fontWeight: 700 }}>Bag repair,</span>
               <br />
-              <span style={{ fontWeight: 500, fontStyle: "italic" }}>delivered to you</span>
+              <span style={{ fontWeight: 500, fontStyle: "italic" }}>without the hassle.</span>
             </h1>
             <div className="mt-9 flex flex-wrap gap-3 justify-center">
               {/* Repointed 2026-09-24 (Danielle's call) from the old

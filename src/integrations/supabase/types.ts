@@ -55,49 +55,67 @@ export type Database = {
       }
       assessments: {
         Row: {
+          complimentary: boolean
           created_at: string
           deposit_amount_cents: number | null
           deposit_paid_at: string | null
           deposit_status: string
+          description: string | null
+          guest_email: string | null
+          guest_zip: string | null
           id: string
+          manual_email_sent_at: string | null
           pairs: Json
           proposal_token: string
           proposed_services: Json
+          requested_conditions: string[]
           status: string
           stripe_payment_intent_id: string | null
           stripe_session_id: string | null
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
+          complimentary?: boolean
           created_at?: string
           deposit_amount_cents?: number | null
           deposit_paid_at?: string | null
           deposit_status?: string
+          description?: string | null
+          guest_email?: string | null
+          guest_zip?: string | null
           id?: string
+          manual_email_sent_at?: string | null
           pairs?: Json
           proposal_token?: string
           proposed_services?: Json
+          requested_conditions?: string[]
           status?: string
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
+          complimentary?: boolean
           created_at?: string
           deposit_amount_cents?: number | null
           deposit_paid_at?: string | null
           deposit_status?: string
+          description?: string | null
+          guest_email?: string | null
+          guest_zip?: string | null
           id?: string
+          manual_email_sent_at?: string | null
           pairs?: Json
           proposal_token?: string
           proposed_services?: Json
+          requested_conditions?: string[]
           status?: string
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -227,6 +245,7 @@ export type Database = {
           order_pair_id: string | null
           pair_snapshot: Json
           price_cents: number
+          service_id: string | null
           service_snapshot: Json
         }
         Insert: {
@@ -237,6 +256,7 @@ export type Database = {
           order_pair_id?: string | null
           pair_snapshot: Json
           price_cents: number
+          service_id?: string | null
           service_snapshot: Json
         }
         Update: {
@@ -247,6 +267,7 @@ export type Database = {
           order_pair_id?: string | null
           pair_snapshot?: Json
           price_cents?: number
+          service_id?: string | null
           service_snapshot?: Json
         }
         Relationships: [
@@ -262,6 +283,13 @@ export type Database = {
             columns: ["order_pair_id"]
             isOneToOne: false
             referencedRelation: "order_pairs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]
@@ -303,6 +331,8 @@ export type Database = {
       }
       order_pairs: {
         Row: {
+          source_pair_id: string | null
+          customer_photo_paths: Json
           completion_status: string
           condition_assessment: Json
           created_at: string
@@ -312,12 +342,17 @@ export type Database = {
           intake_status: string
           order_id: string
           outtake_notes: string | null
+          qc_notes: string | null
+          qc_reviewed_at: string | null
+          qc_status: string
           shoe_brand: string | null
           shoe_color_material: string | null
           shoe_type: string | null
           updated_at: string
         }
         Insert: {
+          source_pair_id?: string | null
+          customer_photo_paths?: Json
           completion_status?: string
           condition_assessment?: Json
           created_at?: string
@@ -327,12 +362,17 @@ export type Database = {
           intake_status?: string
           order_id: string
           outtake_notes?: string | null
+          qc_notes?: string | null
+          qc_reviewed_at?: string | null
+          qc_status?: string
           shoe_brand?: string | null
           shoe_color_material?: string | null
           shoe_type?: string | null
           updated_at?: string
         }
         Update: {
+          source_pair_id?: string | null
+          customer_photo_paths?: Json
           completion_status?: string
           condition_assessment?: Json
           created_at?: string
@@ -342,6 +382,9 @@ export type Database = {
           intake_status?: string
           order_id?: string
           outtake_notes?: string | null
+          qc_notes?: string | null
+          qc_reviewed_at?: string | null
+          qc_status?: string
           shoe_brand?: string | null
           shoe_color_material?: string | null
           shoe_type?: string | null
@@ -360,6 +403,7 @@ export type Database = {
       orders: {
         Row: {
           action_required_by: string | null
+          assessment_id: string | null
           contact_email: string
           contact_phone: string
           courier_fee_cents: number
@@ -374,11 +418,15 @@ export type Database = {
           paid_at: string | null
           payment_method_snapshot: Json | null
           payment_status: string
+          pickup_calendly_event_uri: string | null
           pickup_date: string | null
+          pickup_reminder_sent_at: string | null
           pickup_time_label: string | null
           placed_at: string
           repairs_subtotal_cents: number
+          return_calendly_event_uri: string | null
           return_date: string | null
+          return_reminder_sent_at: string | null
           return_time_label: string | null
           status: string
           stripe_payment_intent_id: string | null
@@ -391,6 +439,7 @@ export type Database = {
         }
         Insert: {
           action_required_by?: string | null
+          assessment_id?: string | null
           contact_email: string
           contact_phone: string
           courier_fee_cents?: number
@@ -405,11 +454,15 @@ export type Database = {
           paid_at?: string | null
           payment_method_snapshot?: Json | null
           payment_status?: string
+          pickup_calendly_event_uri?: string | null
           pickup_date?: string | null
+          pickup_reminder_sent_at?: string | null
           pickup_time_label?: string | null
           placed_at?: string
           repairs_subtotal_cents: number
+          return_calendly_event_uri?: string | null
           return_date?: string | null
+          return_reminder_sent_at?: string | null
           return_time_label?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
@@ -422,6 +475,7 @@ export type Database = {
         }
         Update: {
           action_required_by?: string | null
+          assessment_id?: string | null
           contact_email?: string
           contact_phone?: string
           courier_fee_cents?: number
@@ -436,11 +490,15 @@ export type Database = {
           paid_at?: string | null
           payment_method_snapshot?: Json | null
           payment_status?: string
+          pickup_calendly_event_uri?: string | null
           pickup_date?: string | null
+          pickup_reminder_sent_at?: string | null
           pickup_time_label?: string | null
           placed_at?: string
           repairs_subtotal_cents?: number
+          return_calendly_event_uri?: string | null
           return_date?: string | null
+          return_reminder_sent_at?: string | null
           return_time_label?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
@@ -451,7 +509,15 @@ export type Database = {
           user_id?: string
           workshop_assignee?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "orders_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "assessments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pair_photos: {
         Row: {
@@ -523,6 +589,7 @@ export type Database = {
           billing_address_id: string | null
           card_brand: string
           card_last4: string
+          cardholder_name: string | null
           created_at: string
           exp_month: number
           exp_year: number
@@ -536,6 +603,7 @@ export type Database = {
           billing_address_id?: string | null
           card_brand: string
           card_last4: string
+          cardholder_name?: string | null
           created_at?: string
           exp_month: number
           exp_year: number
@@ -549,6 +617,7 @@ export type Database = {
           billing_address_id?: string | null
           card_brand?: string
           card_last4?: string
+          cardholder_name?: string | null
           created_at?: string
           exp_month?: number
           exp_year?: number
@@ -589,30 +658,6 @@ export type Database = {
         }
         Relationships: []
       }
-      repair_packages: {
-        Row: {
-          is_active: boolean
-          name: string
-          price_cents: number
-          slug: string
-          updated_at: string
-        }
-        Insert: {
-          is_active?: boolean
-          name: string
-          price_cents: number
-          slug: string
-          updated_at?: string
-        }
-        Update: {
-          is_active?: boolean
-          name?: string
-          price_cents?: number
-          slug?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           created_at: string
@@ -649,11 +694,36 @@ export type Database = {
         }
         Relationships: []
       }
+      repair_packages: {
+        Row: {
+          is_active: boolean
+          name: string
+          price_cents: number
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          is_active?: boolean
+          name: string
+          price_cents: number
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          is_active?: boolean
+          name?: string
+          price_cents?: number
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       reworks: {
         Row: {
           created_at: string
           description: string
           id: string
+          manual_email_sent_at: string | null
           order_id: string
           services_in_scope: Json
           status: string
@@ -664,6 +734,7 @@ export type Database = {
           created_at?: string
           description: string
           id?: string
+          manual_email_sent_at?: string | null
           order_id: string
           services_in_scope?: Json
           status?: string
@@ -674,6 +745,7 @@ export type Database = {
           created_at?: string
           description?: string
           id?: string
+          manual_email_sent_at?: string | null
           order_id?: string
           services_in_scope?: Json
           status?: string
@@ -789,19 +861,19 @@ export type Database = {
           created_at: string
           id: string
           service_id: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
           id?: string
           service_id: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           service_id?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -815,6 +887,7 @@ export type Database = {
       }
       services: {
         Row: {
+          after_image_url: string | null
           base_price_cents: number | null
           card_name: string | null
           card_price_label: string | null
@@ -839,6 +912,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          after_image_url?: string | null
           base_price_cents?: number | null
           card_name?: string | null
           card_price_label?: string | null
@@ -863,6 +937,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          after_image_url?: string | null
           base_price_cents?: number | null
           card_name?: string | null
           card_price_label?: string | null
@@ -966,6 +1041,9 @@ export type Database = {
         Args: { _name: string; _payload: Json }
         Returns: number
       }
+      approve_rework: { Args: { _rework_id: string }; Returns: undefined }
+      decline_proposal: { Args: { _assessment_id: string }; Returns: undefined }
+      deny_rework: { Args: { _rework_id: string }; Returns: undefined }
       generate_order_number: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -976,7 +1054,12 @@ export type Database = {
       }
       is_account_locked: { Args: { _email: string }; Returns: boolean }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      mark_quote_ready: { Args: { _assessment_id: string }; Returns: undefined }
       record_failed_signin: { Args: { _email: string }; Returns: Json }
+      request_more_info: {
+        Args: { _assessment_id: string }
+        Returns: undefined
+      }
       reset_failed_attempts: { Args: { _user_id: string }; Returns: undefined }
     }
     Enums: {
@@ -996,12 +1079,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1025,11 +1108,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1050,11 +1133,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1075,11 +1158,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1092,11 +1175,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

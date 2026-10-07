@@ -82,7 +82,7 @@ function ChartBox({ height = 280, children }: { height?: number; children: React
 
 const KpiDashboard = () => {
   const [period, setPeriod] = useState<Period>("month");
-  const { data: bundle, isLoading, error } = useQuery({
+  const { data: bundle, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["admin-kpis", "bundle"],
     queryFn: fetchKpiBundle,
   });
@@ -165,6 +165,18 @@ const KpiDashboard = () => {
 
   if (isLoading) {
     return <div className="text-sm text-muted-foreground py-12 text-center">Loading KPIs…</div>;
+  }
+
+  if (error || !bundle) {
+    return (
+      <div role="alert" className="space-y-3 py-12 text-center">
+        <h1 className="text-xl font-semibold">Reports unavailable</h1>
+        <p>We couldn't load your reports. Please try again.</p>
+        <Button onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? "Retrying…" : "Try again"}
+        </Button>
+      </div>
+    );
   }
 
   const volumeChartData = volume.labels.map((label, i) => ({

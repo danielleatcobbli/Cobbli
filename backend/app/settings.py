@@ -21,12 +21,12 @@ class Settings(BaseSettings):
         default="", validation_alias="SUPABASE_SERVICE_ROLE_KEY"
     )
     # Anon/publishable key — used for RLS-respecting, user-JWT-scoped clients.
-    # Without this, a user-scoped client would fall back to the service-role
-    # key and silently BYPASS RLS. Falls back to the service key only if unset
-    # (keeps local/dev working) but production must set it.
+    # Required for staff API access; missing configuration fails closed.
     supabase_anon_key: str = Field(
         default="", validation_alias="SUPABASE_ANON_KEY"
     )
+
+    payments_enabled: bool = Field(default=False, validation_alias="PAYMENTS_ENABLED")
 
     stripe_secret_key: str = Field(default="", validation_alias="STRIPE_SECRET_KEY")
     stripe_webhook_secret: str = Field(

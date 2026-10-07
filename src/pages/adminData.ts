@@ -33,6 +33,8 @@ import { REQUIRED_PHOTO_ANGLES } from "./AdminOrderDetail";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const KNOWN_STATUSES = new Set<OrderStatus>([
+  "canceled",
+  "needs-review",
   // Standard checkout path
   "placed",
   "pending_payment",
@@ -61,10 +63,11 @@ const KNOWN_STATUSES = new Set<OrderStatus>([
  * Falls back to "pickup-scheduled" (a fresh order's natural starting point
  * per Section 9) rather than letting an unrecognized string reach STATUS_CFG
  * lookups and crash the page. */
-function coerceStatus(raw: string): OrderStatus {
+export function coerceStatus(raw: string): OrderStatus {
+  if (raw === "cancelled") return "canceled";
   if (KNOWN_STATUSES.has(raw as OrderStatus)) return raw as OrderStatus;
-  console.warn(`adminData: unrecognized order status "${raw}", falling back to "pickup-scheduled"`);
-  return "pickup-scheduled";
+  console.warn(`adminData: unrecognized order status "${raw}", falling back to "needs-review"`);
+  return "needs-review";
 }
 
 function toDateOnly(iso: string | null | undefined): string {
@@ -214,10 +217,13 @@ export async function fetchOrders(): Promise<Order[]> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type OrderDetailRow = OrderRow & {
+  assessment_id: string | null;
   contact_email: string;
 };
 
 type OrderPairRow = {
+  source_pair_id: string | null;
+  customer_photo_paths: string[];
   id: string;
   order_id: string;
   shoe_type: string | null;
@@ -301,7 +307,7 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
   const { data: orderRow, error: orderErr } = await supabase
     .from("orders")
     .select(
-      "id, user_id, order_number, status, placed_at, delivery_address, contact_phone, contact_email, workshop_assignee, dispatch_assignee, action_required_by, last_contacted_at, pickup_date, pickup_time_label, return_date, return_time_label, notes",
+      "id, user_id, order_number, status, placed_at, delivery_address, contact_phone, contact_email, assessment_id, workshop_assignee, dispatch_assignee, action_required_by, last_contacted_at, pickup_date, pickup_time_label, return_date, return_time_label, notes",
     )
     .eq("id", id)
     .maybeSingle();
@@ -313,7 +319,7 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
     supabase
       .from("order_pairs")
       .select(
-        "id, order_id, shoe_type, shoe_brand, shoe_color_material, customer_notes, intake_status, completion_status, condition_assessment, intake_notes, outtake_notes, qc_status, qc_notes, qc_reviewed_at",
+        "id, order_id, shoe_type, shoe_brand, shoe_color_material, customer_notes, intake_status, completion_status, condition_assessment, intake_notes, outtake_notes, qc_status, qc_notes, qc_reviewed_at, source_pair_id, customer_photo_paths",
       )
       .eq("order_id", id),
     supabase
@@ -344,6 +350,10 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
 
   const shoePairs: ShoePair[] = [];
   for (const p of pairs) {
+    const customerPhotoUrls = (await Promise.all((p.customer_photo_paths || []).map(async path => {
+      const { data } = await supabase.storage.from("assessment-uploads").createSignedUrl(path, 3600);
+      return data?.signedUrl;
+    }))).filter((url): url is string => !!url);
     const pairItems = items.filter(i => i.order_pair_id === p.id);
     const beforeRows = photoRowsList.filter(ph => ph.order_pair_id === p.id && ph.side === "before");
     const afterRows = photoRowsList.filter(ph => ph.order_pair_id === p.id && ph.side === "after");
@@ -363,7 +373,8 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
       photos: {
         // No table tracks customer-submitted checkout photos yet (separate
         // from staff intake/outtake) -- left at 0 rather than guessed.
-        customerSubmitted: 0,
+        customerSubmitted: (p.customer_photo_paths || []).length,
+        customerUrls: customerPhotoUrls,
         before,
         after,
       },
@@ -386,21 +397,11 @@ export async function fetchOrderDetail(id: string): Promise<OrderDetail | null> 
     });
   }
 
-  // If this order was created from a proposal approval, fetch the assessment
-  // snapshot (photos + proposed services) for traceability in the detail page.
-  //
-  // NOT WIRED UP YET: this needs an `assessment_id` column (or equivalent
-  // link) on `orders` to know which assessment an order came from, and that
-  // column doesn't exist in the current schema (verified 2026-07-21 via a
-  // live Supabase schema check — orders has no assessment_id, and
-  // assessments has no order_id either). Selecting a nonexistent column was
-  // the root cause of "Couldn't load this order: [object Object]" surfacing
-  // the first time a real order was opened this session. Left as a flagged
-  // gap rather than guessed at — a developer needs to add the linking
-  // column (and backfill it on order creation from a proposal) before this
-  // can be wired up; ProposalReferenceCard is still in place and will pick
-  // this up automatically once assessmentRef is populated again.
-  const assessmentRef: OrderDetail["assessmentRef"] | undefined = undefined;
+  const assessmentRef: OrderDetail["assessmentRef"] | undefined = order.assessment_id ? {
+    id: order.assessment_id,
+    photoUrls: shoePairs.flatMap(pair => pair.photos.customerUrls || []),
+    services: items.map(item => ({ name: item.service_snapshot?.name || "Repair", priceCents: item.price_cents, tier: "recommended" as const })),
+  } : undefined;
 
   return {
     id: order.id,
@@ -638,4 +639,19 @@ export async function fetchGalleryItems(): Promise<GalleryItem[]> {
     });
   }
   return items;
+}
+
+/** Saved notes use the authenticated staff identity; RLS remains authoritative. */
+export async function addOrderNote(orderId: string, body: string) {
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user) throw new Error("Sign in to save a note.");
+  const profiles = await fetchProfileMap([auth.user.id]);
+  const author = profiles.get(auth.user.id);
+  const name = author ? fullNameFromProfile(author) : "Staff";
+  const { data, error } = await supabase.from("order_notes").insert({
+    order_id: orderId, author_id: auth.user.id, author_name: name, body: body.trim(),
+  }).select("body, author_name, created_at").single();
+  if (error || !data) throw error ?? new Error("Note was not saved.");
+  return { text: data.body, author: data.author_name ?? "Staff", isoTimestamp: data.created_at,
+    initials: (data.author_name ?? "Staff").split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase() };
 }

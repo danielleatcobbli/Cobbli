@@ -222,6 +222,16 @@ def test_cart_checkout_session_creates_order_and_items(client):
     )
     orders_table.update.return_value = update_chain
 
+    # Resumable order_items insertion (2026-10-01 fix) checks for existing
+    # rows before inserting — without this, the mock's default truthy
+    # MagicMock return value from an unconfigured `.select()` chain reads as
+    # "items already exist" and the insert is silently skipped.
+    items_select_chain = MagicMock()
+    items_select_chain.eq.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[], error=None
+    )
+    items_table.select.return_value = items_select_chain
+
     items_insert = MagicMock()
     items_insert.execute.return_value = MagicMock(data=[], error=None)
     items_table.insert.return_value = items_insert
