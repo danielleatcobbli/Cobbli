@@ -22,7 +22,7 @@ export default function PilotOverview() {
     <p>Current saved records, including legacy shoe work and tests. These counts are not bag-pilot performance, revenue, or conversion metrics.</p>
     <p className="text-sm text-muted-foreground">Last loaded: {new Date(dataUpdatedAt).toLocaleString()}</p>
     <div className="grid gap-6 md:grid-cols-2">{[
-      { title: "Requests not converted", rows: data.requests, href: "/admin/proposals" },
+      { title: "Requests not converted", rows: data.requests, href: "/admin/orders" },
       { title: "Repair records", rows: data.repairs, href: "/admin/orders" },
     ].map(group => <section key={group.title} className="rounded-lg border p-5">
       <h2 className="text-lg font-semibold">{group.title}: {group.rows.length}</h2>

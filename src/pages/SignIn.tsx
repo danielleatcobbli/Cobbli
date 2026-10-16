@@ -56,7 +56,7 @@ const SignIn = () => {
       navigate(pending, { replace: true });
       return;
     }
-    const target = role === "admin" || role === "staff" ? "/admin/orders" : "/account";
+    const target = role === "admin" || role === "staff" ? "/admin" : "/account";
     navigate(target, { replace: true });
   }, [user, role, roleLoading, navigate]);
 
