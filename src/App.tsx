@@ -216,7 +216,7 @@ const App = () => (
                           path="/admin"
                           element={
                             <RoleRoute allow={["admin", "staff"]}>
-                              <AdminDashboard />
+                              <Admin />
                             </RoleRoute>
                           }
                         />
@@ -224,7 +224,7 @@ const App = () => (
                           path="/admin/assessments"
                           element={
                             <RoleRoute allow={["admin", "staff"]}>
-                              <Admin />
+                              <Navigate to="/admin" replace />
                             </RoleRoute>
                           }
                         />
@@ -252,7 +252,7 @@ const App = () => (
                           path="/admin/proposals"
                           element={
                             <RoleRoute allow={["admin", "staff"]}>
-                              <Admin />
+                              <Navigate to="/admin" replace />
                             </RoleRoute>
                           }
                         />
