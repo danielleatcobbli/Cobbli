@@ -24,8 +24,6 @@ import AssessmentConfirmation from "./pages/AssessmentConfirmation";
 import AssessmentProposal from "./pages/AssessmentProposal";
 import RepairDetails from "./pages/RepairDetails";
 import Admin from "./pages/Admin";
-import AdminDashboard from "./pages/AdminDashboard";
-import AdminOrderDetail from "./pages/AdminOrderDetail";
 import OwnerSettings from "./pages/OwnerSettings";
 import AdminReworks from "./pages/admin/AdminReworks";
 import AdminReports from "./pages/admin/AdminReports";
@@ -232,7 +230,7 @@ const App = () => (
                           path="/admin/order/:id"
                           element={
                             <RoleRoute allow={["admin", "staff"]}>
-                              <AdminOrderDetail />
+                              <Navigate to="/admin" replace />
                             </RoleRoute>
                           }
                         />
