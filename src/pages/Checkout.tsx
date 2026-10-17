@@ -38,6 +38,26 @@ import {
 import { calculateTaxCents } from "@/lib/tax";
 import { apiFetchJson } from "@/integrations/api/client";
 
+// Guests have no account, so they cannot use the "own orders" rule. The
+// lookup function returns the single order for this payment session.
+// If that function is not on the database yet, fall back to the table read
+// so checkout still completes until the migration is applied.
+async function lookupGuestOrderBySession(
+  sessionId: string,
+): Promise<{ id: string; total_cents: number | null } | null> {
+  const { data, error } = await supabase.rpc("get_guest_order_by_session", {
+    _stripe_session_id: sessionId,
+  });
+  if (!error) return (data as { id: string; total_cents: number | null } | null) ?? null;
+  if (error.code !== "PGRST202") return null;
+  const { data: row } = await supabase
+    .from("orders")
+    .select("id, total_cents")
+    .eq("stripe_session_id", sessionId)
+    .maybeSingle();
+  return row;
+}
+
 type Step = "contact" | "address" | "pickup" | "payment";
 
 type CanonicalTotals = {
@@ -200,12 +220,20 @@ const Checkout = () => {
       // whole time rather than bouncing them to an empty My Repairs list.
       let dbOrderId: string | null = null;
       let dbTotalCents: number | null = null;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const signedIn = !!sessionData.session;
       for (let i = 0; i < 60 && !cancelled; i++) {
-        const { data } = await supabase
-          .from("orders")
-          .select("id, total_cents")
-          .eq("stripe_session_id", returningSessionId)
-          .maybeSingle();
+        // Signed-in orders stay on the own-row policy. Guests must not list
+        // every guest order, so they look up this payment session only.
+        const data = signedIn
+          ? (
+              await supabase
+                .from("orders")
+                .select("id, total_cents")
+                .eq("stripe_session_id", returningSessionId)
+                .maybeSingle()
+            ).data
+          : await lookupGuestOrderBySession(returningSessionId);
         if (data?.id) {
           dbOrderId = data.id;
           dbTotalCents = (data as { total_cents?: number | null }).total_cents ?? null;

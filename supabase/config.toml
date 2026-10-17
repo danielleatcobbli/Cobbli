@@ -1,5 +1,9 @@
 project_id = "vzyrzhfxdrtgyhpddvlj"
 
+# Fake catalog data lives in the migrations. seed.sql adds no customer rows.
+[db.seed]
+sql_paths = ["./seed.sql"]
+
 [functions.send-order-confirmation]
 verify_jwt = false
 

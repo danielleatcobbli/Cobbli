@@ -77,6 +77,22 @@ type DbOrder = {
   order_items: DbOrderItem[];
 };
 
+// Prefer the one-order function. Use the table only when that function has
+// not been created yet, so confirmation still loads until the migration runs.
+async function lookupGuestOrder(id: string): Promise<DbOrder | null> {
+  const { data, error } = await supabase.rpc("get_guest_order", { _id: id });
+  if (!error) return (data as DbOrder | null) ?? null;
+  if (error.code !== "PGRST202") return null;
+  const { data: row } = await supabase
+    .from("orders")
+    .select(
+      "id,order_number,status,contact_email,delivery_address,repairs_subtotal_cents,courier_fee_cents,total_cents,order_items(id,pair_snapshot,service_snapshot,price_cents)",
+    )
+    .eq("id", id)
+    .maybeSingle();
+  return (row as DbOrder | null) ?? null;
+}
+
 const mapDbOrder = (o: DbOrder): LoadedOrder => {
   const pairsMap = new Map<string, LoadedPair>();
   o.order_items.forEach((it, idx) => {
@@ -135,24 +151,26 @@ const OrderConfirmation = () => {
     }
     let cancelled = false;
     (async () => {
-      // Signed-in: scoped to that user's own order (existing RLS policy).
-      // Guest (no `user`): the localStorage mirror from Checkout.tsx already
-      // covers the common case (same browser, right after paying). This
-      // fallback is for returning later / a different device — matched by
-      // the order id alone, which is how guest orders are found (2026-09-24,
-      // Danielle's call: guest checkout). The id is an unguessable UUID, and
-      // the RLS policy ("Guests view own orders by id") only exposes rows
-      // where user_id is null, so this never leaks a signed-in customer's
-      // order to a guest request.
-      const query = supabase
-        .from("orders")
-        .select(
-          "id,order_number,status,contact_email,delivery_address,repairs_subtotal_cents,courier_fee_cents,total_cents,order_items(id,pair_snapshot,service_snapshot,price_cents)",
-        )
-        .eq("id", id);
-      const { data, error } = await (user ? query.eq("user_id", user.id) : query).maybeSingle();
+      // Signed-in: scoped to that user's own order. Guests look up the one
+      // order id they were given. Listing every guest order is not allowed.
+      let data: DbOrder | null = null;
+      let error: { message: string } | null = null;
+      if (user) {
+        const result = await supabase
+          .from("orders")
+          .select(
+            "id,order_number,status,contact_email,delivery_address,repairs_subtotal_cents,courier_fee_cents,total_cents,order_items(id,pair_snapshot,service_snapshot,price_cents)",
+          )
+          .eq("id", id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        data = result.data as DbOrder | null;
+        error = result.error;
+      } else {
+        data = await lookupGuestOrder(id);
+      }
       if (cancelled) return;
-      if (!error && data) setRemoteOrder(mapDbOrder(data as unknown as DbOrder));
+      if (!error && data) setRemoteOrder(mapDbOrder(data));
       setLoading(false);
     })();
     return () => {

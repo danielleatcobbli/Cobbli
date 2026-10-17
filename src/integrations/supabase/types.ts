@@ -588,6 +588,7 @@ export type Database = {
         Row: {
           billing_address_id: string | null
           card_brand: string
+          cardholder_name: string | null
           card_last4: string
           cardholder_name: string | null
           created_at: string
@@ -602,6 +603,7 @@ export type Database = {
         Insert: {
           billing_address_id?: string | null
           card_brand: string
+          cardholder_name?: string | null
           card_last4: string
           cardholder_name?: string | null
           created_at?: string
@@ -616,6 +618,7 @@ export type Database = {
         Update: {
           billing_address_id?: string | null
           card_brand?: string
+          cardholder_name?: string | null
           card_last4?: string
           cardholder_name?: string | null
           created_at?: string
@@ -1045,6 +1048,8 @@ export type Database = {
       decline_proposal: { Args: { _assessment_id: string }; Returns: undefined }
       deny_rework: { Args: { _rework_id: string }; Returns: undefined }
       generate_order_number: { Args: never; Returns: string }
+      get_guest_order: { Args: { _id: string }; Returns: Json }
+      get_guest_order_by_session: { Args: { _stripe_session_id: string }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
