@@ -1,0 +1,21 @@
+# Keep the image lean and secret-free.
+api/               # Vercel serverless shim — not used in the container
+tests/
+scripts/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+vercel.json
+.vercel/
+requirements-dev.txt
+README.md
+Dockerfile
+.dockerignore
