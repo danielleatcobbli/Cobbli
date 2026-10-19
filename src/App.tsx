@@ -27,6 +27,8 @@ import Admin from "./pages/Admin";
 import OwnerSettings from "./pages/OwnerSettings";
 import AdminReworks from "./pages/admin/AdminReworks";
 import AdminReports from "./pages/admin/AdminReports";
+import RequestList from "./pages/admin/RequestList";
+import RequestDetail from "./pages/admin/RequestDetail";
 import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import SelectServices from "./pages/SelectServices";
@@ -215,6 +217,24 @@ const App = () => (
                           element={
                             <RoleRoute allow={["admin", "staff"]}>
                               <Admin />
+                            </RoleRoute>
+                          }
+                        />
+                        {/* Stage 1 unified Requests list + detail. Built next to
+                            /admin; /admin is swapped over after the demo. */}
+                        <Route
+                          path="/admin/requests"
+                          element={
+                            <RoleRoute allow={["admin", "staff"]}>
+                              <RequestList />
+                            </RoleRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin/requests/:id"
+                          element={
+                            <RoleRoute allow={["admin", "staff"]}>
+                              <RequestDetail />
                             </RoleRoute>
                           }
                         />

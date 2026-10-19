@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/components/admin/AdminLayout";
+import ProposalBuilder, { type ProposedService } from "@/components/admin/ProposalBuilder";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -25,8 +23,8 @@ type AssessmentRow = {
   pairs: Array<{
     /** Stable per-bag id, written by AssessmentUpload.tsx starting
      *  2026-10-01 — absent on older rows submitted before that date. Used to
-     *  tag proposed_services[] entries to a specific bag (see SelectionRow's
-     *  pairIds below) rather than associating by array position. */
+     *  tag proposed_services[] entries to a specific bag (see ProposalBuilder's
+     *  pairIds) rather than associating by array position. */
     id?: string;
     shoeType?: string | null;
     colors?: string[];
@@ -64,55 +62,8 @@ type AssessmentRow = {
   complimentary?: boolean;
 };
 
-type Service = {
-  id: string;
-  slug: string;
-  name: string;
-  base_price_cents: number;
-  /** Coming-soon services can't be sold: checkout (backend/app/pricing.py)
-   *  rejects them, so they're shown greyed out and can't be picked. */
-  is_coming_soon?: boolean | null;
-};
-
-type ProposedService = {
-  recommendation_id?: string;
-  choice_group?: string;
-  rationale?: string;
-  limitations?: string;
-  service_id: string;
-  slug: string;
-  name: string;
-  price_cents: number;
-  tier: "essential" | "recommended";
-  /** Which bag (assessments.pairs[].id) this service applies to — added
-   *  2026-10-01 so the customer-facing Repair Details page can group
-   *  recommended/approved services directly under the relevant bag instead
-   *  of showing one flat list. Absent on proposals saved before this date,
-   *  or when the bag it was tagged to has no stable id (pre-2026-10-01
-   *  submission) — those render in a shared, ungrouped section rather than
-   *  being guessed into a specific bag. */
-  pair_id?: string;
-};
-
-type SelectionRow = {
-  choice_group: string;
-  rationale: string;
-  limitations: string;
-  service: Service;
-  checked: boolean;
-  tier: "essential" | "recommended";
-  price_cents: number;
-  /** Which of this assessment's bags the service applies to, by pair id.
-   *  Defaults to every bag (today's behavior, unchanged) — staff only need
-   *  to touch this when a service is specific to one bag in a multi-bag
-   *  submission. Meaningless (and hidden) for single-bag assessments. */
-  pairIds: string[];
-};
-
-const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
-
 // Fixed 2026-09-24 (Danielle's call): this tab used to be "proposal_sent",
-// but saveProposal() below was writing a status AssessmentProposal.tsx (the
+// but saving a proposal (now in ProposalBuilder) was writing a status AssessmentProposal.tsx (the
 // customer-facing page) never checks for — only "quote_ready" makes a
 // proposal actually show as ready to the customer. Staff-saved proposals
 // were silently invisible to the customer this whole time. Renamed the tab
@@ -133,7 +84,6 @@ const Admin = () => {
   usePageMeta({ title: "Admin — Cobbli", description: "Cobbli internal admin." });
   const [rows, setRows] = useState<AssessmentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [services, setServices] = useState<Service[]>([]);
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]["id"]>("pending");
   // Signed thumbnail URLs per assessment id, keyed by row id — this is the
   // "clear place to view assessments with photos" Danielle asked for
@@ -150,11 +100,6 @@ const Admin = () => {
 
   // Editor state
   const [editing, setEditing] = useState<AssessmentRow | null>(null);
-  const [selection, setSelection] = useState<SelectionRow[]>([]);
-  const [saving, setSaving] = useState(false);
-  // Deliberate complimentary-confirmation flag (2026-10-01, Item 4) — see
-  // the AssessmentRow.complimentary doc comment above.
-  const [complimentary, setComplimentary] = useState(false);
 
   const fetchRows = async (status: (typeof STATUS_TABS)[number]["id"]) => {
     setRows(null);
@@ -192,17 +137,6 @@ const Admin = () => {
   useEffect(() => {
     fetchRows(tab);
   }, [tab]);
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from("services")
-        .select("id, slug, name, base_price_cents, is_coming_soon")
-        .eq("is_active", true)
-        .order("popularity_rank", { ascending: true });
-      setServices(data ?? []);
-    })();
-  }, []);
 
   // Signed URLs for every pair's photos across the visible rows, grouped per
   // pair — same signed-URL pattern AssessmentProposal.tsx uses. Skips rows
@@ -242,150 +176,8 @@ const Admin = () => {
     };
   }, [rows, photosByRow]);
 
-  const openEditor = (source: AssessmentRow) => {
-    const row = { ...source, pairs: source.pairs.map(p => ({ ...p, id: p.id || crypto.randomUUID() })) };
-    setComplimentary(Boolean(row.complimentary));
-    const allPairIds = row.pairs.map((p) => p.id).filter((id): id is string => !!id);
-    // A service can now have multiple proposed_services entries — one per
-    // tagged bag (see saveProposal) — so group by service_id to recover a
-    // single row with every bag it applies to, rather than losing all but
-    // the last entry. Untagged entries (no pair_id — pre-2026-10-01
-    // proposals, or a bag with no stable id) count as "applies to every
-    // bag," matching how they're already treated everywhere else.
-    const bySid = new Map<string, ProposedService[]>();
-    for (const s of row.proposed_services ?? []) {
-      bySid.set(s.service_id, [...(bySid.get(s.service_id) ?? []), s]);
-    }
-    setSelection(
-      [...services, ...(row.proposed_services ?? []).filter((line, index, all) =>
-        !services.some(s => s.id === line.service_id) && all.findIndex(other => other.service_id === line.service_id) === index
-      ).map(line => ({ id: line.service_id, name: line.name, slug: line.slug, base_price_cents: line.price_cents, is_coming_soon: false }))].map((svc) => {
-        const entries = bySid.get(svc.id) ?? [];
-        const first = entries[0];
-        const taggedIds = entries.map((e) => e.pair_id).filter((id): id is string => !!id);
-        return {
-          service: svc,
-
-          choice_group: first?.choice_group ?? "",
-          rationale: first?.rationale ?? "",
-          limitations: first?.limitations ?? "",
-          checked: entries.length > 0 && svc.is_coming_soon !== true,
-          tier: first?.tier ?? "essential",
-          price_cents: first?.price_cents ?? svc.base_price_cents,
-          pairIds: taggedIds.length > 0 ? taggedIds : allPairIds,
-
-        };
-      }),
-    );
-    setEditing(row);
-  };
-
-  const closeEditor = () => {
-    setEditing(null);
-    setSelection([]);
-    setComplimentary(false);
-  };
-
-  const toggleService = (sid: string) =>
-    setSelection((rows) =>
-      rows.map((r) =>
-        r.service.id === sid && r.service.is_coming_soon !== true
-          ? { ...r, checked: !r.checked }
-          : r,
-      ),
-    );
-
-  const setTier = (sid: string, tier: "essential" | "recommended") =>
-    setSelection((rows) =>
-      rows.map((r) => (r.service.id === sid ? { ...r, tier } : r)),
-    );
-
-  const setPrice = (sid: string, dollars: string) => {
-    const cents = Math.max(0, Math.round(Number(dollars || "0") * 100));
-    setSelection((rows) =>
-      rows.map((r) => (r.service.id === sid ? { ...r, price_cents: cents } : r)),
-    );
-  };
-
-  // Toggle whether a service applies to a given bag (only surfaced in the UI
-  // for multi-bag assessments). A service always needs at least one bag
-  // while checked, so the last one can't be unchecked here directly.
-  const togglePair = (sid: string, pairId: string) =>
-    setSelection((rows) =>
-      rows.map((r) => {
-        if (r.service.id !== sid) return r;
-        const has = r.pairIds.includes(pairId);
-        if (has && r.pairIds.length === 1) return r;
-        return { ...r, pairIds: has ? r.pairIds.filter((id) => id !== pairId) : [...r.pairIds, pairId] };
-      }),
-    );
-
-  const selectedCount = selection.filter((r) => r.checked).length;
-
-  const saveProposal = async () => {
-    if (!editing || saving) return;
-    if (selectedCount === 0) {
-      toast({ title: "Select at least one service", variant: "destructive" });
-      return;
-    }
-    setSaving(true);
-    // One ProposedService entry per (checked service × tagged bag), so each
-    // bag's recommended/approved services can be grouped correctly on the
-    // customer-facing Repair Details page (2026-10-01). Single-bag
-    // assessments (the common case) still emit exactly one entry per
-    // service, tagged to that bag — same shape as before, just with pair_id
-    // added. If the bag itself predates stable ids (submitted before
-    // 2026-10-01), pair_id is simply omitted for that entry.
-    const proposed_services: ProposedService[] = selection
-      .filter((r) => r.checked)
-      .flatMap((r) => {
-        const targetIds = r.pairIds.length > 0 ? r.pairIds : [undefined];
-        return targetIds.map((pairId) => ({
-          recommendation_id: `${pairId || "legacy"}:${r.service.id}`,
-          choice_group: r.choice_group.trim() || undefined,
-          rationale: r.rationale.trim() || undefined,
-          limitations: r.limitations.trim() || undefined,
-          service_id: r.service.id,
-          slug: r.service.slug,
-          name: r.service.name,
-          price_cents: r.price_cents,
-          tier: r.tier,
-          ...(pairId ? { pair_id: pairId } : {}),
-        }));
-      });
-    try {
-      await apiFetchJson(`/ops/assessments/${editing.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          proposed_services,
-          pairs: editing.pairs,
-          status: "quote_ready",
-          complimentary,
-        }),
-      });
-    } catch (e) {
-      setSaving(false);
-      toast({
-        title: "Could not save",
-        description: e instanceof Error ? e.message : "Save failed",
-        variant: "destructive",
-      });
-      return;
-    }
-    setSaving(false);
-    toast({
-      title: "Quote ready",
-      description: "Recommendations saved. You can copy the customer link below.",
-    });
-    const url = editing.proposal_token ? `${window.location.origin}/proposal/t/${editing.proposal_token}` : `${window.location.origin}/repair/request/${editing.id}`;
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      /* ignore */
-    }
-    closeEditor();
-    fetchRows(tab);
-  };
+  const openEditor = (row: AssessmentRow) => setEditing(row);
+  const closeEditor = () => setEditing(null);
 
   const copyLink = async (id: string) => {
     const row = rows?.find(r => r.id === id);
@@ -743,141 +535,19 @@ const Admin = () => {
             </div>
           )}
 
-          <Button type="button" variant="outline" onClick={() => {
-            const name = window.prompt("Name of the bag repair to recommend");
-            if (!name?.trim()) return;
-            const id = `custom-${crypto.randomUUID()}`;
-            setSelection(prev => [...prev, { service: { id, slug: id, name: name.trim(), base_price_cents: 0 }, checked: true, tier: "recommended", price_cents: 0, pairIds: editing?.pairs.map(p => p.id).filter(Boolean) ?? [], choice_group: "", rationale: "", limitations: "" }]);
-          }}>Add a custom bag repair</Button>
-          <p className="text-xs text-muted-foreground">Every repair is optional for the customer. Give alternatives the same issue name; the customer can select only one for that bag.</p>
-          <div className="space-y-2 mt-2">
-            {selection.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No active services available.</p>
-            ) : (
-              selection.map((row) => (
-                <div
-                  key={row.service.id}
-                  className={`rounded-lg border p-3 ${
-                    row.service.is_coming_soon === true
-                      ? "border-border opacity-50"
-                      : row.checked
-                        ? "border-primary bg-secondary/30"
-                        : "border-border"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={row.checked}
-                      onCheckedChange={() => toggleService(row.service.id)}
-                      disabled={row.service.is_coming_soon === true}
-                      className="mt-1"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-primary truncate">{row.service.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {row.service.is_coming_soon === true
-                          ? "Coming soon — not available to book yet"
-                          : `Default ${formatCents(row.service.base_price_cents)}`}
-                      </p>
-                    </div>
-                  </div>
-                  {row.checked && (
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 pl-7">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Tier</p>
-                        <div className="inline-flex rounded-md border border-border overflow-hidden">
-                          {(["essential", "recommended"] as const).map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => setTier(row.service.id, t)}
-                              className={`px-3 py-1.5 text-xs capitalize ${
-                                row.tier === t
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-white text-primary"
-                              }`}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Price ($)</p>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={(row.price_cents / 100).toString()}
-                          onChange={(e) => setPrice(row.service.id, e.target.value)}
-                        />
-                      </div>
-                      {([ ["choice_group", "Issue / alternatives group (optional)"], ["rationale", "What this option does"], ["limitations", "Limitations / tradeoffs"] ] as const).map(([field,label]) => <label key={field} className="text-xs sm:col-span-2">{label}
-                        <Input value={row[field]} onChange={e => setSelection(prev => prev.map(r => r.service.id === row.service.id ? { ...r, [field]: e.target.value } : r))} />
-                      </label>)}
-                      {/* Only shown for multi-bag assessments — single-bag
-                          submissions have nothing to disambiguate, so this
-                          stays out of the way for the common case
-                          (2026-10-01). Bags without a stable id (pre-dating
-                          this feature) can't be individually targeted and
-                          are left out of the picker; the service still
-                          applies to them via the "no pair_id" fallback. */}
-                      {editing && editing.pairs.length > 1 && (
-                        <div className="sm:col-span-2">
-                          <p className="text-xs text-muted-foreground mb-1">Applies to</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {editing.pairs.map((p, i) =>
-                              p.id ? (
-                                <button
-                                  key={p.id}
-                                  type="button"
-                                  onClick={() => togglePair(row.service.id, p.id!)}
-                                  className={`px-2.5 py-1 rounded-full text-xs border ${
-                                    row.pairIds.includes(p.id)
-                                      ? "bg-primary text-primary-foreground border-primary"
-                                      : "bg-white text-primary border-border"
-                                  }`}
-                                >
-                                  Bag {i + 1}
-                                </button>
-                              ) : null,
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Deliberate complimentary-confirmation flag (2026-10-01, Item 4)
-              — explicit staff opt-in only, never inferred from price. When
-              set, the customer sees "Confirm complimentary repair" instead
-              of "Continue to checkout" and the order is created with no
-              Stripe charge (POST /checkout/confirm-complimentary). */}
-          <label className="mt-4 flex items-start gap-2 rounded-lg border border-border p-3 text-sm">
-            <Checkbox checked={complimentary} onCheckedChange={(v) => setComplimentary(Boolean(v))} />
-            <span>
-              <span className="font-medium">Complimentary repair (no charge)</span>
-              <span className="block text-xs text-muted-foreground">
-                The customer confirms for free instead of paying — use for test/comp repairs only.
-              </span>
-            </span>
-          </label>
-
-          <DialogFooter className="mt-4">
-            <p className="text-xs text-muted-foreground mr-auto self-center">
-              {selectedCount} service{selectedCount === 1 ? "" : "s"} selected
-            </p>
-            <Button variant="outline" onClick={closeEditor} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={saveProposal} disabled={saving || selectedCount === 0}>
-              {saving ? "Saving…" : "Save & copy link"}
-            </Button>
-          </DialogFooter>
+          {editing && (
+            <div className="mt-4">
+              <ProposalBuilder
+                key={editing.id}
+                assessment={editing}
+                onCancel={closeEditor}
+                onSaved={() => {
+                  closeEditor();
+                  fetchRows(tab);
+                }}
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </AdminLayout>

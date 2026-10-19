@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 // (Middleware-equivalent guards + RLS enforce the rest.)
 const NAV: { to: string; label: string; allow: Role[] }[] = [
   { to: "/admin", label: "Requests", allow: ["staff", "admin"] },
+  { to: "/admin/requests", label: "All requests", allow: ["staff", "admin"] },
   { to: "/admin/orders", label: "Orders", allow: ["staff", "admin"] },
   { to: "/admin/reworks", label: "Reworks", allow: ["staff", "admin"] },
   { to: "/admin/reports", label: "Reports", allow: ["admin"] },

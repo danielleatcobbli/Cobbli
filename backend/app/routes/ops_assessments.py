@@ -50,16 +50,45 @@ def _raise_if_error(resp: Any) -> None:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(err))
 
 
+def _attach_orders(sb: Any, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Add `order` (or None) to each request row via orders.assessment_id.
+
+    orders_assessment_id_unique guarantees at most one order per request, so
+    this is a plain lookup. A failed lookup raises (502) instead of returning
+    rows with the order silently missing — otherwise a booked request would
+    show up as if nothing had happened to it.
+    """
+    ids = [r["id"] for r in rows if r.get("id")]
+    by_assessment: dict[str, dict[str, Any]] = {}
+    if ids:
+        resp = (
+            sb.table("orders")
+            .select("id, order_number, status, assessment_id")
+            .in_("assessment_id", ids)
+            .execute()
+        )
+        _raise_if_error(resp)
+        for order in getattr(resp, "data", None) or []:
+            if order.get("assessment_id"):
+                by_assessment[order["assessment_id"]] = order
+    return [{**r, "order": by_assessment.get(r.get("id"))} for r in rows]
+
+
 @router.get("/")
 async def list_assessments(user: StaffUser, status_filter: str | None = None) -> Any:
-    """List assessments. Optional ?status_filter= filter. RLS-scoped to staff/admin."""
+    """List assessments. Optional ?status_filter= filter. RLS-scoped to staff/admin.
+
+    Each row carries `order` (id, order_number, status) when the request has
+    been booked, else None.
+    """
     sb = get_supabase_for_user(user.access_token)
     query = sb.table("assessments").select(_SELECT)
     if status_filter is not None:
         query = query.eq("status", status_filter)
     resp = query.order("created_at", desc=True).execute()
     _raise_if_error(resp)
-    return {"data": getattr(resp, "data", None) or []}
+    rows = getattr(resp, "data", None) or []
+    return {"data": _attach_orders(sb, rows)}
 
 
 @router.get("/{assessment_id}")
@@ -76,7 +105,7 @@ async def get_assessment(assessment_id: str, user: StaffUser) -> Any:
     row = getattr(resp, "data", None)
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Assessment not found")
-    return {"data": row}
+    return {"data": _attach_orders(sb, [row])[0]}
 
 
 @router.patch("/{assessment_id}")
