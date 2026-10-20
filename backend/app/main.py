@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
         ops_service_admin,
         payment_methods,
         public_proposal,
+        repair_email_worker,
         send_account_locked,
         send_order_confirmation,
         send_password_updated,
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(send_walkup_welcome.router)
     app.include_router(send_service_unavailable.router)
     app.include_router(public_proposal.router)
+    app.include_router(repair_email_worker.router)
 
     # Operations dashboard routes (staff/admin gated) + public blog reads.
     app.include_router(ops_assessments.router)

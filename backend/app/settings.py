@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     )
 
     brevo_api_key: str = Field(default="", validation_alias="BREVO_API_KEY")
+    repair_emails_enabled: bool = Field(default=False, validation_alias="REPAIR_EMAILS_ENABLED")
+    repair_email_worker_secret: str = Field(default="", validation_alias="REPAIR_EMAIL_WORKER_SECRET")
     ai_api_key: str = Field(default="", validation_alias="AI_API_KEY")
 
     cors_allow_origins: str = Field(
