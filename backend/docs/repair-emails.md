@@ -23,31 +23,37 @@ This adds a durable database outbox and a secret-protected FastAPI worker for th
 
 The transaction that changes status also queues the email. Rollback removes both changes. No historical records are backfilled. No-op updates don't enqueue. Booking confirmations/reminders deduplicate by booking UID + date + time label. State is rechecked before sending to suppress obsolete notifications. This is not an exactly-once delivery guarantee: a state change can race the provider call. Unknown provider outcomes are held for review, not automatically retried.
 
-## Launch dependencies / connection contract
+## Implemented customer and staff flows
 
-1. **Customer response backend (coordinate with Olivier).** `src/lib/repairResponse.ts` defines question/response endpoints that are absent in main. After implementing and testing them, the staff workflow must write `staff_question` and `response_flow_ready: true` in server-owned context before setting needs_more_info. The worker blocks this email until that flag is present. The flag is an integration assertion, not a runtime health check.
-2. **Cal.com booking synchronization.** Current code creates bookings but has no verified reschedule/cancel webhook synchronization. Implement authenticated webhook handling that updates the matching order's booking UID, date and window. Otherwise reminders can use stale details. Persist the actual reschedule URL returned/verified by the scheduling integration; never synthesize it from an assumed URL format. Confirm that the two-hour cutoff in the approved copy is enforced by Cal.com or the server before enabling booking emails.
-3. **Guest repair management.** Main now has guest order lookup, but it does not provide the authenticated repair page/return scheduling flow used by these email buttons. Guest order emails deliberately block until a secure management URL and full flow are implemented. Anonymous-auth users also need durable sign-in/access after their browser session ends; test this explicitly.
-4. **Staff context and cancellation.** Add server-owned writes for explanations and cancellation outcomes. Do not copy arbitrary customer JSON. `closed` is mapped but still needs a supported customer-request closure workflow. Cancellation should cancel the real booking before reporting it canceled.
-5. **Deployment and scheduler.** No production settings, migrations, scheduler, or Brevo sends were changed by this work. Configure and test staging first.
+Staff can ask a question, read customer replies and photos, decline with an explanation, and close a request at the customer's request. Context and status changes are saved together. Customer replies require the signed-in owner or the request's secret token. Reply photos are private; staff receives short-lived links. Retried submissions do not create duplicate replies.
 
-`public.repair_email_context` is service-role-only with primary key `(entity_type, entity_id)` and JSON `data`. The owning backend writes context before the associated transition, ideally in the same transaction. Required fields:
+Guest email links open the full confirmed repair and permit initial pickup/return scheduling using the existing request token. Existing appointments cannot be rescheduled through this flow. Staff must cancel calendar appointments manually before confirming a repair cancellation, and must enter accurate next steps and payment status. This action does not issue refunds.
 
-- More information: `staff_question`, `response_flow_ready: true`.
-- Declined: `staff_explanation`.
-- Pickup/return confirmation or reminder: `pickup_reschedule_url` / `return_reschedule_url`, plus `pickup_version` / `return_version` matching `UID|YYYY-MM-DD|time_label` in the order. Refresh both after rescheduling. Only HTTPS URLs on the configured site hostname or cal.com are accepted.
-- Repair cancellation: `next_steps`, `payment_status`; optional `cancellation_reason`.
-- Request closure: optional `payment_status`.
+The four booking template sources in `backend/email_templates` omit self-service rescheduling and the two-hour cutoff. Confirm the live Brevo versions match before enabling delivery. Live template updates are not fully verified yet.
 
-Existing sender configuration is reused: Danielle from Cobbli <noreply@cobbli.com>, reply-to support@cobbli.com. Verify the sender in Brevo. Template IDs are account-specific; staging should use an isolated Brevo account/template set or test recipients, never real customer records.
+## Staging rollout and remaining access
 
-## Staging rollout
+No complete staging deployment or live delivery test has been verified. The staging database connector failed during setup, and the available AWS account did not list the Cobbli hosting app. Obtain the correct staging frontend/backend URL and deployment access; do not deploy to the production project.
 
-1. Complete the dependencies above. Confirm all template IDs and rendered params with one- and multiple-bag cases, logged-in and guest users.
-2. Apply `supabase/migrations/20261019120000_repair_email_outbox.sql` to staging. It retires three obsolete repair-email triggers, so treat migration deployment as a sender cutover even while the worker is disabled. It does not affect authentication emails.
-3. Set server-only `BREVO_API_KEY`, existing Supabase admin credentials, HTTPS origin `SITE_URL`, and a strong `REPAIR_EMAIL_WORKER_SECRET`. Keep `REPAIR_EMAILS_ENABLED=false` until ready. Never expose these through VITE variables.
-4. Use a server scheduler to POST `/internal/repair-emails/run` once per minute with `Authorization: Bearer <REPAIR_EMAIL_WORKER_SECRET>`. The worker claims 20 rows per invocation; use an execution limit that accommodates provider latency, or reduce the batch for short-lived hosts. The repo does not yet configure this scheduler.
-5. Before enabling, review/suppress queued test or stale events. Turn on `REPAIR_EMAILS_ENABLED` only for the staging test. Exercise every event and verify actual delivery, buttons, cancellation/rescheduling and the cutoff. Then repeat a controlled production smoke test with approved internal recipients.
+1. Verify/apply prerequisite `20261002182652_complimentary_repair_integrity.sql`, then `20261019120000_repair_email_outbox.sql` and `20261020185138_repair_customer_messages.sql` on staging. Inspect current schema first. The outbox migration retires three obsolete repair-email triggers; authentication emails are unaffected.
+2. Deploy frontend and backend from this branch together. Configure staging Supabase credentials, `SITE_URL` to the staging frontend HTTPS origin, and the frontend API origin. Configure server-only `BREVO_API_KEY` and a strong `REPAIR_EMAIL_WORKER_SECRET`.
+3. Keep `REPAIR_EMAILS_ENABLED=false` until the templates and data are checked. Keep `REPAIR_EMAIL_DELIVERY_MODE=test` (default). Set `REPAIR_EMAIL_TEST_RECIPIENTS` to a comma-separated list of explicitly approved internal addresses. An empty list blocks all sends; recipients are never silently redirected. No approved live test address has been supplied yet.
+4. Configure the hosting scheduler to POST `/internal/repair-emails/run` once per minute with the worker bearer secret. This scheduler is not yet deployed. The worker claims up to 20 messages per call; allow enough runtime for provider latency.
+5. Enable only staging sending, exercise the review cases below, and verify Brevo delivery logs and actual inbox rendering. Reconcile blocked/uncertain events individually. Production sending requires a separate rollout and explicit `REPAIR_EMAIL_DELIVERY_MODE=production` configuration.
+
+Sender currently remains Danielle from Cobbli <noreply@cobbli.com>, reply-to support@cobbli.com. Verify this sender and reconcile with the live templates' sender before delivery testing.
+
+## Shivangi's staging review
+
+Use disposable staging requests and approved internal recipients only:
+
+- Submit a request; verify one receipt email. Ask a staff question, reply with text/photos from the email link, and confirm staff can read it. Retry the same submission and confirm no duplicate reply.
+- Publish recommendations; select repairs and book a pickup. Verify the confirmation's date, window, address/unit, reference, and website link for one and multiple bags.
+- Open the guest link in a fresh browser session. Confirm it shows the saved repair and supports initial return booking after staff marks it ready. A wrong token must fail.
+- Mark picked up, then ready for return. Verify the collected email explains the next step and the return-ready email opens scheduling. Confirm return booking generates one confirmation.
+- Test pickup and return reminders with controlled staging dates. Canceled, obsolete, or incomplete bookings must not send reminders. No customer reschedule link should appear.
+- Exercise waitlist/release, decline with explanation, customer-requested closure, and cancellation after manual calendar cancellation. Verify accurate customer context and no automatic refund claim.
+- Repeat status saves and worker calls; verify no duplicate notifications. Verify an address outside the test list is blocked. Simulate provider failure and confirm it is held for review, not automatically resent.
 
 ## Operations
 
@@ -65,7 +71,9 @@ Do not bulk reset sent/uncertain rows. Disabling the worker does not stop queue 
 
 ## Verification
 
-- 38 focused Python tests cover all 14 payloads, plural bag count, public request tokens, address/unit and DST, stale/canceled notifications, missing context, matching booking links, authorization, feature flag, success, suppression, blocked sends and uncertain provider outcomes.
+- 62 focused Python tests pass across lifecycle delivery, initial scheduling, customer replies and public proposals, including test-recipient enforcement.
+- 71 frontend tests and TypeScript checking pass.
+- SQL fixture tests pass for outbox behavior and the customer-message migration.
 - PGlite runs the actual migration on minimal Postgres fixtures and checks transitions, deduplication, transaction rollback, claims and access restrictions. This does not replace testing all migrations on Supabase.
 - Full backend suite comparison against unchanged main `2eb8f05`: same 30 failures, in legacy checkout and disabled old email tests; no additional failures from this change. These existing failures remain unresolved.
 - No live provider calls or customer emails were sent.
@@ -73,7 +81,7 @@ Do not bulk reset sent/uncertain rows. Disabling the worker does not stop queue 
 Run Python tests from backend with the repository's dev requirements installed:
 
 ```sh
-pytest tests/test_repair_emails.py
+pytest tests/test_repair_emails.py tests/test_initial_schedule.py tests/test_repair_messages.py tests/test_public_proposal.py
 ```
 
 Run SQL checks from backend/tests/sql:

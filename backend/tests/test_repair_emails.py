@@ -142,7 +142,6 @@ def test_no_reminder_before_9am_or_on_wrong_day():
         ("request_declined", "staff_explanation"),
         ("repair_canceled", "next_steps"),
         ("repair_canceled", "payment_status"),
-        ("pickup_confirmed", "pickup_reschedule_url"),
     ],
 )
 def test_missing_required_context_blocks_sending(kind, field):
@@ -183,13 +182,19 @@ def test_worker_disabled_does_not_touch_database(unauth_client, monkeypatch):
     assert response.json() == {"enabled": False, "processed": 0}
 
 
-@pytest.mark.parametrize("outcome", ["sent", "uncertain", "blocked", "suppressed"])
+@pytest.mark.parametrize("outcome", ["sent", "uncertain", "blocked", "suppressed", "unapproved"])
 def test_worker_delivery_outcomes(unauth_client, monkeypatch, outcome):
     from app.routes import repair_email_worker as worker
     from app.settings import get_settings
 
     monkeypatch.setenv("REPAIR_EMAIL_WORKER_SECRET", "worker-test")
     monkeypatch.setenv("REPAIR_EMAILS_ENABLED", "true")
+    monkeypatch.setenv(
+        "REPAIR_EMAIL_TEST_RECIPIENTS",
+        ""
+        if outcome == "unapproved"
+        else "guest@example.com,customer@example.com,test@example.com",
+    )
     get_settings.cache_clear()
     event, row, profile, bags, ctx = fixtures()
     event.update(id="event-1", entity_id=row["id"])
@@ -234,18 +239,20 @@ def test_worker_delivery_outcomes(unauth_client, monkeypatch, outcome):
         "/internal/repair-emails/run", headers={"Authorization": "Bearer worker-test"}
     )
     assert response.status_code == 200
-    assert response.json()[outcome] == 1
+    expected = "blocked" if outcome == "unapproved" else outcome
+    assert response.json()[expected] == 1
     assert sender.await_count == (1 if outcome in {"sent", "uncertain"} else 0)
-    assert finish.call_args.args[2] == outcome
+    assert finish.call_args.args[2] == expected
+    if outcome == "unapproved":
+        assert finish.call_args.kwargs["error_code"] == "test_recipient_not_allowed"
     if outcome == "sent":
         assert finish.call_args.kwargs["message_id"] == "test-message"
 
 
-def test_old_booking_link_blocks_new_confirmation():
+def test_booking_email_does_not_require_rescheduling():
     event, row, profile, bags, ctx = fixtures("pickup_confirmed")
-    ctx["pickup_version"] = "old-booking"
-    with pytest.raises(MissingEmailData, match="current appointment"):
-        render_email(event, row, profile, bags, ctx, "https://cobbli.com", NOW)
+    result = render_email(event, row, profile, bags, {}, "https://cobbli.com", NOW)
+    assert "pickup_reschedule_url" not in result["params"]
 
 
 def test_question_email_requires_working_response_flow():

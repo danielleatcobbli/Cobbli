@@ -1,3 +1,5 @@
+import CloseRepair from "@/components/admin/CloseRepair";
+import RepairMessages from "@/components/admin/RepairMessages";
 import { operationsDate } from "@/lib/operationsDate";
 /**
  * AdminOrderDetail
@@ -2202,103 +2204,7 @@ function ReworkActions({ orderId, onRefetch }: { orderId: string; onRefetch: () 
  * manual explanation email (no transactional email fires for this action).
  */
 function ProposalActions({ assessmentId, onRefetch }: { assessmentId: string; onRefetch: () => void }) {
-  const [loading, setLoading] = useState<string | null>(null);
-  const [confirmingDecline, setConfirmingDecline] = useState(false);
-  const [emailChecked, setEmailChecked] = useState(false);
-  const busy = loading !== null;
-
-  const markReady = async () => {
-    setLoading("mark_quote_ready");
-    try {
-      const { error } = await supabase.rpc("mark_quote_ready", { _assessment_id: assessmentId });
-      if (error) throw error;
-      toast({ title: "Quote ready — customer notified.", description: "An email has been sent automatically." });
-      onRefetch();
-    } catch (err) {
-      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const requestMoreInfo = async () => {
-    setLoading("request_more_info");
-    try {
-      const { error } = await supabase.rpc("request_more_info", { _assessment_id: assessmentId });
-      if (error) throw error;
-      toast({ title: "More info requested.", description: "Remember to contact the customer directly — no automated email is sent for this action." });
-      onRefetch();
-    } catch (err) {
-      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const confirmDecline = async () => {
-    setLoading("decline_proposal");
-    try {
-      const { error } = await supabase.rpc("decline_proposal", { _assessment_id: assessmentId });
-      if (error) throw error;
-      // Staff confirmed they've sent a manual email — stamp the timestamp.
-      await supabase.from("assessments").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", assessmentId);
-      toast({ title: "Proposal declined." });
-      onRefetch();
-    } catch (err) {
-      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setLoading(null);
-      setConfirmingDecline(false);
-      setEmailChecked(false);
-    }
-  };
-
-  const btnStyle = (extra: React.CSSProperties): React.CSSProperties => ({
-    padding: "7px 16px", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700,
-    cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1,
-    whiteSpace: "nowrap", fontFamily: "inherit", ...extra,
-  });
-
-  if (confirmingDecline) {
-    return (
-      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 9, padding: "12px 14px", maxWidth: 340 }}>
-        <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 600, color: "#9a3412" }}>Decline this proposal? This can't be undone.</p>
-        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 13, color: "#374151", lineHeight: 1.45, marginBottom: 12 }}>
-          <input
-            type="checkbox"
-            checked={emailChecked}
-            onChange={e => setEmailChecked(e.target.checked)}
-            style={{ marginTop: 2, flexShrink: 0, accentColor: "#3d1700", width: 15, height: 15 }}
-          />
-          I've sent the customer a manual email explaining this decision
-        </label>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={() => { setConfirmingDecline(false); setEmailChecked(false); }}
-            style={{ fontSize: 13, padding: "6px 14px", borderRadius: 7, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151", fontFamily: "inherit" }}>
-            Cancel
-          </button>
-          <button type="button" disabled={!emailChecked || busy} onClick={confirmDecline}
-            style={{ fontSize: 13, padding: "6px 16px", borderRadius: 7, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 700, fontFamily: "inherit" }}>
-            {loading === "decline_proposal" ? "Declining…" : "Confirm — decline"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <button type="button" disabled={busy} onClick={markReady} style={btnStyle({ backgroundColor: "#dcfce7", color: "#166534" })}>
-        {loading === "mark_quote_ready" ? "Sending…" : "Mark quote ready"}
-      </button>
-      <button type="button" disabled={busy} onClick={requestMoreInfo} style={btnStyle({ backgroundColor: "#fef3c7", color: "#92400e" })}>
-        {loading === "request_more_info" ? "Sending…" : "Request more info"}
-      </button>
-      <button type="button" disabled={busy} onClick={() => setConfirmingDecline(true)} style={btnStyle({ backgroundColor: "#fee2e2", color: "#991b1b" })}>
-        Decline
-      </button>
-    </div>
-  );
+  return <RepairMessages assessmentId={assessmentId} onSaved={onRefetch} />;
 }
 
 function PageHeader({ order, onRefetch }: { order: OrderDetail; onRefetch: () => void }) {
@@ -2341,6 +2247,7 @@ function PageHeader({ order, onRefetch }: { order: OrderDetail; onRefetch: () =>
 
   return (
     <div style={{ backgroundColor: "#fff", border: "1px solid #e0d8cc", borderRadius: 8, padding: "18px 22px", marginBottom: 16 }}>
+      {!order.status.startsWith("proposal-") && !["canceled", "completed", "returned"].includes(order.status) && <CloseRepair id={order.id} onSaved={onRefetch} />}
       {/* Back */}
       <button
         type="button"

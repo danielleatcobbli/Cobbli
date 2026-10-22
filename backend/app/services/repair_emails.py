@@ -139,10 +139,12 @@ def render_email(
             recommendations_url=link,
         )
     else:
-        # Existing guest proposal pages cannot manage a return booking.
-        if not row.get("user_id"):
-            raise MissingEmailData("Guest repair management link is not implemented")
-        link = f"{base}/repair/order/{quote(row['id'], safe='')}"
+        if row.get("repair_access_token"):
+            link = f"{base}/proposal/t/{quote(row['repair_access_token'], safe='')}"
+        elif row.get("user_id"):
+            link = f"{base}/repair/order/{quote(row['id'], safe='')}"
+        else:
+            raise MissingEmailData("Guest repair has no access token")
         params.update(
             repair_reference=row.get("order_number") or row["id"],
             repair_url=link,
@@ -164,14 +166,6 @@ def render_email(
         params[f"{appointment}_address"] = ", ".join(
             str(address[k]) for k in ("street", "street2", "city", "state", "zip") if address.get(k)
         )
-        # A real existing-booking link is supplied by the scheduling integration.
-        if context.get(f"{appointment}_version") != appointment_version(row, appointment):
-            raise MissingEmailData("Booking link does not match current appointment")
-        url = required(context, f"{appointment}_reschedule_url")
-        target = urlsplit(url)
-        if target.scheme != "https" or target.hostname not in {parsed.hostname, "cal.com"}:
-            raise MissingEmailData("Untrusted reschedule URL")
-        params[f"{appointment}_reschedule_url"] = url
     if kind == "more_information" and context.get("response_flow_ready") is not True:
         raise MissingEmailData("Customer response flow is not enabled")
     fields = {

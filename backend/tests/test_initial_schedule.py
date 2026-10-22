@@ -59,3 +59,22 @@ def test_uncertain_save_does_not_cancel_possibly_saved_event(booking):
     booking[2].execute.side_effect=[SimpleNamespace(data=booking[1],error=None),TimeoutError(),TimeoutError()]
     assert call(booking).status_code==503
     booking[5].assert_not_called()
+
+def test_guest_with_matching_request_token_can_schedule(booking):
+    client, order, query, body, book, _ = booking
+    client.app.dependency_overrides[optional_user] = lambda: None
+    order['assessment_id'] = 'request'
+    body['proposal_token'] = 'correct-token'
+    query.execute.side_effect = [SimpleNamespace(data=order,error=None), SimpleNamespace(data={'id':'request','proposal_token':'correct-token','user_id':None},error=None), SimpleNamespace(data=[{'id':'order'}],error=None)]
+    assert call(booking).status_code == 200
+    book.assert_called_once()
+
+
+def test_guest_wrong_request_token_cannot_book(booking):
+    client, order, query, body, book, _ = booking
+    client.app.dependency_overrides[optional_user] = lambda: None
+    order['assessment_id'] = 'request'
+    body['proposal_token'] = 'wrong-token'
+    query.execute.side_effect = [SimpleNamespace(data=order,error=None), SimpleNamespace(data={'id':'request','proposal_token':'correct-token','user_id':None},error=None)]
+    assert call(booking).status_code == 403
+    book.assert_not_called()

@@ -173,7 +173,7 @@ const BagThumbnail = ({ src, label, onClick }: { src: string | null; label: stri
 // ─── request (assessment) view ─────────────────────────────────────────────
 
 type ConfirmedRepair = {
-  order_number: string; status: string; pickup_date: string | null; pickup_time_label: string | null;
+  id: string; order_number: string; status: string; pickup_date: string | null; pickup_time_label: string | null;
   return_date: string | null; return_time_label: string | null;
   order_items: { service_snapshot: { name?: string }; pair_snapshot: { id?: string } }[];
 };
@@ -494,25 +494,8 @@ export const RepairDetailsRequest = ({ id, token }: { id: string; token?: string
     );
   }
 
-  if (alreadyBooked && token) {
-    return <PageShell refLabel={confirmedOrder ? `Repair #${confirmedOrder.order_number}` : "Repair confirmed"}
-      meta={confirmedOrder ? REPAIR_STATUS[confirmedOrder.status] ?? fallbackMeta(confirmedOrder.status) : fallbackMeta("booked")}>
-      <section className="mt-8 space-y-5">
-        <h2 className="text-xl">Approved repairs</h2>
-        {confirmedOrder ? pairs.map((bag, index) => {
-          const work = confirmedOrder.order_items.filter(item => item.pair_snapshot?.id === bag.id);
-          if (!work.length) return null;
-          return <div key={bag.id || index} className="rounded-xl border p-5 flex gap-4">
-            <BagThumbnail src={thumbsByPair[index]?.[0] || null} label={`Bag ${index + 1}`} />
-            <div><p className="font-semibold">Bag {index + 1}</p>{work.map((item, i) => <p key={i}>{item.service_snapshot?.name || "Repair"}</p>)}</div>
-          </div>;
-        }) : <p>Your repair has been confirmed. Contact us if you need its details.</p>}
-        <h2 className="text-xl">Pickup &amp; Return</h2>
-        <p>Pickup: {confirmedOrder?.pickup_date ? `${fmtDateKey(confirmedOrder.pickup_date)}, ${confirmedOrder.pickup_time_label || ""}` : "Contact us for pickup details."}</p>
-        <p>Return: {confirmedOrder?.return_date ? `${fmtDateKey(confirmedOrder.return_date)}, ${confirmedOrder.return_time_label || ""}` : "We'll contact you when your repair is ready to arrange its return."}</p>
-        <p className="text-sm">Need help? <a className="underline" href="mailto:support@cobbli.com">Contact us</a>.</p>
-      </section>
-    </PageShell>;
+  if (alreadyBooked && token && confirmedOrder) {
+    return <RepairDetailsOrder id={confirmedOrder.id} token={token} />;
   }
 
   // Same reference format as the My Repairs card (Account.tsx) — "Repair
@@ -611,7 +594,7 @@ type OrderRow = {
   contact_phone: string | null;
 };
 
-const RepairDetailsOrder = ({ id }: { id: string }) => {
+export const RepairDetailsOrder = ({ id, token }: { id: string; token?: string }) => {
   const { user } = useAuth();
   const { user: accountUser } = useAccount();
   const [order, setOrder] = useState<OrderRow | null>(null);
@@ -625,6 +608,14 @@ const RepairDetailsOrder = ({ id }: { id: string }) => {
   usePageMeta({ title: "Repair details — Cobbli", description: "Review your confirmed repair, pickup and return." });
 
   const fetchOrder = useCallback(async () => {
+    if (token) {
+      try {
+        const data = await apiFetchJson<{ confirmed_order: OrderRow | null }>(`/public/proposal/${encodeURIComponent(token)}`);
+        if (!data.confirmed_order || data.confirmed_order.id !== id) throw new Error("Repair not found");
+        setOrder(data.confirmed_order); setError(null);
+      } catch { setError("We couldn't load your repair. Please contact us."); }
+      setLoading(false); return;
+    }
     const query = supabase
       .from("orders")
       .select(
@@ -639,7 +630,7 @@ const RepairDetailsOrder = ({ id }: { id: string }) => {
     }
     setOrder(data as unknown as OrderRow);
     setLoading(false);
-  }, [id, user]);
+  }, [id, user, token]);
 
   useEffect(() => {
     fetchOrder();
@@ -696,7 +687,7 @@ const RepairDetailsOrder = ({ id }: { id: string }) => {
   }, [bags]);
 
   const doReschedule = useCallback(async () => {
-    if (!newWindow || !rescheduleSlot || !order || !user) return;
+    if (!newWindow || !rescheduleSlot || !order || (!user && !token)) return;
     setRescheduling(true);
     try {
       const existingUri =
@@ -704,7 +695,7 @@ const RepairDetailsOrder = ({ id }: { id: string }) => {
       if (existingUri) throw new Error("This appointment is already scheduled. Please contact us to make changes.");
       const updateFields = await apiFetchJson<Partial<NonNullable<typeof order>>>(`/checkout/schedule/${order.id}`, {
         method: "POST",
-        body: JSON.stringify({ kind: rescheduleSlot, start: newWindow.start_time, end: newWindow.end_time }),
+        body: JSON.stringify({ proposal_token: token, kind: rescheduleSlot, start: newWindow.start_time, end: newWindow.end_time }),
       });
 
       setOrder((prev) => (prev ? { ...prev, ...updateFields } : prev));
@@ -716,7 +707,7 @@ const RepairDetailsOrder = ({ id }: { id: string }) => {
     } finally {
       setRescheduling(false);
     }
-  }, [newWindow, rescheduleSlot, order, user, accountUser]);
+  }, [newWindow, rescheduleSlot, order, user, accountUser, token]);
 
   if (loading) {
     return (

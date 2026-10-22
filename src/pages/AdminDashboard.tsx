@@ -1,3 +1,4 @@
+import RepairMessages from "@/components/admin/RepairMessages";
 import { operationsDate } from "@/lib/operationsDate";
 /**
  * AdminDashboard
@@ -638,106 +639,8 @@ function ReworkActionButtons({ orderId, refetch }: { orderId: string; refetch?: 
  *
  * assessmentId — the _assessment_id arg passed to every proposal RPC.
  */
-function ProposalActionButtons({ assessmentId, refetch, onNeedsManualReachOut }: {
-  assessmentId: string;
-  refetch?: () => void;
-  onNeedsManualReachOut?: () => void;
-}) {
-  const [loading, setLoading] = useState<string | null>(null);
-  const [confirmingDecline, setConfirmingDecline] = useState(false);
-  const [emailChecked, setEmailChecked] = useState(false);
-  const busy = loading !== null;
-
-  const markReady = async () => {
-    setLoading("mark_quote_ready");
-    try {
-      const { error } = await supabase.rpc("mark_quote_ready", { _assessment_id: assessmentId });
-      if (error) throw error;
-      toast({ title: "Quote ready — customer notified.", description: "An email has been sent automatically." });
-      refetch?.();
-    } catch (err) {
-      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const requestMoreInfo = async () => {
-    setLoading("request_more_info");
-    try {
-      const { error } = await supabase.rpc("request_more_info", { _assessment_id: assessmentId });
-      if (error) throw error;
-      toast({ title: "More info requested." });
-      refetch?.();
-      // Flag the row as needing a manual reach-out — no transactional email
-      // fires for this action, so the dashboard surfaces it as an open task.
-      onNeedsManualReachOut?.();
-    } catch (err) {
-      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const confirmDecline = async () => {
-    setLoading("decline_proposal");
-    try {
-      const { error } = await supabase.rpc("decline_proposal", { _assessment_id: assessmentId });
-      if (error) throw error;
-      // Staff confirmed they sent the manual email — stamp the timestamp.
-      await supabase.from("assessments").update({ manual_email_sent_at: new Date().toISOString() }).eq("id", assessmentId);
-      toast({ title: "Proposal declined." });
-      refetch?.();
-    } catch (err) {
-      toast({ title: "Action failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-    } finally {
-      setLoading(null);
-      setConfirmingDecline(false);
-      setEmailChecked(false);
-    }
-  };
-
-  if (confirmingDecline) {
-    return (
-      <div style={{ backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 7, padding: "8px 10px", maxWidth: 280 }}>
-        <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, color: "#9a3412" }}>Decline this proposal? This can't be undone.</p>
-        <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer", fontSize: 11, color: "#374151", lineHeight: 1.4, marginBottom: 10 }}>
-          <input
-            type="checkbox"
-            checked={emailChecked}
-            onChange={e => setEmailChecked(e.target.checked)}
-            style={{ marginTop: 1, flexShrink: 0, accentColor: "#3d1700" }}
-          />
-          I've sent the customer a manual email explaining this decision
-        </label>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button type="button" onClick={() => { setConfirmingDecline(false); setEmailChecked(false); }}
-            style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, border: "1px solid #e0d8cc", background: "#fff", cursor: "pointer", color: "#374151" }}>
-            Cancel
-          </button>
-          <button type="button" disabled={!emailChecked || busy} onClick={confirmDecline}
-            style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, border: "none", backgroundColor: emailChecked && !busy ? "#991b1b" : "#d1d5db", color: "#fff", cursor: emailChecked && !busy ? "pointer" : "not-allowed", fontWeight: 600 }}>
-            {loading === "decline_proposal" ? "Declining…" : "Confirm — decline"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const btnBase: React.CSSProperties = { border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.55 : 1 };
-  return (
-    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-      <button type="button" disabled={busy} onClick={markReady} style={{ ...btnBase, backgroundColor: "#dcfce7", color: "#166534" }}>
-        {loading === "mark_quote_ready" ? "…" : "Mark ready"}
-      </button>
-      <button type="button" disabled={busy} onClick={requestMoreInfo} style={{ ...btnBase, backgroundColor: "#fef3c7", color: "#92400e" }}>
-        {loading === "request_more_info" ? "…" : "Need info"}
-      </button>
-      <button type="button" disabled={busy} onClick={() => setConfirmingDecline(true)} style={{ ...btnBase, backgroundColor: "#fee2e2", color: "#991b1b" }}>
-        Decline
-      </button>
-    </div>
-  );
+function ProposalActionButtons({ assessmentId, refetch }: { assessmentId: string; refetch?: () => void; onNeedsManualReachOut?: () => void }) {
+  return <RepairMessages assessmentId={assessmentId} onSaved={refetch} />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

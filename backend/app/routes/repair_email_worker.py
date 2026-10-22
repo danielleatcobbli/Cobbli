@@ -89,6 +89,18 @@ async def run(authorization: Annotated[str | None, Header()] = None):
                 )
                 or {}
             )
+            if table == "orders" and row.get("assessment_id"):
+                assessment = (
+                    data(
+                        sb.table("assessments")
+                        .select("proposal_token")
+                        .eq("id", row["assessment_id"])
+                        .maybe_single()
+                        .execute()
+                    )
+                    or {}
+                )
+                row["repair_access_token"] = assessment.get("proposal_token")
             payload = render_email(
                 event,
                 row,
@@ -102,6 +114,18 @@ async def run(authorization: Annotated[str | None, Header()] = None):
                 finish(sb, event, "suppressed")
                 counts["suppressed"] += 1
                 continue
+            if settings.repair_email_delivery_mode == "test":
+                allowed = {
+                    email.strip().casefold()
+                    for email in settings.repair_email_test_recipients.split(",")
+                    if email.strip()
+                }
+                recipients = payload.get("to") or []
+                if not recipients or any(
+                    recipient.get("email", "").strip().casefold() not in allowed
+                    for recipient in recipients
+                ):
+                    raise MissingEmailData("test_recipient_not_allowed")
         except MissingEmailData as exc:
             finish(sb, event, "blocked", error_code=str(exc))
             counts["blocked"] += 1

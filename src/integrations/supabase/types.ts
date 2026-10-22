@@ -590,7 +590,6 @@ export type Database = {
           card_brand: string
           cardholder_name: string | null
           card_last4: string
-          cardholder_name: string | null
           created_at: string
           exp_month: number
           exp_year: number
@@ -605,7 +604,6 @@ export type Database = {
           card_brand: string
           cardholder_name?: string | null
           card_last4: string
-          cardholder_name?: string | null
           created_at?: string
           exp_month: number
           exp_year: number
@@ -620,7 +618,6 @@ export type Database = {
           card_brand?: string
           cardholder_name?: string | null
           card_last4?: string
-          cardholder_name?: string | null
           created_at?: string
           exp_month?: number
           exp_year?: number

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.routes import repair_messages
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -57,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(send_service_unavailable.router)
     app.include_router(public_proposal.router)
     app.include_router(repair_email_worker.router)
+    app.include_router(repair_messages.router)
 
     # Operations dashboard routes (staff/admin gated) + public blog reads.
     app.include_router(ops_assessments.router)
