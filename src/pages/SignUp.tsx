@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { consumeReturnTo, saveReturnTo } from "@/lib/authRedirect";
+import { DEFAULT_AUTH_DESTINATION, consumeReturnTo, saveReturnTo } from "@/lib/authRedirect";
 import { trackEvent } from "@/lib/analytics";
 import {
   PASSWORD_HELPER_TEXT,
@@ -32,7 +32,7 @@ const SignUp = () => {
   const successRedirect =
     from && (from === "/checkout" || from.startsWith("/start-repair") || from.startsWith("/proposal"))
       ? from
-      : "/account";
+      : DEFAULT_AUTH_DESTINATION;
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -153,13 +153,13 @@ const SignUp = () => {
                 phone: `+1${phoneDigits}`,
               },
             },
-            { emailRedirectTo: `${window.location.origin}/account?verified=1` },
+            { emailRedirectTo: `${window.location.origin}${DEFAULT_AUTH_DESTINATION}?verified=1` },
           )
         : await supabase.auth.signUp({
             email: email.trim(),
             password,
             options: {
-              emailRedirectTo: `${window.location.origin}/account?verified=1`,
+              emailRedirectTo: `${window.location.origin}${DEFAULT_AUTH_DESTINATION}?verified=1`,
               data: {
                 first_name: firstName.trim(),
                 last_name: lastName.trim(),

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
+import BrandSpinner from "@/components/cobbli/BrandSpinner";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,8 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { useRole } from "@/hooks/useRole";
 import { trackEvent } from "@/lib/analytics";
-import { consumeReturnTo, peekReturnTo, saveReturnTo } from "@/lib/authRedirect";
+import { DEFAULT_AUTH_DESTINATION, consumeReturnTo, saveReturnTo } from "@/lib/authRedirect";
 
 // Requires at least 2 characters after the last dot (e.g. "gmail.co" but not
 // "gmail.c") — still permissive about actual domain names, just catches
@@ -22,14 +22,19 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const SignIn = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
-  const { role, loading: roleLoading } = useRole();
+  const { user, loading: authLoading } = useAuth();
   const navState = location.state as { from?: string; resetSuccess?: string } | null;
   const fromState = navState?.from;
   const resetSuccess = navState?.resetSuccess;
   // Persist any router-provided "from" so it survives full-page OAuth redirects.
   if (fromState) saveReturnTo(fromState);
 
+  const [googlePending, setGooglePending] = useState(false);
+  const [oauthReturn] = useState(() => {
+    const query = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    return query.has("code") || hash.has("access_token") || query.has("error") || hash.has("error");
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -44,21 +49,11 @@ const SignIn = () => {
       "Sign in to your Cobbli account to manage shoe repair orders, saved addresses and payment methods for fast door-to-door checkout across NYC.",
   });
 
-  // Redirect already-signed-in users
-  // Role-based post-login routing. A pending deep-link (returnTo) always wins;
-  // otherwise admin/staff land on the ops dashboard and customers on their
-  // account. Wait for the role to resolve so we don't misroute on first paint.
+  // Resume an explicit task, otherwise always open My Repairs.
   useEffect(() => {
-    if (!user || roleLoading) return;
-    const pending = peekReturnTo();
-    if (pending) {
-      consumeReturnTo();
-      navigate(pending, { replace: true });
-      return;
-    }
-    const target = role === "admin" || role === "staff" ? "/admin/orders" : "/account";
-    navigate(target, { replace: true });
-  }, [user, role, roleLoading, navigate]);
+    if (!user || authLoading) return;
+    navigate(consumeReturnTo() || DEFAULT_AUTH_DESTINATION, { replace: true });
+  }, [user, authLoading, navigate]);
 
   // Reset the locked-screen state whenever the user re-navigates to /signin
   // (e.g. clicking the header account icon from the locked screen).
@@ -70,6 +65,21 @@ const SignIn = () => {
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !locked && !submitting;
 
+  useEffect(() => {
+    if (oauthReturn && !authLoading && !user) {
+      setPasswordError("We couldn’t finish Google sign-in. Please try again.");
+    }
+  }, [oauthReturn, authLoading, user]);
+
+  useEffect(() => {
+    if (!googlePending) return;
+    const timer = window.setTimeout(() => {
+      setGooglePending(false);
+      setPasswordError("Google sign-in is taking longer than expected. Please try again.");
+    }, 30000);
+    return () => window.clearTimeout(timer);
+  }, [googlePending]);
+
   const handleGoogle = async () => {
     setEmailError(null);
     setPasswordError(null);
@@ -77,11 +87,15 @@ const SignIn = () => {
     // back to /signin — a non-protected route — so the PKCE code exchange
     // completes before any auth-gated redirect runs. The saved returnTo (from
     // checkout/start-repair) is consumed after the session is established.
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/signin` },
-    });
-    if (error) {
+    setGooglePending(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/signin` },
+      });
+      if (error) throw error;
+    } catch {
+      setGooglePending(false);
       setPasswordError("Google sign-in failed. Please try again.");
     }
     // Redirect is handled by the role-aware effect once `user` is set.
@@ -134,6 +148,18 @@ const SignIn = () => {
       setSubmitting(false);
     }
   };
+
+  if (authLoading || user || googlePending) {
+    return <div className="min-h-screen flex flex-col bg-white">
+      <Header />
+      <main className="flex-1 flex flex-col items-center justify-center gap-5 py-24" aria-busy="true">
+        <BrandSpinner size="lg" label="Signing you in" />
+        <h1 className="text-2xl text-primary">Signing you in…</h1>
+        <p className="text-primary/70">Your repairs will be ready in a moment.</p>
+      </main>
+      <Footer />
+    </div>;
+  }
 
   // Restyled 2026-08-26 (Danielle's call) — cream page bg + amber page
   // heading only; the auth form/tabs/buttons below keep their existing

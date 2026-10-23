@@ -280,6 +280,7 @@ const App = () => (
                             </RoleRoute>
                           }
                         />
+                        <Route path="/account" element={<Navigate to="/account/orders" replace />} />
                         <Route
                           path="/account/*"
                           element={

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { useLocation, useNavigate } from "react-router-dom";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { consumeReturnTo } from "@/lib/authRedirect";
+import { DEFAULT_AUTH_DESTINATION, consumeReturnTo } from "@/lib/authRedirect";
 
 type AuthState = {
   session: Session | null;
@@ -49,11 +49,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION")
       ) {
         const path = locationRef.current.pathname;
-        const returnTo = consumeReturnTo();
+        // SignIn owns its role-aware redirect after the session resolves.
+        const onSignIn = path === "/signin" || path === "/signin/";
+        const returnTo = onSignIn ? null : consumeReturnTo();
         if (returnTo) {
           navigate(returnTo, { replace: true });
-        } else if (AUTH_ENTRY_ROUTES.some((p) => path === p || path.startsWith(`${p}/`))) {
-          navigate("/account?verified=1", { replace: true });
+        } else if (!onSignIn && AUTH_ENTRY_ROUTES.some((p) => path === p || path.startsWith(`${p}/`))) {
+          navigate(DEFAULT_AUTH_DESTINATION, { replace: true });
         }
       }
 
@@ -63,6 +65,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       hadSessionRef.current = !!data.session;
+      setLoading(false);
+    }).catch(() => {
       setLoading(false);
     });
 

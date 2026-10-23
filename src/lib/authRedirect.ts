@@ -6,6 +6,9 @@
  * absolute URLs from untrusted sources.
  */
 
+// All sign-in methods default to My Repairs; explicit task return links take priority.
+export const DEFAULT_AUTH_DESTINATION = "/account/orders";
+
 const KEY = "cobbli.auth.returnTo";
 
 /** Sanitize to a same-origin relative path starting with "/" and not "//". */

@@ -1594,7 +1594,7 @@ const Account = () => {
             <Sidebar onSignOut={handleSignOut} />
             <div className="flex-1 min-w-0">
               <Routes>
-                <Route index element={<Navigate to="orders" replace />} />
+                <Route index element={<Navigate to="/account/orders" replace />} />
                 <Route path="orders" element={<Orders />} />
                 <Route path="addresses" element={<Addresses />} />
                 <Route path="addresses/new" element={<AddAddress />} />
@@ -1604,7 +1604,7 @@ const Account = () => {
                 <Route path="payment-methods/:id/edit" element={<EditPaymentMethod />} />
                 <Route path="password" element={<Password />} />
                 <Route path="contact" element={<Contact />} />
-                <Route path="*" element={<Navigate to="orders" replace />} />
+                <Route path="*" element={<Navigate to="/account/orders" replace />} />
               </Routes>
             </div>
           </div>
