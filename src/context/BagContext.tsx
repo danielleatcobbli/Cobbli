@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 export type BagService = {
   id: string;
   name: string;
+  recommendationId?: string;
   /** Price in cents — snapshot at add time; treat as a fallback only. Always re-derive from the live price list when rendering. */
   price: number;
   /** For services that require dye/paint consent (e.g. faded-or-patchy-color, color-restoration). */

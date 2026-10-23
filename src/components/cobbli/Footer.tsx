@@ -50,7 +50,7 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
         fontFamily: "'Albert Sans', sans-serif",
       }}
     >
-      <div className="container py-10 flex flex-row items-center justify-between gap-6">
+      <div className="container py-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="flex flex-col gap-2" style={{ fontSize: "13px", fontWeight: 700, color: "#fdb600" }}>
           <div className="flex items-center gap-3 flex-wrap">
             <a href="/privacy-policy" className="underline" {...legalLinkProps}>
@@ -72,7 +72,7 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
           <p>© 2026 Cobbli. All Rights Reserved.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           {socials.map((s) => (
             <a
               key={s.label}
@@ -80,10 +80,10 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
               aria-label={s.label}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center hover:opacity-80 transition-opacity"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center hover:opacity-80 transition-opacity"
             >
               <span
-                className="block h-8 w-8"
+                className="block h-8 w-8 shrink-0"
                 style={{
                   backgroundColor: "#fdb600",
                   WebkitMaskImage: `url(${s.src})`,

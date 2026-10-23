@@ -47,7 +47,7 @@ const navLinks = [
  *  masked (real icon-shaped) output, so the dilate actually grows the icon's
  *  edges this time. */
 const HeaderIcon = ({ src, color }: { src: string; color: string }) => (
-  <span className="block h-[26px] w-[26px]" style={{ filter: "url(#header-icon-dilate)" }}>
+  <span className="block h-[26px] w-[26px] shrink-0">
     <span
       className="block h-full w-full"
       style={{

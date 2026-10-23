@@ -19,7 +19,6 @@ export async function createPreviewUrl(file: File): Promise<string> {
     return URL.createObjectURL(blob as Blob);
   } catch (e) {
     console.error("HEIC preview conversion failed", e);
-    // Fallback: return original object URL (may show broken icon)
-    return URL.createObjectURL(file);
+    throw new Error("Could not create a preview for this HEIC photo.");
   }
 }

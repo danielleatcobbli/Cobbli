@@ -17,7 +17,7 @@ def line_key(line, index):
     return line.get("recommendation_id") or f"{line.get('pair_id') or 'legacy'}:{line.get('service_id')}:{index}"
 
 
-def approved_payload(row, payload):
+def approved_payload(row, payload, *, paid=False):
     selected = payload.get("selected_recommendation_ids")
     if not isinstance(selected, list) or not selected or not all(isinstance(k, str) for k in selected) or len(selected) != len(set(selected)):
         raise HTTPException(400, "Select at least one repair.")
@@ -45,7 +45,10 @@ def approved_payload(row, payload):
         snapshot = deepcopy(line)
         snapshot["id"] = line.get("service_id")
         snapshot["recommendation_id"] = key
-        items.append({"pair_snapshot": deepcopy(bag_map[bag_id]), "service_snapshot": snapshot, "price_cents": 0})
+        price = line.get("price_cents") if paid else 0
+        if type(price) is not int or price < 0:
+            raise HTTPException(409, "This recommendation needs a valid price. Please contact us.")
+        items.append({"pair_snapshot": deepcopy(bag_map[bag_id]), "service_snapshot": snapshot, "price_cents": price})
     result = deepcopy(payload)
     result["items"] = items
     return result

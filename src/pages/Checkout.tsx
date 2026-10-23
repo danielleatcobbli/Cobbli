@@ -359,6 +359,13 @@ const Checkout = () => {
       // --- Build the cart payload (no DB write here — order row, and the
       //     Cal.com booking, are both created by the Stripe webhook after
       //     payment is confirmed) ---
+      let quoteContext: { recommendation_revision?: string; proposal_token?: string } = {};
+      if (assessmentId) {
+        try { quoteContext = JSON.parse(sessionStorage.getItem(`cobbli.quote.${assessmentId}`) || "{}"); } catch { /* require re-review below */ }
+        if (!quoteContext?.recommendation_revision || pairs.some(p => p.assessmentId !== assessmentId || p.services.some(s => !s.recommendationId))) {
+          throw new Error("Please return to your recommendations and review your selections before paying.");
+        }
+      }
       const payload = {
         contact_email: email,
         contact_phone: phone,
@@ -367,7 +374,12 @@ const Checkout = () => {
         repairs_subtotal_cents: subtotal,
         courier_fee_cents: courierFee,
         total_cents: orderSubtotal,
-        ...(assessmentId && { assessment_id: assessmentId }),
+        ...(assessmentId && {
+          assessment_id: assessmentId,
+          recommendation_revision: quoteContext.recommendation_revision,
+          proposal_token: quoteContext.proposal_token,
+          selected_recommendation_ids: pairs.flatMap(p => p.services.map(s => s.recommendationId)),
+        }),
         ...(selectedWindow && {
           pickup_window: {
             start: selectedWindow.start_time,
@@ -745,8 +757,7 @@ const Checkout = () => {
                         />
                         {zipInvalid && (
                           <p className="text-xs text-destructive mt-1">
-                            We don't currently deliver to {addrForm.zip}.{" "}
-                            <Link to="/faqs" className="underline">See our service areas and request a new service area</Link>.
+                            We don’t currently offer pickup and return in {addrForm.zip}. We regularly review our service area, so check back for updates.
                           </p>
                         )}
                       </Field>

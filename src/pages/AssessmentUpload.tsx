@@ -33,7 +33,8 @@ const ACCEPT = "image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic
 // moment it's picked — this lets each ItemUploadCard instance manage its own
 // file list/UI locally while the parent just awaits every item's promises at
 // submit time, with no shared File->upload lookup map needed across items.
-type Picked = { file: File; preview: string; uploadPromise: Promise<string> };
+type Picked = { file: File; preview: string; uploadPromise: Promise<string>; uploadError?: string; previewError?: boolean; previewPending?: boolean };
+type FilesUpdate = Picked[] | ((files: Picked[]) => Picked[]);
 
 type Item = { key: string; files: Picked[]; description: string };
 
@@ -77,7 +78,7 @@ const genKey = () =>
  *  stays with the parent via `startUpload`, passed in as a prop, so every
  *  item shares the same guest/user folder + session timestamp logic instead
  *  of each reinventing it. */
-const ItemUploadCard = ({
+export const ItemUploadCard = ({
   item,
   index,
   total,
@@ -97,14 +98,11 @@ const ItemUploadCard = ({
    *  "Please complete all required fields" rework). Never shown before a
    *  submit attempt. */
   showError: boolean;
-  onFilesChange: (files: Picked[]) => void;
+  onFilesChange: (files: FilesUpdate) => void;
   onDescriptionChange: (description: string) => void;
   onRemove: () => void;
-  /** Called when a specific file's upload rejects — removes just that file
-   *  via a functional state update keyed off the file reference (not the
-   *  `files` snapshot closed over at pick time), so it can't clobber other
-   *  photos added to this same bag while the failed upload was in flight. */
-  onFileUploadFailed: (file: File) => void;
+  /** Keep failed uploads visible with an actionable error. */
+  onFileUploadFailed: (file: File, error: unknown) => void;
   startUpload: (file: File) => Promise<string>;
   /** Lets the parent scroll/focus this bag's card when it's the first
    *  incomplete section after a failed submit attempt. */
@@ -119,6 +117,7 @@ const ItemUploadCard = ({
     if (!list) return;
     const incoming = Array.from(list);
     const accepted: Picked[] = [];
+    const remaining = MAX_FILES - files.length;
     for (const f of incoming) {
       if (!isImage(f)) {
         toast({ title: "Unsupported file", description: `${f.name} must be JPG, PNG or HEIC.`, variant: "destructive" });
@@ -128,6 +127,10 @@ const ItemUploadCard = ({
         toast({ title: "File too large", description: `${f.name} exceeds 50MB.`, variant: "destructive" });
         continue;
       }
+      if (accepted.length >= remaining) {
+        toast({ title: "File limit", description: `You can upload up to ${MAX_FILES} files.`, variant: "destructive" });
+        break;
+      }
       const uploadPromise = startUpload(f).catch((e) => {
         console.warn("upload failed", e);
         toast({
@@ -135,9 +138,11 @@ const ItemUploadCard = ({
           description: `${f.name}: ${friendlyUploadError(e)}`,
           variant: "destructive",
         });
-        onFileUploadFailed(f);
+        onFileUploadFailed(f, e);
         throw e;
       });
+      // Attach a handler immediately; submission still awaits the original promise.
+      void uploadPromise.catch(() => undefined);
       const picked: Picked = { file: f, preview: URL.createObjectURL(f), uploadPromise };
       accepted.push(picked);
       const name = f.name.toLowerCase();
@@ -147,23 +152,21 @@ const ItemUploadCard = ({
         name.endsWith(".heic") ||
         name.endsWith(".heif");
       if (isHeic) {
+        picked.previewPending = true;
         createPreviewUrl(f).then((url) => {
           onFilesChange(
-            item.files.map((p) => {
+            (current) => current.map((p) => {
               if (p.file !== f) return p;
               URL.revokeObjectURL(p.preview);
-              return { ...p, preview: url };
+              return { ...p, preview: url, previewPending: false };
             }),
           );
+        }).catch(() => {
+          onFilesChange(current => current.map(p => p.file === f ? { ...p, previewError: true, previewPending: false } : p));
         });
       }
     }
-    const remaining = MAX_FILES - files.length;
-    if (accepted.length > remaining) {
-      toast({ title: "File limit", description: `You can upload up to ${MAX_FILES} files.`, variant: "destructive" });
-    }
-    const added = accepted.slice(0, remaining);
-    onFilesChange([...files, ...added]);
+    onFilesChange(current => [...current, ...accepted]);
     if (inputRef.current) inputRef.current.value = "";
     if (cameraPhotoInputRef.current) cameraPhotoInputRef.current.value = "";
   };
@@ -179,6 +182,7 @@ const ItemUploadCard = ({
     <div
       ref={cardRef}
       tabIndex={-1}
+      aria-describedby={showError ? `bag-photos-error-${item.key}` : undefined}
       className={`mt-6 rounded-xl border p-4 md:p-5 outline-none ${
         showError ? "border-destructive" : "border-border"
       }`}
@@ -192,7 +196,8 @@ const ItemUploadCard = ({
           className="text-sm font-medium"
           style={{ color: "#3d1700" }}
         >
-          Upload photos of your bag(s) from all sides. Make sure to capture any areas of damage or wear.
+          <strong>Upload photos of your bag from all sides, including close-ups of any damage or wear.</strong>{" "}
+          For handle or strap issues, also include photos of the attachment points and the inside of the bag near them so we can see how they’re connected.
         </p>
         {total > 1 && (
           <button
@@ -274,7 +279,7 @@ const ItemUploadCard = ({
             JPG, PNG, HEIC · up to {MAX_FILES} files · 50MB max each
           </p>
           {showError && (
-            <p className="mt-2 text-xs text-destructive" role="alert">
+            <p id={`bag-photos-error-${item.key}`} className="mt-2 text-xs text-destructive" role="alert">
               Add at least one photo of this bag.
             </p>
           )}
@@ -284,7 +289,9 @@ const ItemUploadCard = ({
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
             {files.map((f, idx) => (
               <div key={idx} className="relative aspect-square rounded-md overflow-hidden border border-border bg-secondary/40">
-                <img src={f.preview} alt={`Upload ${idx + 1}`} className="h-full w-full object-cover" />
+                {f.previewPending ? <p className="p-3 text-xs" role="status">Preparing preview…</p> : f.previewError ? <p className="p-3 text-xs">Preview unavailable. You can keep this photo or replace it with a JPG.</p> :
+                  <img src={f.preview} alt={`Upload ${idx + 1}`} className="h-full w-full object-cover" />}
+                {f.uploadError && <p role="alert" className="absolute inset-x-0 bottom-0 bg-white p-2 text-xs text-destructive">Upload failed. {f.uploadError} Remove this photo and add it again.</p>}
                 <button
                   type="button"
                   onClick={() => remove(idx)}
@@ -390,10 +397,7 @@ const AssessmentUpload = () => {
   const [zip, setZip] = useState("");
   const [email, setEmail] = useState(user?.email ?? "");
   const [busy, setBusy] = useState(false);
-  // Only becomes true after a submit attempt — drives whether the general
-  // "Please complete all required fields" message and the per-field error
-  // states show at all (2026-10-01). Never true on first load, so nothing is
-  // flagged as invalid before the customer has interacted with the form.
+  // Show field errors after submission is attempted; clear each as it is corrected.
   const [attempted, setAttempted] = useState(false);
   const itemCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const zipRef = useRef<HTMLInputElement>(null);
@@ -465,17 +469,10 @@ const AssessmentUpload = () => {
       });
   };
 
-  const updateItemFiles = (key: string, files: Picked[]) =>
-    setItems((prev) => prev.map((it) => (it.key === key ? { ...it, files } : it)));
-  const handleFileUploadFailed = (key: string, file: File) =>
-    setItems((prev) =>
-      prev.map((it) => {
-        if (it.key !== key) return it;
-        const failed = it.files.find((p) => p.file === file);
-        if (failed) URL.revokeObjectURL(failed.preview);
-        return { ...it, files: it.files.filter((p) => p.file !== file) };
-      }),
-    );
+  const updateItemFiles = (key: string, files: FilesUpdate) =>
+    setItems((prev) => prev.map((it) => (it.key === key ? { ...it, files: typeof files === "function" ? files(it.files) : files } : it)));
+  const handleFileUploadFailed = (key: string, file: File, error: unknown) =>
+    updateItemFiles(key, current => current.map(p => p.file === file ? { ...p, uploadError: friendlyUploadError(error) } : p));
   const updateItemDescription = (key: string, description: string) =>
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, description } : it)));
   const addItem = () => {
@@ -502,6 +499,10 @@ const AssessmentUpload = () => {
   // rather than silently dropping it at submit time this blocks submit
   // until it's either filled in or removed (via the item's own Remove
   // button).
+  const zipError = attempted && !/^\d{5}$/.test(zip)
+    ? (zip ? "Enter a 5-digit ZIP code." : "Enter your ZIP code.") : null;
+  const emailError = attempted && !emailValid
+    ? (email.trim() ? "Enter a valid email address." : "Enter your email address.") : null;
   const itemsValid = items.every((it) => it.files.length > 0);
   const canSubmit = items.length > 0 && itemsValid && emailValid && zipValid && !busy;
 
@@ -628,7 +629,7 @@ const AssessmentUpload = () => {
               onFilesChange={(files) => updateItemFiles(item.key, files)}
               onDescriptionChange={(description) => updateItemDescription(item.key, description)}
               onRemove={() => removeItem(item.key)}
-              onFileUploadFailed={(file) => handleFileUploadFailed(item.key, file)}
+              onFileUploadFailed={(file, error) => handleFileUploadFailed(item.key, file, error)}
               startUpload={startUpload}
               cardRef={(el) => { itemCardRefs.current[item.key] = el; }}
             />
@@ -674,17 +675,18 @@ const AssessmentUpload = () => {
                 value={zip}
                 onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
                 aria-required="true"
-                aria-invalid={zipInvalid || (attempted && !zipValid)}
+                aria-invalid={Boolean(zipError)}
+                aria-describedby={zipError ? "assessment-zip-error" : zipInvalid ? "assessment-zip-coverage" : undefined}
+                className={zipError ? "border-destructive" : undefined}
               />
               {zipInvalid && (
-                <p className="text-xs text-destructive" role="alert">
-                  We don't currently deliver to {zip}.{" "}
-                  <Link to="/faqs" className="underline">See our service areas and request a new service area</Link>.
+                <p id="assessment-zip-coverage" className="text-xs text-destructive" role="alert">
+                  We don’t currently offer pickup and return in {zip}. We regularly review our service area, so check back for updates.
                 </p>
               )}
-              {attempted && !zip && (
-                <p className="text-xs text-destructive" role="alert">
-                  Enter your zip code.
+              {zipError && (
+                <p id="assessment-zip-error" className="text-xs text-destructive" role="alert">
+                  {zipError}
                 </p>
               )}
             </div>
@@ -704,16 +706,13 @@ const AssessmentUpload = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 aria-required="true"
-                aria-invalid={attempted && !emailValid}
+                aria-invalid={Boolean(emailError)}
+                aria-describedby={emailError ? "assessment-email-error" : undefined}
+                className={emailError ? "border-destructive" : undefined}
               />
-              {attempted && email.length > 0 && !emailValid && (
-                <p className="text-xs text-destructive" role="alert">
-                  Enter a valid email address.
-                </p>
-              )}
-              {attempted && email.length === 0 && (
-                <p className="text-xs text-destructive" role="alert">
-                  Enter your email address.
+              {emailError && (
+                <p id="assessment-email-error" className="text-xs text-destructive" role="alert">
+                  {emailError}
                 </p>
               )}
             </div>
@@ -729,11 +728,6 @@ const AssessmentUpload = () => {
             >
               {busy ? "Submitting…" : "Submit request"}
             </Button>
-            {attempted && !canSubmit && !busy && (
-              <p className="mt-2 text-sm text-destructive" role="alert">
-                Please complete all required fields.
-              </p>
-            )}
             {/* Notice-only, unchecked, at submission time (2026-09-24,
                 Danielle's call) — this is the one guest-accessible flow that
                 collects personal data (email, description, photos) without

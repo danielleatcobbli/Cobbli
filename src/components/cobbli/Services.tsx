@@ -32,8 +32,8 @@ const Services = () => {
             className="mx-auto mt-6 max-w-2xl text-base md:text-lg leading-relaxed"
             style={{ color: "#3d1700", fontFamily: "'Instrument Sans', sans-serif" }}
           >
-            We're here to make taking care of the things you love as easy as owning them. With expert repair
-            brought right to your door, Cobbli makes it simple to keep your favorite pieces looking good and in
+            We're here to make taking care of the bags you love as easy as owning them. With expert repair
+            brought right to your door, Cobbli makes it simple to keep your favorite bags looking good and in
             your life for longer.
           </p>
           {/* Text color moved from inline style into the same text-[#fdb600]

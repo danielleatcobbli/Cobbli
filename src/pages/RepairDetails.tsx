@@ -351,7 +351,7 @@ export const RepairDetailsRequest = ({ id, token }: { id: string; token?: string
       const extra = isFirst ? proposedServices.filter((s) => !s.pair_id) : [];
       return [...tagged, ...extra]
         .filter((s) => selectedRecommended.has(s.recommendation_id!))
-        .map((l) => ({ id: l.service_id, name: l.name, price: l.price_cents }));
+        .map((l) => ({ id: l.service_id, name: l.name, price: l.price_cents, recommendationId: l.recommendation_id }));
     };
     pairs.forEach((p, i) => {
       const label = pairs.length > 1 ? `Bag ${i + 1}` : "Your bag";
@@ -359,6 +359,7 @@ export const RepairDetailsRequest = ({ id, token }: { id: string; token?: string
       if (services.length === 0) return;
       addPair(services, undefined, label, p.shoeType as never, undefined, p.photoPaths?.[0], id);
     });
+    sessionStorage.setItem(`cobbli.quote.${id}`, JSON.stringify({ recommendation_revision: revision, proposal_token: token }));
     navigate(`/checkout?assessment_id=${id}`);
   };
 

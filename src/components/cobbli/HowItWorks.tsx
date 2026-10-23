@@ -1,8 +1,8 @@
-import { Camera, ListChecks, ShoppingBag } from "lucide-react";
+import { Camera, HandPointer, House } from "lucide-react";
 const steps = [
-  { title: "Show us your bag", Icon: Camera, copy: "Upload a few photos, including any damage or wear. We'll recommend the right fixes." },
-  { title: "Choose what works for you", Icon: ListChecks, copy: "We'll email when your recommendations are ready. Choose your repairs and an available pickup time." },
-  { title: "Back in your hands", Icon: ShoppingBag, copy: "We pick up your bag and get to work. When it's ready, we'll help you arrange its return." },
+  { title: "Show us your bag", Icon: Camera, copy: "Upload a few photos and we'll recommend the right fixes." },
+  { title: "Schedule a pickup", Icon: HandPointer, copy: "We'll email you when your recommendations are ready. Choose the repairs you'd like and schedule a pickup." },
+  { title: "We’ll take care of the rest", Icon: House, copy: "We pick up your bag and our expert artisans repair it. When it’s ready, we’ll contact you to arrange its return." },
 ];
 export default function HowItWorks() {
   return <section id="how-it-works" className="py-16 md:py-20" style={{ backgroundColor: "#fdb600" }}>

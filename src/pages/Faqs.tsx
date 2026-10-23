@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Plus, Minus } from "lucide-react";
 import Header from "@/components/cobbli/Header";
@@ -21,97 +21,97 @@ const Email = () => (
   </a>
 );
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Session-level deduplication: these are interest signals, not unique people.
+const recordedCoverageZips = new Set<string>();
 
-const CoverageRequestForm = () => {
+export const CoverageRequestForm = () => {
   const [zip, setZip] = useState("");
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState<string | null>(null);
+  const [result, setResult] = useState<"invalid" | "covered" | "uncovered" | "unavailable" | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [recorded, setRecorded] = useState(false);
+  const checking = useRef(false);
   const { isServiceable } = useServiceableZips();
-
-  const zipValid = /^[0-9]{5}$/.test(zip);
-  const zipAlreadyServiced = zipValid && isServiceable(zip) === true;
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!zipValid || zipAlreadyServiced) return;
-    const trimmedEmail = email.trim();
-    if (trimmedEmail && !EMAIL_RE.test(trimmedEmail)) {
-      setEmailError("Please enter a valid email address.");
+    if (checking.current) return;
+    setRecorded(false);
+    if (!/^[0-9]{5}$/.test(zip)) {
+      setResult("invalid");
       return;
     }
-    setEmailError(null);
+    const coverage = isServiceable(zip);
+    if (coverage === null) {
+      setResult("unavailable");
+      return;
+    }
+    if (coverage) {
+      setResult("covered");
+      return;
+    }
+    setResult("uncovered");
+    const key = `cobbli:coverage-request:${zip}`;
+    let alreadyRecorded = recordedCoverageZips.has(zip);
+    try { alreadyRecorded ||= sessionStorage.getItem(key) === "1"; } catch { /* Storage may be disabled. */ }
+    if (alreadyRecorded) {
+      setRecorded(true);
+      return;
+    }
+    checking.current = true;
     setSubmitting(true);
-    const { error } = await supabase
-      .from("coverage_requests")
-      .insert({ zip_code: zip, email: trimmedEmail || null });
-    setSubmitting(false);
-    if (error) {
-      setEmailError("Something went wrong. Please try again.");
-      return;
+    try {
+      const { error } = await supabase.from("coverage_requests").insert({ zip_code: zip, email: null });
+      if (!error) {
+        recordedCoverageZips.add(zip);
+        try { sessionStorage.setItem(key, "1"); } catch { /* In-memory deduplication remains available. */ }
+        setRecorded(true);
+      }
+    } catch { /* Coverage remains valid even if recording interest fails. */ }
+    finally {
+      checking.current = false;
+      setSubmitting(false);
     }
-    setSubmitted(true);
   };
 
-  if (submitted) {
-    return (
-      <p className="rounded-md border border-border bg-muted/40 p-4 text-foreground">
-        Got it, thank you! We've noted your zip code and will reach out if you provided your email when we
-        expand to your area.
-      </p>
-    );
-  }
-
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded-md border border-border p-4" noValidate>
-      <div className="space-y-1.5">
-        <Label htmlFor="cr-zip">Zip code <span className="text-destructive">*</span></Label>
+    <form onSubmit={onSubmit} className="space-y-3 rounded-md border border-border p-4" noValidate>
+      <Label htmlFor="cr-zip">ZIP code</Label>
+      <div className="flex flex-col gap-3 sm:flex-row">
         <Input
           id="cr-zip"
           inputMode="numeric"
-          pattern="[0-9]*"
+          autoComplete="postal-code"
           maxLength={5}
           value={zip}
-          onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+          disabled={submitting}
+          onChange={(e) => {
+            setZip(e.target.value.replace(/\D/g, "").slice(0, 5));
+            setResult(null);
+            setRecorded(false);
+          }}
           placeholder="10001"
+          aria-invalid={result === "invalid"}
+          aria-describedby={result ? "coverage-result" : undefined}
           required
         />
-        {zipAlreadyServiced && (
+        <Button type="submit" disabled={submitting}>
+          {submitting ? "Checking…" : "Check availability"}
+        </Button>
+      </div>
+      <div id="coverage-result" role="status" aria-live="polite">
+        {result === "invalid" && <p className="text-sm text-destructive">Enter a valid 5-digit ZIP code.</p>}
+        {result === "unavailable" && <p className="text-sm">We couldn’t check availability right now. Please try again shortly.</p>}
+        {result === "covered" && (
           <p className="text-sm font-medium text-green-700">
-            Great news — we already service your area!{" "}
-            <Link
-              to="/start-repair/assessment"
-              className="underline underline-offset-4"
-              onClick={() => trackEvent("start_repair", { source: "faqs" })}
-            >
-              Start a repair
-            </Link>
-            .
+            We serve your area!{" "}
+            <Link to="/start-repair/assessment" className="underline underline-offset-4"
+              onClick={() => trackEvent("start_repair", { source: "faqs" })}>Start a repair →</Link>
           </p>
         )}
+        {result === "uncovered" && (
+          <p className="text-sm">We’re not in your area yet.{recorded && " Thanks for helping us understand where to expand next."}</p>
+        )}
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="cr-email">Email</Label>
-        <Input
-          id="cr-email"
-          type="email"
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value);
-            if (emailError) setEmailError(null);
-          }}
-          placeholder="you@example.com"
-        />
-        <p className="text-sm text-muted-foreground">
-          We will notify you when we add service in your area
-        </p>
-        {emailError && <p className="text-sm text-destructive">{emailError}</p>}
-      </div>
-      <Button type="submit" disabled={!zipValid || zipAlreadyServiced || submitting}>
-        {submitting ? "Submitting…" : "Submit"}
-      </Button>
     </form>
   );
 };
@@ -121,7 +121,7 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "How does Cobbli work?",
     a: (
       <p>
-        Tell us what's wrong with your bag through our quick{" "}
+        Upload photos of your bag through our short{" "}
         <Link
           to="/start-repair/assessment"
           className="underline underline-offset-4 hover:text-primary"
@@ -129,28 +129,17 @@ const faqs: { q: string; a: ReactNode }[] = [
         >
           Start a Repair
         </Link>{" "}
-        form or by sending us a photo or video and we'll recommend the right repairs. From there, we pick
+        form and we'll recommend the right repairs. From there, we pick
         up your items, repair them, and return them to your door.
       </p>
     ),
   },
   {
-    q: "What areas do you service?",
+    q: "What areas of New York do you serve?",
     a: (
       <div className="space-y-3">
         <p>
-          We currently service the below Manhattan neighborhoods. Enter your address at checkout and we'll
-          let you know if you're within our coverage zone.
-        </p>
-        <p className="pl-4">
-          Alphabet City, Battery Park City, Chelsea, Chinatown, East Village, FiDi, Flatiron, Garment
-          District, Gramercy, Hell's Kitchen, Lenox Hill, Little Italy, Lower East Side, Midtown East,
-          Murray Hill, NoHo, Rockefeller Center, SoHo, Sutton Place, Theater District, Tribeca, Union
-          Square, Upper East Side, Upper West Side, West Village, Yorkville
-        </p>
-        <p>
-          Don't see your neighborhood? Let us know your zip code below — we use submissions to prioritize
-          where we expand next.
+          We currently serve most of Manhattan. Enter your ZIP code to check whether we offer pickup and return in your area.
         </p>
         <CoverageRequestForm />
       </div>
@@ -160,7 +149,7 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "How do I schedule my pickup and return?",
     a: (
       <p>
-        Schedule your pickup during checkout. Once your order is ready, we will text you to schedule your
+        Schedule your pickup during checkout. Once your order is ready, we will email you to schedule your
         return.
       </p>
     ),
@@ -186,7 +175,7 @@ const faqs: { q: string; a: ReactNode }[] = [
     q: "Do you offer order guarantees?",
     a: (
       <p>
-        Yes. If you're not satisfied with your repair, contact us at <Email /> within 14 days of receiving
+        If you're not satisfied with your repair, contact us at <Email /> within 14 days of receiving
         your order.
       </p>
     ),

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import OptionalUser
 from app.repair_approval import authorize_assessment, approved_payload
-from app.pricing import CartQuote, quote_cart
+from app.pricing import CartQuote, quote_cart, quote_assessment
 from app.settings import get_settings
 from app.stripe_customers import resolve_or_create_customer
 from app.supabase_client import get_supabase_admin
@@ -98,7 +98,7 @@ def _validate_cart(payload: Any) -> dict[str, Any]:
     return payload
 
 
-def _validate_cart_assessment_ownership(payload: dict[str, Any], user: Any) -> None:
+def _validate_cart_assessment_ownership(payload: dict[str, Any], user: Any) -> dict[str, Any] | None:
     """Request-to-order continuity fix (2026-10-01). `cartPayload` can carry
     an `assessment_id` when this checkout started from accepting a repair
     recommendation (RepairDetails.tsx / AssessmentProposal.tsx's
@@ -114,7 +114,7 @@ def _validate_cart_assessment_ownership(payload: dict[str, Any], user: Any) -> N
     sb = get_supabase_admin()
     resp = (
         sb.table("assessments")
-        .select("id, user_id, status, proposal_token")
+        .select("id,user_id,status,proposal_token,updated_at,pairs,proposed_services,complimentary")
         .eq("id", assessment_id)
         .maybe_single()
         .execute()
@@ -125,6 +125,7 @@ def _validate_cart_assessment_ownership(payload: dict[str, Any], user: Any) -> N
     authorize_assessment(row, user, payload.get("proposal_token"))
     if row.get("status") != "quote_ready":
         raise HTTPException(409, "This request is not currently available for confirmation.")
+    return row
 
 
 class ComplimentaryConfirmRequest(BaseModel):
@@ -325,6 +326,8 @@ def _fingerprint_cart(canonical_payload: dict[str, Any]) -> str:
         ),
         "pickup_window": canonical_payload.get("pickup_window"),
         "total_cents": canonical_payload.get("total_cents"),
+        "recommendation_revision": canonical_payload.get("recommendation_revision"),
+        "selected_recommendation_ids": sorted(canonical_payload.get("selected_recommendation_ids") or []),
     }
     digest = hashlib.sha256(
         json.dumps(fingerprint_payload, sort_keys=True, default=str).encode()
@@ -464,7 +467,7 @@ def create_checkout(
     cart_assessment_id: str | None = None
     if body.kind == "cart":
         _validate_cart(body.cartPayload)
-        _validate_cart_assessment_ownership(body.cartPayload or {}, user)
+        assessment = _validate_cart_assessment_ownership(body.cartPayload or {}, user)
         raw_assessment_id = (body.cartPayload or {}).get("assessment_id")
         cart_assessment_id = raw_assessment_id if isinstance(raw_assessment_id, str) and raw_assessment_id else None
 
@@ -474,7 +477,7 @@ def create_checkout(
         # window are all trustworthy together — not from whatever the client
         # happened to send.
         pricing_started = perf_counter()
-        cart_quote = quote_cart(body.cartPayload or {})
+        cart_quote = quote_assessment(body.cartPayload or {}, assessment) if assessment else quote_cart(body.cartPayload or {})
         pricing_duration_ms = (perf_counter() - pricing_started) * 1000
 
     reused_client_secret: str | None = None

@@ -20,6 +20,7 @@ export const useLivePricedBag = (pairs: BagPair[]) => {
     const bySlug = new Map((services ?? []).map((s) => [s.slug, s]));
 
     const livePairs = pairs.map((p) => {
+      if (p.assessmentId) return p; // Staff quotes are independent of catalogue prices.
       const shoeType = p.shoeType as ShoeType | undefined;
       const liveServices: BagService[] = p.services.map((svc) => {
         if (svc.id.startsWith("bundle-")) {

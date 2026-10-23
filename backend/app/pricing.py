@@ -296,12 +296,33 @@ def quote_cart(payload: dict[str, Any]) -> CartQuote:
             canonical_item = _canonical_service_item(item, submitted_id, service)
         canonical_items.append(canonical_item)
 
+    return _quote_items(payload, canonical_items, catalog.config)
+
+
+def quote_assessment(payload: dict[str, Any], assessment: dict[str, Any]) -> CartQuote:
+    """Price selected staff-authored recommendations without a service catalogue."""
+    from app.repair_approval import approved_payload
+    if assessment.get("complimentary"):
+        raise HTTPException(409, "Use complimentary confirmation for this request.")
+    revision = assessment.get("updated_at")
+    if not revision or payload.get("recommendation_revision") != revision:
+        raise HTTPException(409, "Recommendations changed. Please review them again.")
+    canonical = approved_payload(assessment, payload, paid=True)
+    config = dict(PRICING_CONFIG_DEFAULTS)
+    rows = _rows(get_supabase_admin().table("pricing_config").select("key,value_cents").execute(), "pickup pricing")
+    for row in rows:
+        if row.get("key") in config and type(row.get("value_cents")) is int and row["value_cents"] >= 0:
+            config[row["key"]] = row["value_cents"]
+    return _quote_items(canonical, canonical["items"], config)
+
+
+def _quote_items(payload, canonical_items, config) -> CartQuote:
     repairs_subtotal = sum(item["price_cents"] for item in canonical_items)
-    free_threshold = catalog.config["free_courier_threshold_cents"]
+    free_threshold = config["free_courier_threshold_cents"]
     courier_fee = (
         0
         if repairs_subtotal >= free_threshold
-        else catalog.config["courier_fee_cents"]
+        else config["courier_fee_cents"]
     )
 
     delivery_address = payload.get("delivery_address")
