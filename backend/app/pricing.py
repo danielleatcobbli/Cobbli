@@ -308,6 +308,7 @@ def quote_assessment(payload: dict[str, Any], assessment: dict[str, Any]) -> Car
     if not revision or payload.get("recommendation_revision") != revision:
         raise HTTPException(409, "Recommendations changed. Please review them again.")
     canonical = approved_payload(assessment, payload, paid=True)
+    canonical.pop("proposal_token", None)  # Authorization links must not be sent to Stripe metadata.
     config = dict(PRICING_CONFIG_DEFAULTS)
     rows = _rows(get_supabase_admin().table("pricing_config").select("key,value_cents").execute(), "pickup pricing")
     for row in rows:

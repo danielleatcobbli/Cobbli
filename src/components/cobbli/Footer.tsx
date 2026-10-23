@@ -82,7 +82,11 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
               rel="noopener noreferrer"
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center hover:opacity-80 transition-opacity"
             >
-              <span
+              {s.label === "X" ? (
+                <svg viewBox="0 0 24 24" className="h-8 w-8 shrink-0" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M4 3h4l12 18h-4L4 3Z M20 3 4 21" />
+                </svg>
+              ) : <span
                 className="block h-8 w-8 shrink-0"
                 style={{
                   backgroundColor: "#fdb600",
@@ -95,7 +99,7 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
                   WebkitMaskPosition: "center",
                   maskPosition: "center",
                 }}
-              />
+              />}
             </a>
           ))}
         </div>

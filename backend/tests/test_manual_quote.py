@@ -10,7 +10,7 @@ def assessment():
         {'recommendation_id':'replace','pair_id':'a','service_id':'replace','price_cents':9000,'choice_group':'handle'},
         {'recommendation_id':'lining','pair_id':'b','service_id':'custom','price_cents':6300}]}
 def payload():
-    return {'recommendation_revision':'v1','selected_recommendation_ids':['stitch','lining'],'delivery_address':{'zip':'10001'},'items':[{'price_cents':1}],'total_cents':1}
+    return {'recommendation_revision':'v1','selected_recommendation_ids':['stitch','lining'],'delivery_address':{'zip':'10001'},'items':[{'price_cents':1}],'total_cents':1,'proposal_token':'private-link'}
 @pytest.fixture(autouse=True)
 def config():
     sb=MagicMock();sb.table.return_value.select.return_value.execute.return_value=SimpleNamespace(data=[],error=None)
@@ -21,6 +21,7 @@ def test_staff_price_and_bag_assignment():
     assert [i['price_cents'] for i in q.payload['items']]==[4700,6300]
     assert [i['pair_snapshot']['id'] for i in q.payload['items']]==['a','b']
     assert q.payload['items'][0]['service_snapshot']['limitations']=='Temporary'
+    assert 'proposal_token' not in q.payload
 def test_skipped_work_and_fee():
     p=payload();p['selected_recommendation_ids']=['stitch'];assert quote_assessment(p,assessment()).total_cents==6200
 @pytest.mark.parametrize('ids',[[],['stitch','replace'],['unknown'],['stitch','stitch']])
