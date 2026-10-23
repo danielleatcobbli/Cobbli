@@ -24,6 +24,7 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetchJson } from "@/integrations/api/client";
+import { loadRepairThumbnail } from "@/lib/repairThumbnail";
 import { StripeCardSetupForm } from "@/components/StripeCardSetup";
 
 type Profile = {
@@ -250,23 +251,25 @@ type Repair = {
   priceLabel: string;
 };
 
-const RepairCard = ({ r, thumbUrl }: { r: Repair; thumbUrl: string | null | undefined }) => (
+const RepairCard = ({ r, thumbUrl }: { r: Repair; thumbUrl: string | null | undefined }) => {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  return (
   <ClickableCard to={r.to}>
     <div className="flex gap-4">
       <div className="shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-md overflow-hidden bg-muted/40 border border-border flex items-center justify-center">
-        {thumbUrl ? (
-          <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+        {thumbUrl && failedUrl !== thumbUrl ? (
+          <img src={thumbUrl} alt="" onError={() => setFailedUrl(thumbUrl)} className="w-full h-full object-cover" />
         ) : (
           <ShoppingBag className="text-muted-foreground/50" size={26} />
         )}
       </div>
-      <div className="min-w-0 flex-1 flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0 flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="min-w-0">
           <p className="font-semibold leading-snug">{r.refLabel}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{r.dateLabel}</p>
           {r.meta.next && <p className="text-sm text-foreground/80 mt-2">{r.meta.next}</p>}
         </div>
-        <div className="text-right shrink-0">
+        <div className="text-left lg:text-right lg:max-w-48">
           <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold mb-2", r.meta.pill)}>
             {r.meta.label}
           </span>
@@ -278,7 +281,8 @@ const RepairCard = ({ r, thumbUrl }: { r: Repair; thumbUrl: string | null | unde
       <span className="text-sm text-primary underline underline-offset-4">{r.meta.action}</span>
     </div>
   </ClickableCard>
-);
+  );
+};
 
 const EmptyState = ({
   message,
@@ -303,29 +307,31 @@ const EmptyState = ({
 // thumbnailPath (see BagContext.tsx's BagPair) live.
 const useThumbnails = (paths: (string | null)[]) => {
   const [urls, setUrls] = useState<Record<string, string>>({});
-  const key = paths.filter(Boolean).join("|");
+  const key = JSON.stringify([...new Set(paths.filter((p): p is string => !!p))]);
   useEffect(() => {
     let cancelled = false;
-    const toFetch = Array.from(new Set(paths.filter((p): p is string => !!p)));
-    if (toFetch.length === 0) return;
-    (async () => {
-      const entries = await Promise.all(
-        toFetch.map(async (path) => {
-          const { data } = await supabase.storage.from("assessment-uploads").createSignedUrl(path, 3600);
-          return [path, data?.signedUrl] as const;
-        }),
-      );
-      if (cancelled) return;
-      setUrls((prev) => {
-        const next = { ...prev };
-        for (const [path, url] of entries) if (url) next[path] = url;
-        return next;
-      });
-    })();
+    const objectUrls: string[] = [];
+    setUrls({});
+    const toFetch: string[] = JSON.parse(key);
+    // Resolve independently so one large HEIC cannot delay every other photo.
+    toFetch.forEach(async (path) => {
+      try {
+        const url = await loadRepairThumbnail(path);
+        if (!url) return;
+        if (cancelled) {
+          if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+          return;
+        }
+        if (url.startsWith("blob:")) objectUrls.push(url);
+        setUrls(prev => ({ ...prev, [path]: url }));
+      } catch {
+        // Keep the bag placeholder if a photo is missing or cannot be decoded.
+      }
+    });
     return () => {
       cancelled = true;
+      objectUrls.forEach(url => URL.revokeObjectURL(url));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return urls;
 };

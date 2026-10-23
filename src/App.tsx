@@ -1,4 +1,4 @@
-import { PAYMENTS_ENABLED } from "@/lib/pilot";
+import { PAYMENTS_ENABLED, SERVICE_CATALOG_ENABLED } from "@/lib/pilot";
 import { useEffect, useState, lazy, Suspense, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -149,7 +149,7 @@ const App = () => (
                         <Route path="/signup" element={<SignUp />} />
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/link-expired" element={<LinkExpired />} />
-                        <Route path="/start-repair" element={PAYMENTS_ENABLED ? <StartRepair /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/start-repair" element={SERVICE_CATALOG_ENABLED ? <StartRepair /> : <Navigate to="/start-repair/assessment" replace />} />
                         <Route path="/start-repair/assessment" element={<AssessmentUpload />} />
                         {/* /start-repair/assessment/deposit retired 2026-09-24
                             (Danielle's call: no deposit structure) — was
@@ -182,14 +182,14 @@ const App = () => (
                           path="/proposal/t/:token"
                           element={<AssessmentProposal />}
                         />
-                        <Route path="/start-repair/services" element={PAYMENTS_ENABLED ? <SelectServices /> : <Navigate to="/start-repair/assessment" replace />} />
-                        <Route path="/start-repair/services/:slug" element={PAYMENTS_ENABLED ? <ServiceDetail mode="flow" /> : <Navigate to="/start-repair/assessment" replace />} />
-                        <Route path="/services" element={PAYMENTS_ENABLED ? <Services /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/start-repair/services" element={SERVICE_CATALOG_ENABLED ? <SelectServices /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/start-repair/services/:slug" element={SERVICE_CATALOG_ENABLED ? <ServiceDetail mode="flow" /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/services" element={SERVICE_CATALOG_ENABLED ? <Services /> : <Navigate to="/start-repair/assessment" replace />} />
                         <Route path="/services/zipper-reattachment" element={<Navigate to="/services#zipper" replace />} />
                         <Route path="/start-repair/services/zipper-reattachment" element={<Navigate to="/start-repair/services" replace />} />
-                        <Route path="/services/:slug" element={PAYMENTS_ENABLED ? <ServiceDetail mode="standalone" /> : <Navigate to="/start-repair/assessment" replace />} />
-                        <Route path="/packages/:slug" element={PAYMENTS_ENABLED ? <PackageDetail /> : <Navigate to="/start-repair/assessment" replace />} />
-                        <Route path="/bag" element={PAYMENTS_ENABLED ? <Bag /> : <Navigate to="/account/orders" replace />} />
+                        <Route path="/services/:slug" element={SERVICE_CATALOG_ENABLED ? <ServiceDetail mode="standalone" /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/packages/:slug" element={SERVICE_CATALOG_ENABLED ? <PackageDetail /> : <Navigate to="/start-repair/assessment" replace />} />
+                        <Route path="/bag" element={SERVICE_CATALOG_ENABLED ? <Bag /> : <Navigate to="/account/orders" replace />} />
                         {/* Guest checkout is in scope (2026-09-24, Danielle's
                             call) — no longer gated behind sign-in. */}
                         <Route path="/checkout" element={PAYMENTS_ENABLED ? <Checkout /> : <Navigate to="/account/orders" replace />} />
