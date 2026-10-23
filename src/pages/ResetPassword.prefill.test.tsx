@@ -56,7 +56,7 @@ describe("ResetPassword email pre-population", () => {
       () => expect(resetPasswordForEmail).toHaveBeenCalledWith("locked@example.com", expect.anything()),
       { timeout: 3000 },
     );
-    await screen.findByText(/sent a password reset link to locked@example\.com/i, undefined, { timeout: 3000 });
+    await screen.findByText(/If an account exists for locked@example\.com/i, undefined, { timeout: 3000 });
   });
 
   it("auto-sends the router-state email even when a URL param is also present", async () => {

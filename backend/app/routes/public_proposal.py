@@ -103,7 +103,7 @@ def get_public_proposal(token: str) -> dict[str, Any]:
 
     confirmed_order = None
     if row.get("status") == "booked":
-        confirmed = sb.table("orders").select("order_number,status,pickup_date,pickup_time_label,return_date,return_time_label,order_items(service_snapshot,pair_snapshot)").eq("assessment_id", row["id"]).maybe_single().execute()
+        confirmed = sb.table("orders").select("id,order_number,status,contact_email,contact_phone,delivery_address,repairs_subtotal_cents,courier_fee_cents,total_cents,pickup_date,pickup_time_label,return_date,return_time_label,pickup_calendly_event_uri,return_calendly_event_uri,order_items(id,price_cents,service_snapshot,pair_snapshot)").eq("assessment_id", row["id"]).maybe_single().execute()
         if getattr(confirmed, "error", None):
             raise HTTPException(503, "Could not load confirmation")
         confirmed_order = getattr(confirmed, "data", None)

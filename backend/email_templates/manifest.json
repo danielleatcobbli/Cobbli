@@ -1,0 +1,235 @@
+[
+  {
+    "name": "Cobbli | Bags | 1.\tREQUEST RECEIVED",
+    "slug": "01-request-received",
+    "subject": "We\u2019ve received your repair request",
+    "preview_text": "We\u2019ll review your photos and email you with the next step.",
+    "html_file": "01-request-received.html",
+    "required_params": [
+      "bag_count",
+      "request_reference",
+      "request_url"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 25
+  },
+  {
+    "name": "Cobbli | Bags | 2.\tMORE INFORMATION NEEDED",
+    "slug": "02-more-information-needed",
+    "subject": "Question about your repair request",
+    "preview_text": "We need more info to recommend the right fixes",
+    "html_file": "02-more-information-needed.html",
+    "required_params": [
+      "request_reference",
+      "response_url",
+      "staff_question"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 26
+  },
+  {
+    "name": "Cobbli | Bags | 3.\tRECOMMENDATIONS READY",
+    "slug": "03-recommendations-ready",
+    "subject": "Your repair recommendations are ready",
+    "preview_text": "Choose your repairs and schedule your pickup.",
+    "html_file": "03-recommendations-ready.html",
+    "required_params": [
+      "recommendations_url",
+      "request_reference"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 27
+  },
+  {
+    "name": "Cobbli | Bags | 4.\tREPAIR AND PICKUP CONFIRMED",
+    "slug": "04-pickup-confirmed",
+    "subject": "Your repair and pickup are confirmed",
+    "preview_text": "Your pickup is scheduled for {{ params.pickup_date }}.",
+    "html_file": "04-pickup-confirmed.html",
+    "required_params": [
+      "bag_count",
+      "pickup_address",
+      "pickup_date",
+      "pickup_window",
+      "repair_reference",
+      "repair_url"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 28
+  },
+  {
+    "name": "Cobbli | Bags | 5.\tPICKUP REMINDER",
+    "slug": "05-pickup-reminder",
+    "subject": "Pickup reminder",
+    "preview_text": "We\u2019ll collect your {% if params.bag_count > 1 %}bags{% else %}bag{% endif %} tomorrow.",
+    "html_file": "05-pickup-reminder.html",
+    "required_params": [
+      "bag_count",
+      "pickup_address",
+      "pickup_date",
+      "pickup_details_url",
+      "pickup_window",
+      "repair_reference"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 29
+  },
+  {
+    "name": "Cobbli | Bags | 6.\tBAG COLLECTED",
+    "slug": "06-bag-collected",
+    "subject": "We have your {% if params.bag_count > 1 %}bags{% else %}bag{% endif %}",
+    "preview_text": "We\u2019ll complete your repairs and email you to schedule a return.",
+    "html_file": "06-bag-collected.html",
+    "required_params": [
+      "bag_count",
+      "repair_reference",
+      "repair_url"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 30
+  },
+  {
+    "name": "Cobbli | Bags | 7.\tREADY TO SCHEDULE RETURN",
+    "slug": "07-schedule-return",
+    "subject": "Your {% if params.bag_count > 1 %}bags{% else %}bag{% endif %} {% if params.bag_count > 1 %}are{% else %}is{% endif %} ready to come home",
+    "preview_text": "Choose a return window that works for you.",
+    "html_file": "07-schedule-return.html",
+    "required_params": [
+      "bag_count",
+      "repair_reference",
+      "schedule_return_url"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 31
+  },
+  {
+    "name": "Cobbli | Bags | 8.\tRETURN CONFIRMED",
+    "slug": "08-return-confirmed",
+    "subject": "Your return is booked",
+    "preview_text": "We\u2019ll bring your {% if params.bag_count > 1 %}bags{% else %}bag{% endif %} back on {{ params.return_date }}.",
+    "html_file": "08-return-confirmed.html",
+    "required_params": [
+      "bag_count",
+      "repair_reference",
+      "return_address",
+      "return_date",
+      "return_details_url",
+      "return_window"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 32
+  },
+  {
+    "name": "Cobbli | Bags | 9.\tRETURN REMINDER",
+    "slug": "09-return-reminder",
+    "subject": "Your {% if params.bag_count > 1 %}bags{% else %}bag{% endif %} {% if params.bag_count > 1 %}are{% else %}is{% endif %} coming home tomorrow",
+    "preview_text": "Your return window is {{ params.return_window }}.",
+    "html_file": "09-return-reminder.html",
+    "required_params": [
+      "bag_count",
+      "repair_reference",
+      "return_address",
+      "return_date",
+      "return_details_url",
+      "return_window"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 33
+  },
+  {
+    "name": "Cobbli | Bags | 10.\tWAITLISTED",
+    "slug": "10-waitlisted",
+    "subject": "An update on your repair request",
+    "preview_text": "We\u2019re at capacity, but your request is on our waitlist.",
+    "html_file": "10-waitlisted.html",
+    "required_params": [
+      "request_reference",
+      "request_url"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 34
+  },
+  {
+    "name": "Cobbli | Bags | 11.\tCAPACITY AVAILABLE",
+    "slug": "11-capacity-available",
+    "subject": "We can now take on your repair",
+    "preview_text": "Review your recommendations and schedule your pickup.",
+    "html_file": "11-capacity-available.html",
+    "required_params": [
+      "recommendations_url",
+      "request_reference"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 35
+  },
+  {
+    "name": "Cobbli | Bags | 12A. REQUEST CLOSED \u2014 COBBLI CANNOT TAKE ON THE REQUEST",
+    "slug": "12a-request-declined",
+    "subject": "An update on your repair request",
+    "preview_text": "We\u2019re unable to take on your repair request.",
+    "html_file": "12a-request-declined.html",
+    "required_params": [
+      "bag_count",
+      "request_reference",
+      "staff_explanation"
+    ],
+    "optional_params": [
+      "first_name"
+    ],
+    "brevo_template_id": 36
+  },
+  {
+    "name": "Cobbli | Bags | 12B. REQUEST CLOSED \u2014 CUSTOMER REQUEST",
+    "slug": "12b-request-closed",
+    "subject": "Your repair request is closed",
+    "preview_text": "We\u2019ve closed your request as requested.",
+    "html_file": "12b-request-closed.html",
+    "required_params": [
+      "request_reference"
+    ],
+    "optional_params": [
+      "first_name",
+      "payment_status"
+    ],
+    "brevo_template_id": 37
+  },
+  {
+    "name": "Cobbli | Bags | 12C. CONFIRMED REPAIR CANCELED",
+    "slug": "12c-repair-canceled",
+    "subject": "Your repair has been canceled",
+    "preview_text": "Your cancellation details and next steps.",
+    "html_file": "12c-repair-canceled.html",
+    "required_params": [
+      "next_steps",
+      "payment_status",
+      "repair_reference"
+    ],
+    "optional_params": [
+      "cancellation_reason",
+      "first_name"
+    ],
+    "brevo_template_id": 38
+  }
+]

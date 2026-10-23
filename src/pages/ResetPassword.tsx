@@ -396,7 +396,13 @@ const ResetPassword = () => {
                 Check your inbox
               </h1>
               <p className="text-foreground/80">
-                We've sent a password reset link to {submittedEmail}. If you don't see it, check your spam folder.
+                If an account exists for {submittedEmail}, you'll receive a password reset link. Check your spam folder if it doesn't arrive.
+              </p>
+              <p className="text-foreground/80">
+                Don't have an account?{" "}
+                <Link to="/signup" className="text-primary hover:underline">
+                  Create an account
+                </Link>.
               </p>
               <Button
                 type="button"

@@ -678,6 +678,7 @@ def create_checkout(
 
 
 class InitialScheduleRequest(BaseModel):
+    proposal_token: str | None = None
     kind: str
     start: str
     end: str
@@ -691,17 +692,25 @@ def schedule_initial_appointment(order_id: str, body: InitialScheduleRequest, us
     update prevents concurrent requests replacing an appointment. Reconcile
     ambiguous writes before canceling a calendar booking.
     """
-    if user is None:
+    if user is None and not body.proposal_token:
         raise HTTPException(401, 'Sign in required')
     if body.kind not in ('pickup', 'return'):
         raise HTTPException(400, 'Invalid appointment type')
     sb = get_supabase_admin()
-    response = sb.table('orders').select('id,user_id,status,contact_email,contact_phone,delivery_address,pickup_calendly_event_uri,return_calendly_event_uri').eq('id', order_id).maybe_single().execute()
+    response = sb.table('orders').select('id,user_id,assessment_id,status,contact_email,contact_phone,delivery_address,pickup_calendly_event_uri,return_calendly_event_uri').eq('id', order_id).maybe_single().execute()
     order = getattr(response, 'data', None)
     if getattr(response, 'error', None):
         raise HTTPException(503, 'Could not verify this repair. Please try again.')
-    if not order or order.get('user_id') != user.id:
+    if not order:
         raise HTTPException(404, 'Repair not found')
+    if not user or order.get('user_id') != user.id:
+        if not body.proposal_token or not order.get('assessment_id'):
+            raise HTTPException(404, 'Repair not found')
+        assessment = sb.table('assessments').select('id,user_id,proposal_token').eq('id', order.get('assessment_id')).maybe_single().execute()
+        row = getattr(assessment, 'data', None)
+        if not row:
+            raise HTTPException(404, 'Repair not found')
+        authorize_assessment(row, user, body.proposal_token)
     allowed = ('placed', 'confirmed') if body.kind == 'pickup' else ('ready-for-return',)
     if order.get('status') not in allowed:
         raise HTTPException(409, 'Scheduling is not available at this stage.')
@@ -726,7 +735,7 @@ def schedule_initial_appointment(order_id: str, body: InitialScheduleRequest, us
         raise HTTPException(409, 'That time could not be booked. Please choose another time.')
     fields = {event_field: event_uri, f'{body.kind}_date': _to_ny_date_key(body.start), f'{body.kind}_time_label': _format_ny_time_range(body.start, body.end)}
     try:
-        result = sb.table('orders').update(fields).eq('id', order_id).eq('user_id', user.id).eq('status', order['status']).is_(event_field, 'null').execute()
+        result = sb.table('orders').update(fields).eq('id', order_id).eq('status', order['status']).is_(event_field, 'null').execute()
         if getattr(result, 'error', None) or not getattr(result, 'data', None):
             raise RuntimeError('Appointment was not saved')
     except Exception:

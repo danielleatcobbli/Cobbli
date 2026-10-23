@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,6 +35,14 @@ class Settings(BaseSettings):
     )
 
     brevo_api_key: str = Field(default="", validation_alias="BREVO_API_KEY")
+    repair_emails_enabled: bool = Field(default=False, validation_alias="REPAIR_EMAILS_ENABLED")
+    repair_email_worker_secret: str = Field(default="", validation_alias="REPAIR_EMAIL_WORKER_SECRET")
+    repair_email_delivery_mode: Literal["test", "production"] = Field(
+        default="test", validation_alias="REPAIR_EMAIL_DELIVERY_MODE"
+    )
+    repair_email_test_recipients: str = Field(
+        default="", validation_alias="REPAIR_EMAIL_TEST_RECIPIENTS"
+    )
     ai_api_key: str = Field(default="", validation_alias="AI_API_KEY")
 
     cors_allow_origins: str = Field(

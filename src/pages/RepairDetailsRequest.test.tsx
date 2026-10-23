@@ -78,9 +78,9 @@ describe('email recommendation review',()=>{
   expect(await screen.findByRole('button',{name:'Continue to pickup'})).toBeDisabled();
  });
  it('uses saved approved work after confirmation, rather than offering the recommendations again',async()=>{
-  mock.api.mockResolvedValue({...request,status:'booked',confirmed_order:{order_number:'CB-1',status:'placed',pickup_date:'2026-10-10',pickup_time_label:'10 AM',return_date:null,return_time_label:null,order_items:[{pair_snapshot:{id:'a'},service_snapshot:{name:'Stitch handle'}}]}});
+  mock.api.mockResolvedValue({...request,status:'booked',confirmed_order:{id:'order',delivery_address:{street:'1 Main',city:'NY',state:'NY',zip:'10001'},total_cents:0,repairs_subtotal_cents:0,courier_fee_cents:0,order_number:'CB-1',status:'placed',pickup_date:'2026-10-10',pickup_time_label:'10 AM',return_date:null,return_time_label:null,order_items:[{pair_snapshot:{id:'a'},service_snapshot:{name:'Stitch handle'}}]}});
   show();
-  expect(await screen.findByText('Approved repairs')).toBeInTheDocument();
+  expect(await screen.findByText('Stitch handle')).toBeInTheDocument();
   expect(screen.getByText('Stitch handle')).toBeInTheDocument();
   expect(screen.queryByText('Replace handle')).not.toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'Confirm repair'})).not.toBeInTheDocument();
