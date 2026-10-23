@@ -1,7 +1,7 @@
-import { Camera, HandPointer, House } from "lucide-react";
+import { Camera, Pointer, House } from "lucide-react";
 const steps = [
   { title: "Show us your bag", Icon: Camera, copy: "Upload a few photos and we'll recommend the right fixes." },
-  { title: "Schedule a pickup", Icon: HandPointer, copy: "We'll email you when your recommendations are ready. Choose the repairs you'd like and schedule a pickup." },
+  { title: "Schedule a pickup", Icon: Pointer, copy: "We'll email you when your recommendations are ready. Choose the repairs you'd like and schedule a pickup." },
   { title: "We’ll take care of the rest", Icon: House, copy: "We pick up your bag and our expert artisans repair it. When it’s ready, we’ll contact you to arrange its return." },
 ];
 export default function HowItWorks() {
