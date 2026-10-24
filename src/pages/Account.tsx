@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Eye, EyeOff, Pencil, ShoppingBag } from "lucide-react";
+import MobileAccountNav from "@/components/cobbli/MobileAccountNav";
 import Header from "@/components/cobbli/Header";
 import Footer from "@/components/cobbli/Footer";
 import BrandSpinner from "@/components/cobbli/BrandSpinner";
@@ -148,7 +149,7 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => {
 
   return (
     <aside className="md:w-64 md:shrink-0">
-      <div className="mb-6 min-h-[3rem]">
+      <div className="mb-3 md:mb-6 min-h-[3rem]">
         {loading ? (
           <BrandSpinner size="sm" className="justify-start" />
         ) : (
@@ -163,7 +164,8 @@ const Sidebar = ({ onSignOut }: { onSignOut: () => void }) => {
       {/* Uppercase + Instrument Sans/bold 2026-08-27 (Danielle's call —
           Account section should use the same fonts/capitalization as the
           rest of the site, matching the header nav's uppercase treatment). */}
-      <nav aria-label="Account" className="flex flex-col gap-1 text-sm uppercase tracking-wide" style={{ fontFamily: "'Instrument Sans', sans-serif" }}>
+      <MobileAccountNav items={NAV} onSignOut={onSignOut} />
+      <nav aria-label="Account" className="hidden md:flex flex-col gap-1 text-sm uppercase tracking-wide" style={{ fontFamily: "'Instrument Sans', sans-serif" }}>
         {NAV.map((item) => (
           <NavLink
             key={item.to}
@@ -1592,7 +1594,7 @@ const Account = () => {
       <Header />
       <main className="flex-1">
         <div className="container py-10 md:py-14">
-          <div className="flex flex-col md:flex-row gap-10 md:gap-14">
+          <div className="flex flex-col md:flex-row gap-6 md:gap-14">
             <Sidebar onSignOut={handleSignOut} />
             <div className="flex-1 min-w-0">
               <Routes>
