@@ -750,6 +750,7 @@ const AddPaymentMethod = () => {
   const [existingCount, setExistingCount] = useState<number | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [setupAttempt, setSetupAttempt] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -774,13 +775,14 @@ const AddPaymentMethod = () => {
   }, [user]);
 
   useEffect(() => {
+    setLoadError(null);
     apiFetchJson<{ clientSecret?: string }>("/payment-methods/setup-intent", { method: "POST" })
       .then((data) => {
         if (data.clientSecret) setClientSecret(data.clientSecret);
         else setLoadError("Could not start card setup. Please try again.");
       })
       .catch(() => setLoadError("Could not start card setup. Please try again."));
-  }, []);
+  }, [setupAttempt]);
 
   const isFirst = existingCount === 0;
   const detailsValid = form.cardholderName.trim().length > 1 && !!form.billingAddressId;
@@ -864,7 +866,7 @@ const AddPaymentMethod = () => {
         <div className="space-y-1.5">
           <Label>Card details <span className="text-destructive">*</span></Label>
           {loadError ? (
-            <p className="text-sm text-destructive">{loadError}</p>
+            <div role="alert"><p className="text-sm text-destructive">{loadError}</p><Button type="button" variant="outline" className="mt-2" onClick={() => setSetupAttempt(n => n + 1)}>Retry card setup</Button></div>
           ) : !clientSecret ? (
             <BrandSpinner className="py-6" />
           ) : (
