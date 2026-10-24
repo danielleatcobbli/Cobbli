@@ -442,15 +442,26 @@ const AssessmentUpload = () => {
   // upgrading requires completing that email's own signup/password flow
   // from this same browser session.
   const anonUidRef = useRef<string | null>(null);
+  const uploadIdentityPromise = useRef<Promise<string> | null>(null);
   const resolveUploadIdentity = async (): Promise<string> => {
     if (user) return user.id;
     if (anonUidRef.current) return anonUidRef.current;
-    const { data, error } = await supabase.auth.signInAnonymously();
-    if (error || !data.user) {
-      throw error ?? new Error("Could not start a session for this upload.");
+    if (!uploadIdentityPromise.current) {
+      uploadIdentityPromise.current = (async () => {
+        const { data: existing } = await supabase.auth.getSession();
+        if (existing.session?.user) return existing.session.user.id;
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (error || !data.user) throw error ?? new Error("Could not start a session for this upload.");
+        return data.user.id;
+      })();
     }
-    anonUidRef.current = data.user.id;
-    return data.user.id;
+    try {
+      anonUidRef.current = await uploadIdentityPromise.current;
+      return anonUidRef.current;
+    } catch (error) {
+      uploadIdentityPromise.current = null;
+      throw error;
+    }
   };
 
   // Shared upload orchestration — every item's ItemUploadCard calls this
@@ -462,7 +473,7 @@ const AssessmentUpload = () => {
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     return supabase.storage
       .from("assessment-uploads")
-      .upload(path, file, { contentType: file.type || undefined, upsert: false })
+      .upload(path, file, { contentType: ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", heic: "image/heic", heif: "image/heif" } as Record<string, string>)[ext] || file.type || undefined, upsert: false })
       .then(({ error }) => {
         if (error) throw error;
         return path;
@@ -681,7 +692,7 @@ const AssessmentUpload = () => {
               />
               {zipInvalid && (
                 <p id="assessment-zip-coverage" className="text-xs text-destructive" role="alert">
-                  We don’t currently offer pickup and return in {zip}. We regularly review our service area, so check back for updates.
+                  We don’t currently offer pickup and return in {zip}. We regularly review our service areas, so check back for updates.
                 </p>
               )}
               {zipError && (

@@ -757,7 +757,7 @@ const Checkout = () => {
                         />
                         {zipInvalid && (
                           <p className="text-xs text-destructive mt-1">
-                            We don’t currently offer pickup and return in {addrForm.zip}. We regularly review our service area, so check back for updates.
+                            We don’t currently offer pickup and return in {addrForm.zip}. We regularly review our service areas, so check back for updates.
                           </p>
                         )}
                       </Field>

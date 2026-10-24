@@ -33,21 +33,21 @@ const CookiePolicy = () => {
         style={{ fontFamily: "'Instrument Sans', sans-serif" }}
       >
         <article className="max-w-3xl mx-auto text-left">
-          <h1 className="text-3xl md:text-4xl uppercase font-bold" style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}>
+          <h1 className="text-3xl md:text-4xl uppercase font-bold" style={{ color: "#3d1700", fontFamily: "'Fraunces', serif" }}>
             Cookie Policy
           </h1>
-          <p className="mt-2 text-sm" style={{ color: "#fdb600", opacity: 0.7 }}>
+          <p className="mt-2 text-sm" style={{ color: "#3d1700", opacity: 1 }}>
             Last updated: Month Day, Year
           </p>
 
-          <section className="mt-8 space-y-4 leading-relaxed" style={{ color: "#fdb600", opacity: 0.9 }}>
+          <section className="mt-8 space-y-4 leading-relaxed" style={{ color: "#3d1700", opacity: 1 }}>
             <p>
               Cobbli uses cookies and similar technologies to operate this website and to
               understand how visitors use it. This page explains what we use and how you can
               control your preferences.
             </p>
 
-            <h2 className="text-xl font-semibold mt-8" style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}>
+            <h2 className="text-xl font-semibold mt-8" style={{ color: "#3d1700", fontFamily: "'Fraunces', serif" }}>
               Essential cookies
             </h2>
             <p>
@@ -55,7 +55,7 @@ const CookiePolicy = () => {
               keeping you signed in, and securing form submissions. They cannot be disabled.
             </p>
 
-            <h2 className="text-xl font-semibold mt-8" style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}>
+            <h2 className="text-xl font-semibold mt-8" style={{ color: "#3d1700", fontFamily: "'Fraunces', serif" }}>
               Analytics cookies (Google Analytics 4)
             </h2>
             <p>
@@ -64,7 +64,7 @@ const CookiePolicy = () => {
               <strong> Accept</strong>.
             </p>
 
-            <h2 className="text-xl font-semibold mt-8" style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}>
+            <h2 className="text-xl font-semibold mt-8" style={{ color: "#3d1700", fontFamily: "'Fraunces', serif" }}>
               Manage your preferences
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -90,7 +90,7 @@ const CookiePolicy = () => {
               </button>
             </div>
 
-            <h2 className="text-xl font-semibold mt-8" style={{ color: "#fdb600", fontFamily: "'Fraunces', serif" }}>
+            <h2 className="text-xl font-semibold mt-8" style={{ color: "#3d1700", fontFamily: "'Fraunces', serif" }}>
               Contact
             </h2>
             <p>

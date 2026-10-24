@@ -5,7 +5,7 @@ export default function GetToKnowUs() {
     <section style={{ backgroundColor: "#fff5cc" }}>
       <div className="container py-14 md:py-16 text-center">
         <h2
-          className="text-5xl md:text-7xl uppercase"
+          className="text-[clamp(1.65rem,6.5vw,4.5rem)] leading-tight uppercase"
           style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, color: "#3d1700" }}
         >
           Get to know us

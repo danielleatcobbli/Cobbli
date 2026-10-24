@@ -1,3 +1,4 @@
+import { IconBrandInstagram, IconBrandTiktok, IconBrandX } from "@tabler/icons-react";
 import instagram from "@/assets/icons/instagram.svg";
 import tiktok from "@/assets/icons/tiktok.svg";
 import x from "@/assets/icons/x.svg";
@@ -82,24 +83,10 @@ const Footer = ({ legalLinksInNewTab = false }: FooterProps) => {
               rel="noopener noreferrer"
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center hover:opacity-80 transition-opacity"
             >
-              {s.label === "X" ? (
-                <svg viewBox="0 0 24 24" className="h-8 w-8 shrink-0" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M4 3h4l12 18h-4L4 3Z M20 3 4 21" />
-                </svg>
-              ) : <span
-                className="block h-8 w-8 shrink-0"
-                style={{
-                  backgroundColor: "#fdb600",
-                  WebkitMaskImage: `url(${s.src})`,
-                  maskImage: `url(${s.src})`,
-                  WebkitMaskSize: "contain",
-                  maskSize: "contain",
-                  WebkitMaskRepeat: "no-repeat",
-                  maskRepeat: "no-repeat",
-                  WebkitMaskPosition: "center",
-                  maskPosition: "center",
-                }}
-              />}
+              {s.label === "Instagram" ? <IconBrandInstagram size={28} stroke={2} aria-hidden="true" />
+                : s.label === "TikTok" ? <IconBrandTiktok size={28} stroke={2} aria-hidden="true" />
+                : <IconBrandX size={28} stroke={2} aria-hidden="true" />}
+
             </a>
           ))}
         </div>

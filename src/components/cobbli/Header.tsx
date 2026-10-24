@@ -238,6 +238,8 @@ const Header = ({ transparent = false, theme = "amber" }: Props) => {
             className="md:hidden p-2 rounded-md hover:bg-primary-glow"
             onClick={() => setOpen((v) => !v)}
             aria-label="Toggle menu"
+            aria-expanded={open}
+            aria-controls="mobile-navigation"
           >
             {open ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -245,7 +247,7 @@ const Header = ({ transparent = false, theme = "amber" }: Props) => {
       </div>
 
       {open && (
-        <div
+        <div id="mobile-navigation"
           className={
             transparent
               ? "md:hidden bg-primary text-primary-foreground"
@@ -254,7 +256,9 @@ const Header = ({ transparent = false, theme = "amber" }: Props) => {
                 : "md:hidden border-t border-primary-glow"
           }
           style={
-            customBar
+            transparent
+              ? { backgroundColor: "#fff5cc", color: "#3d1700" }
+              : customBar
               ? {
                   backgroundColor: barBg,
                   borderTop: `1px solid ${iconColor}`,

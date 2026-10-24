@@ -449,7 +449,7 @@ const Orders = () => {
         <BrandSpinner className="py-10" />
       ) : combined.length === 0 ? (
         <EmptyState
-          message="No repairs yet. Upload photos of your bag and we'll recommend the right repairs."
+          message="No repairs yet."
           cta="Start a repair"
           to="/start-repair/assessment"
         />
